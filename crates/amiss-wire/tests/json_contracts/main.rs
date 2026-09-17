@@ -143,9 +143,9 @@ fn report_examples_match_their_typed_source() {
         );
     }
 
-    let frozen = fs::read(examples.join("scanner-report.frozen-2.json")).unwrap();
+    let frozen = fs::read(examples.join("scanner-report.frozen-3.json")).unwrap();
     <report::model::ReportPayload>::parse(&frozen)
-        .unwrap_or_else(|error| panic!("frozen-2: {error}"));
+        .unwrap_or_else(|error| panic!("frozen-3: {error}"));
 
     // The last released example keeps the previous major until the release refreshes it.
     let released = fs::read(examples.join("scanner-report.last-released.json")).unwrap();

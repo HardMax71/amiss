@@ -52,8 +52,8 @@ fn resolution_tags_reject_fields_from_other_variants() {
         r#"{"kind":"missing","reason":"line-fragment-out-of-range","path":"a.md","near":null}"#,
         r#"{"kind":"external","reason":"url","path":"a.md"}"#,
         r#"{"kind":"invalid","reason":"syntax","target":{"kind":"tree","path":"docs"}}"#,
-        r#"{"kind":"unsupported-semantics","reason":"network-path","target":{"kind":"tree","path":"docs"}}"#,
-        r#"{"kind":"unsupported-semantics","reason":"fragment","target":{"kind":"tree","path":"docs"}}"#,
+        r#"{"kind":"unsupported-semantics","reason":"network-path","path":"a.md"}"#,
+        r#"{"kind":"unsupported-semantics","reason":{"fragment":null}}"#,
         r#"{"kind":"unsupported-version","scope":{"kind":"unknown-path","path":"a.md"}}"#,
     ] {
         assert!(

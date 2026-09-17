@@ -2,9 +2,9 @@
 
 This page tracks the work ahead: what is being done now, and what stays research. It is
 not release notes or a promise that anything listed here will ship. The wire contract
-froze at `1` in August 2026, moved to `2` in September 2026 with the one-occurrence
-reshape, and left this page; the record is in
-[A settled wire](completed/a-settled-wire.md), and the frozen regime's law lives with
+froze at `1` in August 2026, moved to `2` and then `3` in September 2026, and left this
+page; the records are in [A settled wire](completed/a-settled-wire.md) and
+[A reason may grow](completed/a-reason-may-grow.md), and the frozen regime's law lives with
 [The report](report.md). Coverage that has
 landed is described where it works rather than here. The factual boundary of the current
 product is in

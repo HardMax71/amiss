@@ -1,6 +1,6 @@
 # Completed phases
 
-Eleven phases are closed, one page each. A page is a dated exit record rather than live documentation:
+Twelve phases are closed, one page each. A page is a dated exit record rather than live documentation:
 it states what was true when the phase closed, what each claim defends against, and links the code
 that has to stay true for the claim to hold. Where a fact has moved on since, the page says so and
 points at the live chapter that owns it.
@@ -46,6 +46,12 @@ conditions held at once. The wire versioned by its own in-payload field, engine 
 two minor series quiet under a mechanical tripwire, and the first frozen example retained
 permanently to hold every later schema in the major to the additive promise. The same page records
 the move to `2` in September 2026, the first reshape since the freeze.
+
+[A reason may grow](completed/a-reason-may-grow.md) minted `3` once a closed enumeration was shown
+to break the additive promise on its next value. A reason is descriptive, so the document row's
+unsupported reason and the unsupported-semantics reason became open strings a reader keeps and
+rewrites byte for byte; kinds, dispositions, statuses, schema names and `compatibility` stayed
+closed and still refuse an unfamiliar value.
 
 [Projection contracts](completed/projection-contracts.md) made exact code, inventory, count, and
 record-set relationships policy-owned scanner facts. Stable identities, complete-input semantics,

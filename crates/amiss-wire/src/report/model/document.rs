@@ -66,8 +66,10 @@ pub enum DocumentStatus {
     Unsupported,
 }
 
+/// Why a discovered document was not scanned. Descriptive, so it grows inside
+/// a major: a reader keeps the spelling it does not know and re-emits it.
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Clone, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum UnsupportedReason {
@@ -75,6 +77,8 @@ pub enum UnsupportedReason {
     LfsPointer,
     SymlinkDocument,
     UnsupportedDocumentFormat,
+    #[strum(default, transparent)]
+    Unrecognized(String),
 }
 
 #[derive(

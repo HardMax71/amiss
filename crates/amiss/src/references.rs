@@ -8,7 +8,7 @@ use amiss_wire::report::model::{
     MissingResolution, Occurrence, ReportPayload, Resolution, UnsupportedSemanticsResolution,
     occurrences,
 };
-use amiss_wire::resolution::{BlobTarget, TaggedBlobTarget, Target, VersionScope};
+use amiss_wire::resolution::{BlobTarget, Target, VersionScope};
 
 use crate::invocation::{OutputFormat, RefsInvocation};
 
@@ -59,14 +59,16 @@ fn matching_occurrences(bytes: &[u8], target: &RepoPath) -> Result<Vec<Occurrenc
         })
         .filter(|occurrence| {
             let resolution_path = match &occurrence.resolution {
-                Resolution::Resolved { target }
-                | Resolution::TypeMismatch { target }
-                | Resolution::UnsupportedSemantics(
-                    UnsupportedSemanticsResolution::Query { target }
-                    | UnsupportedSemanticsResolution::CodeFragment { target },
-                ) => match target {
-                    Target::Tree { path } | Target::Blob(BlobTarget { path, .. }) => Some(path),
-                },
+                Resolution::Resolved { target } | Resolution::TypeMismatch { target } => {
+                    match target {
+                        Target::Tree { path } | Target::Blob(BlobTarget { path, .. }) => Some(path),
+                    }
+                }
+                Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
+                    target, ..
+                }) => target.as_ref().map(|target| match target {
+                    Target::Tree { path } | Target::Blob(BlobTarget { path, .. }) => path,
+                }),
                 Resolution::DeclaredUntracked { path, .. }
                 | Resolution::UnsupportedTarget { path, .. }
                 | Resolution::Missing(
@@ -76,21 +78,11 @@ fn matching_occurrences(bytes: &[u8], target: &RepoPath) -> Result<Vec<Occurrenc
                 )
                 | Resolution::UnsupportedVersion {
                     scope: VersionScope::KnownPath { path } | VersionScope::KnownCommit { path, .. },
-                }
-                | Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution::Fragment {
-                    target: TaggedBlobTarget::Blob(BlobTarget { path, .. }),
-                }) => Some(path),
+                } => Some(path),
                 Resolution::External { .. }
                 | Resolution::Invalid { .. }
                 | Resolution::Missing(MissingResolution::LabelNotDeclared {})
-                | Resolution::UnsupportedVersion { scope: VersionScope::UnknownPath {} }
-                | Resolution::UnsupportedSemantics(
-                    UnsupportedSemanticsResolution::AttributeDependent {}
-                    | UnsupportedSemanticsResolution::DuplicateLabel {}
-                    | UnsupportedSemanticsResolution::ExternalInventory {}
-                    | UnsupportedSemanticsResolution::NetworkPath {}
-                    | UnsupportedSemanticsResolution::SiteRoute {},
-                ) => None,
+                | Resolution::UnsupportedVersion { scope: VersionScope::UnknownPath {} } => None,
             };
             resolution_path
                 .into_iter()

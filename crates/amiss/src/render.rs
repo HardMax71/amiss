@@ -7,10 +7,9 @@ use amiss_wire::envelope::Payload as _;
 use amiss_wire::human::atom;
 use amiss_wire::report::model::{
     MissingResolution, RepoPath, ReportPayload, Resolution as WireResolution,
-    UnsupportedSemanticsResolution,
 };
 use amiss_wire::report::result_verdict;
-use amiss_wire::resolution::{MissingTag, ResolutionTag, UnsupportedSemanticsTag, VersionScopeTag};
+use amiss_wire::resolution::{MissingTag, ResolutionTag, VersionScopeTag};
 
 use crate::human::missing_detail;
 use crate::invocation::RenderInvocation;
@@ -85,7 +84,7 @@ pub(crate) fn wire_resolution<P, F: Fn(&P) -> String>(
         ),
         WireResolution::UnsupportedSemantics(semantics) => (
             ResolutionTag::UnsupportedSemantics,
-            Some(semantics_tag(semantics).as_ref().to_owned()),
+            Some(semantics.reason.to_string()),
         ),
         WireResolution::UnsupportedVersion { scope } => (
             ResolutionTag::UnsupportedVersion,
@@ -95,28 +94,5 @@ pub(crate) fn wire_resolution<P, F: Fn(&P) -> String>(
         WireResolution::TypeMismatch { .. } => (ResolutionTag::TypeMismatch, None),
         WireResolution::DeclaredUntracked { .. } => (ResolutionTag::DeclaredUntracked, None),
         WireResolution::External { .. } => (ResolutionTag::External, None),
-    }
-}
-
-const fn semantics_tag<P>(
-    semantics: &UnsupportedSemanticsResolution<P>,
-) -> UnsupportedSemanticsTag {
-    match semantics {
-        UnsupportedSemanticsResolution::AttributeDependent {} => {
-            UnsupportedSemanticsTag::AttributeDependent
-        }
-        UnsupportedSemanticsResolution::CodeFragment { .. } => {
-            UnsupportedSemanticsTag::CodeFragment
-        }
-        UnsupportedSemanticsResolution::DuplicateLabel {} => {
-            UnsupportedSemanticsTag::DuplicateLabel
-        }
-        UnsupportedSemanticsResolution::ExternalInventory {} => {
-            UnsupportedSemanticsTag::ExternalInventory
-        }
-        UnsupportedSemanticsResolution::Fragment { .. } => UnsupportedSemanticsTag::Fragment,
-        UnsupportedSemanticsResolution::NetworkPath {} => UnsupportedSemanticsTag::NetworkPath,
-        UnsupportedSemanticsResolution::Query { .. } => UnsupportedSemanticsTag::Query,
-        UnsupportedSemanticsResolution::SiteRoute {} => UnsupportedSemanticsTag::SiteRoute,
     }
 }

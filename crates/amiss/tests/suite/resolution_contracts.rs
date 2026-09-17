@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 use amiss_wire::controls::{EligibleFindingKind, PromotableFindingKind, ResourceName};
 use amiss_wire::resolution::{
     BlobContentTag, BlobMode, ExternalReference, InvalidReference, MissingTag, ResolutionTag,
-    TargetTag, UnsupportedSemanticsTag, UnsupportedTargetTag, VersionScopeTag,
+    TargetTag, UnsupportedSemanticsReason, UnsupportedSemanticsTag, UnsupportedTargetTag,
+    VersionScopeTag,
 };
 use serde_json::{Value, json};
 use strum::IntoEnumIterator;
@@ -303,17 +304,37 @@ fn rust_resolution_atoms_match_the_report_schema() {
     assert_schema_atoms::<ResolutionTag>(&report, "Resolution", "kind");
     assert_schema_atoms::<MissingTag>(&report, "MissingResolution", "reason");
     assert_schema_atoms::<UnsupportedTargetTag>(&report, "UnsupportedTargetResolution", "reason");
-    assert_schema_atoms::<UnsupportedSemanticsTag>(
-        &report,
-        "UnsupportedSemanticsResolution",
-        "reason",
-    );
     assert_schema_atoms::<TargetTag>(&report, "ResolutionTarget", "kind");
     assert_schema_atoms::<BlobContentTag>(&report, "ResolutionContent", "kind");
     assert_schema_atoms::<VersionScopeTag>(&report, "VersionScope", "kind");
     assert_schema_atoms::<BlobMode>(&report, "BlobResolutionTarget", "mode");
     assert_schema_atoms::<InvalidReference>(&report, "InvalidResolution", "reason");
     assert_schema_atoms::<ExternalReference>(&report, "ExternalResolution", "reason");
+}
+
+/// A descriptive reason grows inside the major, so the schema leaves it an
+/// open string instead of an enum. The engine still writes only spellings the
+/// wire names, and a reader keeps any other.
+#[test]
+fn descriptive_reasons_stay_open_and_the_engine_writes_named_spellings() {
+    let report = schema("scanner-report.schema.json");
+    for pointer in [
+        "/$defs/UnsupportedReason/type",
+        "/$defs/UnsupportedSemanticsResolution/properties/reason/type",
+    ] {
+        assert_eq!(
+            report.pointer(pointer).and_then(Value::as_str),
+            Some("string"),
+            "{pointer} is an open string",
+        );
+    }
+    for tag in UnsupportedSemanticsTag::iter() {
+        let named = tag
+            .as_ref()
+            .parse::<UnsupportedSemanticsReason>()
+            .is_ok_and(|reason| !matches!(reason, UnsupportedSemanticsReason::Unrecognized(_)));
+        assert!(named, "the wire names the engine's {} reason", tag.as_ref());
+    }
 }
 
 #[test]

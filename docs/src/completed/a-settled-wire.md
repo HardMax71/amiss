@@ -51,4 +51,5 @@ byte-pinned like its predecessor, and `frozen-1` stays in the tree as the record
 `1`. The example the last release shipped keeps carrying `1` until the release workflow
 refreshes it, and the contract test allows exactly that window, as it allowed the founding
 one. Every reader of `2` refuses a `1` report. `2` is additive within its major as `1` was,
-and the next reshape mints `3`.
+and the next reshape mints `3`. That reshape came later the same month, to let a reason
+grow inside a major; its record is in [A reason may grow](a-reason-may-grow.md).

@@ -108,7 +108,7 @@ fn untrusted_reports_are_refused_before_projection() {
         .expect("fixture member exists");
     *(payload)
         .get_mut("compatibility")
-        .expect("fixture member exists") = Value::from("3");
+        .expect("fixture member exists") = Value::from("4");
     bind_digest(&mut unsupported).unwrap();
     let unsupported_path = format!("{}/unsupported.json", fx.repo);
     write_value(&unsupported_path, &unsupported).unwrap();
