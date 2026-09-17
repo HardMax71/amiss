@@ -142,9 +142,22 @@ file is in the tree anchors a destination somewhere other than beside the docume
 resource ID at its family directory, a Docusaurus bare path or `@site/` alias at the content
 root or the site directory, a Sphinx `:doc:` target with a leading slash at the directory
 holding `conf.py`, a raw HTML destination under a `mkdocs.yml` at the directory the page is
-published at. The file's presence selects the rule and nothing inside it is read. An alias
+published at, a Zola `@/` destination at the `content` directory beside `config.toml`, and an
+mdBook destination climbing past its book's root under the `src` of the book that holds the
+page it names. The file's presence selects the rule and nothing inside it is read. An alias
 with no such file above the document is `unsupported-reference-semantics` rather than a
 directory of that name, since the value arrives when the site is built.
+
+Other generators decide a page's URL in a configuration this engine never opens, and a
+relative destination is resolved against that URL rather than against the file. Under a
+`hugo.toml`, `hugo.yaml`, `_config.yml`, `eleventy.config.*`, `.eleventy.js` or
+`astro.config.*` on the document's ancestor chain, a destination the tree does not hold takes
+`unsupported-reference-semantics` with `reason: unmodelled-route`, the answer a leading-slash
+site route already takes, instead of being claimed missing. Under a `book.toml` the same
+answer covers a destination ending in `.html` that no book source reaches, because that names
+a page of the built site. Only the path side moves: a fragment on a document the tree holds
+is still read against the identities that document publishes, and a tree declaring none of
+these files reports every missing path it reported before.
 
 [What a documentation router serves](route-spellings.md) holds the spellings, the routers
 they were harvested from, the generator rules and what selects each, and what the union costs.
@@ -153,7 +166,8 @@ A destination holding `{{ ... }}` or `{% ... %}` never reaches the tree at all. 
 fills it in, so it takes the same `unsupported-reference-semantics` an AsciiDoc `{attribute}`
 takes, and a file whose own name carries a single brace stays a path.
 
-A destination no spelling reaches is `kind: missing` with `reason: path-not-found`. The path
+A destination no spelling reaches, in a tree that declares no such generator, is
+`kind: missing` with `reason: path-not-found`. The path
 that row names is the destination read from the document's own directory wherever a rule kept
 that reading, so a finding never carries a directory a rule anchored at: a raw
 `<img src="../../img/gone.png">` under a `mkdocs.yml` is missing at `img/gone.png` rather than
