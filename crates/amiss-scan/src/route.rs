@@ -70,7 +70,7 @@ pub(crate) const MKDOCS: RouteRule = RouteRule {
     serves: &[Spelling::DirectoryUrl],
 };
 
-const SPHINX: RouteRule = RouteRule {
+pub(crate) const SPHINX: RouteRule = RouteRule {
     name: "sphinx",
     declared_by: &["conf.py"],
     serves: &[Spelling::SourceRoot],
