@@ -47,7 +47,7 @@ the scan starts.
 The first line is the verdict, and the rest is detail:
 
 ```text
-amiss: pass (fix 0, check 0, existing 0, errors 0, exit 0)
+amiss: pass (fix 0, check 0, pre-existing 0, errors 0, exit 0)
 ```
 
 A Fix is a reference this change broke; `observe` reports it without blocking, `enforce`
