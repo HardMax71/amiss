@@ -121,12 +121,13 @@ fn every_attribute_spelling_names_the_heading() {
 }
 
 /// A block whose last line is an attribute block declares that identity for
-/// itself, and one that directly follows an inline construct declares it for
-/// that construct. One that trails other text declares nothing, one inside a
+/// itself, one standing alone above the block declares it for what follows,
+/// and one that directly follows an inline construct declares it for that
+/// construct. One that trails other text declares nothing, one inside a
 /// fence is code, and so is one inside an inline span, which is where the
 /// extension looks and does not find it.
 #[test]
-fn a_block_declares_the_identity_on_its_own_last_line() {
+fn a_block_declares_the_identity_on_its_own_outer_line() {
     let source = concat!(
         "[](){#empty-link-id}\n\n",
         "A paragraph.\n{#standalone-id}\n\n",
@@ -137,7 +138,8 @@ fn a_block_declares_the_identity_on_its_own_last_line() {
         "*   **`locale`**{ #inline-id }: text after the block.\n",
         "*   **`theme`**{ .cls }: a class names nothing.\n\n",
         "Nothing after it **bold**{#at-the-end}\n\n",
-        "{#opens-a-paragraph} and then text.\n"
+        "{#opens-a-paragraph}\nand then text.\n\n",
+        "{#on-one-line} and then text.\n"
     );
     let got = extraction(Adapter::Markdown, source);
     assert_eq!(
@@ -147,8 +149,31 @@ fn a_block_declares_the_identity_on_its_own_last_line() {
             "standalone-id".to_owned(),
             "inline-id".to_owned(),
             "at-the-end".to_owned(),
+            "opens-a-paragraph".to_owned(),
         ]
     );
+}
+
+/// The identity an attribute block keeps when another attribute carries a
+/// quoted value, which is one attribute however many spaces it holds. An
+/// unquoted word that names no attribute still refuses the whole block.
+#[test]
+fn a_quoted_attribute_value_keeps_the_identity_beside_it() {
+    let cases = [
+        (
+            "## With pip { #with-pip data-toc-label=\"with pip\" }\n",
+            "With pip",
+            "with-pip",
+        ),
+        (
+            "## Quoted { data-label='one two' #after-it }\n",
+            "Quoted",
+            "after-it",
+        ),
+    ];
+    names_the_heading(Adapter::Markdown, &cases);
+    let bare = extraction(Adapter::Markdown, "## Bare { #id bare word }\n");
+    assert_eq!(only(&bare).attribute, None);
 }
 
 /// The attribute spelling is an expression in MDX, which the grammar makes
@@ -414,4 +439,36 @@ fn single_tilde_marks_stay_out_of_heading_text() {
         let got = extraction(adapter, "# a ~b~\n");
         assert_eq!(texts(&got), vec!["a b".to_owned()], "{adapter:?}");
     }
+}
+
+/// A definition-list term is the line above a definition line, with the term's
+/// own code spans read as text the way a heading's are. A second definition
+/// names no new term, a table delimiter is no definition, and a term a blank
+/// line separates from its definition is prose.
+#[test]
+fn a_definition_term_is_recorded_beside_the_headings() {
+    let source = concat!(
+        "## Settings\n\n",
+        "`defaultContentLanguage`\n: (`string`) The project's default language.\n\n",
+        "compression\n: (`bool`) One.\n: (`bool`) Two.\n\n",
+        "Value|Example\n:--|:--\n`drawing`|A drawing\n\n",
+        "alone\n\n: a definition under a blank line\n"
+    );
+    let got = extraction(Adapter::Markdown, source);
+    let recorded: Vec<(String, HeadingSource)> = got
+        .headings
+        .iter()
+        .map(|heading| (heading.text.clone(), heading.source))
+        .collect();
+    assert_eq!(
+        recorded,
+        vec![
+            ("Settings".to_owned(), HeadingSource::Markdown),
+            (
+                "defaultContentLanguage".to_owned(),
+                HeadingSource::DefinitionTerm
+            ),
+            ("compression".to_owned(), HeadingSource::DefinitionTerm),
+        ]
+    );
 }

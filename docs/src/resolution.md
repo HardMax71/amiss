@@ -275,6 +275,10 @@ directory holding that declaration rather than from beside the document. A gener
 instruction under the same declaration, `::: pydantic.config`, is an edge this engine reads
 and cannot follow, because what it pulls in is built by a program rather than held by the
 tree, so the page keeps the identities it writes itself and absence in it stays undecided.
+Two more spellings under that declaration are read the same way: a heading whose text is an
+`<!-- md:setting name -->` comment a hook expands, and a `=== "Title"` content tab the
+tabbed extension slugs under settings that live in `mkdocs.yml`. Neither identity is in the
+tree, so neither page proves absence.
 An option-free `literalinclude` contributes no parsed headings. The graph
 is bounded by `references-per-document`, `parser-nesting`, and
 `aggregate-heading-anchor-evaluation-bytes-per-snapshot`. A cycle, an unscanned or non-local target,
@@ -306,7 +310,9 @@ Every other fragment on a document target is a heading anchor, and a heading ide
 belongs to the renderer rather than to Markdown. Twelve rules are pinned, one per renderer or
 per configuration of one, and the resolver asks whether any of them would publish the
 anchor, counting the headings a document writes as raw HTML and the identities it declares
-outright, in raw HTML or in an attribute block, as well. An anchor no rule
+outright, in raw HTML or in an attribute block, as well. A definition-list term is read
+beside them, because one renderer publishes an identity for a term on the counter its
+headings occupy. An anchor no rule
 publishes is `kind: missing` with `reason: heading-anchor-not-found`, an ordinary missing
 target; the row also carries `near`, the one published identity the fragment names apart from
 typography when exactly one exists and null otherwise. The fold covers the two spellings
