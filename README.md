@@ -49,12 +49,25 @@ amiss check --repo . --object-format sha1 \
   --base "$(git rev-parse HEAD)" --index --profile observe
 ```
 
-The first line is the verdict, `amiss: pass (fix 0, check 0, existing 0, errors 0, exit 0)`
-on a repository with nothing wrong. A Fix is a reference this change broke. A Check is a file
-that changed under a paragraph that did not, listed for a person to read. Pre-existing is the
-backlog, the problems that were already there before this change. Exit 0 means the run
-completed and nothing blocks. Exit 1 means a finding blocks. Exit 2 means the run itself
-could not be trusted, so there is no verdict.
+The first line is the verdict, `amiss: pass (fix 0, check 0, pre-existing 0, errors 0, exit 0)`
+on a repository with nothing wrong. On one with three broken references it reads like this,
+naming the place, the kind and the reason for each:
+
+```text
+amiss: pass (fix 0, check 0, pre-existing 3, errors 0, exit 0)
+Pre-existing target "README.md" affected places 1
+  "README.md":3:33 explicit-target-missing heading-anchor-not-found
+Pre-existing target "docs/guide.md" affected places 1
+  "README.md":3:5 explicit-target-missing path-not-found
+Pre-existing target "src/lib.rs" affected places 1
+  "README.md":3:59 explicit-target-missing line-fragment-out-of-range
+```
+
+A Fix is a reference this change broke. A Check is a file that changed under a paragraph that
+did not, listed for a person to read. Pre-existing is the backlog, the problems that were
+already there before this change. Exit 0 means the run completed and nothing blocks. Exit 1
+means a finding blocks. Exit 2 means the run itself could not be trusted, so there is no
+verdict.
 
 There is no ignore file, no exclude list, and no way to silence one finding. The nine skipped
 directory names (`node_modules`, `vendor`, `target`, `tests` and the rest) are fixed, and a

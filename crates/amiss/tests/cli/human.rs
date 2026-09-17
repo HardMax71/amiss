@@ -788,3 +788,41 @@ fn a_hostile_document_path_is_rendered_inert_and_round_trips_in_json() {
         "json carries the exact bytes as a string, losing nothing: {paths:?}"
     );
 }
+
+/// The README and the quickstart quote the verdict line a clean run prints, so
+/// a change to the human header has to move them too.
+#[test]
+fn the_documented_verdict_line_is_the_one_a_clean_run_prints() {
+    let directory = TempDir::new().expect("temporary directory");
+    let repository = directory.path().to_str().expect("utf-8 path");
+    git(directory.path(), &["init", "-q"]);
+    fs::write(directory.path().join("README.md"), "# Demo\n").expect("write");
+    git(directory.path(), &["add", "."]);
+    git(directory.path(), &["commit", "-qm", "one"]);
+    let head = git(directory.path(), &["rev-parse", "HEAD"])
+        .trim()
+        .to_owned();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        repository,
+        "--object-format",
+        "sha1",
+        "--base",
+        &head,
+        "--index",
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 0);
+    let printed = String::from_utf8(stdout).expect("utf-8 output");
+    let verdict = printed.lines().next().expect("a verdict line");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for page in ["README.md", "docs/src/quickstart.md"] {
+        let document = fs::read_to_string(root.join(page)).expect("documentation is readable");
+        assert!(
+            document.contains(verdict),
+            "{page} quotes the verdict line a clean run prints, which is now {verdict}"
+        );
+    }
+}
