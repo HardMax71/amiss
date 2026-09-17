@@ -69,15 +69,15 @@ fn blob(resolution: &Resolution<RepoPath>) -> Option<&str> {
     blob.path.as_str()
 }
 
-/// A page whose body is a generator instruction publishes identities built
-/// from something outside the tree, so the set this engine reads is
-/// incomplete: the heading the page writes itself still answers, and an
-/// anchor only the generator knows is declared rather than reported absent.
-/// An ordinary page under the same site still proves absence, an admonition
-/// fence names no generator, and the same instruction where no `mkdocs.yml`
-/// governs it includes nothing.
+/// A generator instruction, a heading a hook expands and a content tab an
+/// extension slugs all publish identities built outside the tree, so the set
+/// this engine reads is incomplete: the heading a page writes itself still
+/// answers, and an anchor only the plugin knows is declared rather than
+/// reported absent. An ordinary page under the same site still proves absence,
+/// an admonition fence names no generator, and the same spellings where no
+/// `mkdocs.yml` governs them are the text they look like.
 #[test]
-fn a_generator_instruction_leaves_the_identity_set_incomplete() {
+fn a_declared_plugin_leaves_the_identity_set_incomplete() {
     let chain = amiss_fixtures::mkdocs_generated().expect("the fixture stages");
     let rows = answers(&chain);
     assert_eq!(
@@ -85,18 +85,53 @@ fn a_generator_instruction_leaves_the_identity_set_incomplete() {
         Some("site/docs/api.md"),
         "the page writes its own title"
     );
-    assert!(
-        matches!(
-            answer(&rows, "README.md", 3),
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(_))
-        ),
-        "the generated identity: {:?}",
-        answer(&rows, "README.md", 3)
-    );
+    for (line, place) in [
+        (3, "a generator instruction"),
+        (11, "a heading a hook expands"),
+        (13, "a content tab"),
+    ] {
+        assert!(
+            matches!(
+                answer(&rows, "README.md", line),
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(_))
+            ),
+            "{place}: {:?}",
+            answer(&rows, "README.md", line)
+        );
+    }
     for (line, place) in [
         (5, "an ordinary page under the same site"),
         (7, "an admonition fence"),
         (9, "an instruction no mkdocs governs"),
+        (15, "a content tab no mkdocs governs"),
+    ] {
+        assert!(
+            matches!(
+                answer(&rows, "README.md", line),
+                Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+            ),
+            "{place}: {:?}",
+            answer(&rows, "README.md", line)
+        );
+    }
+}
+
+/// A definition-list term publishes an identity under the renderer that reads
+/// one, so an anchor naming a term resolves, an anchor naming no term of a
+/// page that writes a list is still absent, and the same anchor into a page
+/// that writes no list at all stays absent too.
+#[test]
+fn a_definition_term_answers_an_anchor_that_names_it() {
+    let chain = amiss_fixtures::definition_terms().expect("the fixture stages");
+    let rows = answers(&chain);
+    assert_eq!(
+        blob(answer(&rows, "README.md", 1)),
+        Some("docs/options.md"),
+        "the page writes the term"
+    );
+    for (line, place) in [
+        (3, "a term the page never wrote"),
+        (5, "a page with no list"),
     ] {
         assert!(
             matches!(

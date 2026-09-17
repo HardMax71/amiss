@@ -5,12 +5,13 @@ use unicode_general_category::{GeneralCategory, get_general_category};
 use unicode_normalization::UnicodeNormalization;
 
 use super::{
-    AnchorRule, Attribute, Case, Duplicates, Edges, Empty, Fold, Head, Keep, Normalize, RULES,
-    RawHtml, Runs, Separators, Trim, Typography,
+    AnchorRule, Attribute, Case, DEFINITION_TERMS, Duplicates, Edges, Empty, Fold, Head, Keep,
+    Normalize, RULES, RawHtml, Runs, Separators, Terms, Trim, Typography,
 };
 
 /// Every identity the known renderers would publish for one document, plus the
-/// anchors the document declares itself, in raw HTML or in an attribute block.
+/// anchors the document declares itself, in raw HTML or in an attribute block,
+/// plus the definition-list terms one renderer publishes beside its headings.
 #[must_use]
 pub fn anchor_set(
     headings: &[Heading],
@@ -22,6 +23,7 @@ pub fn anchor_set(
     for rule in &RULES {
         set.extend(identities(rule, headings));
     }
+    set.extend(identities(&DEFINITION_TERMS, headings));
     set
 }
 
@@ -35,7 +37,12 @@ pub fn identities(rule: &AnchorRule, headings: &[Heading]) -> Vec<String> {
     };
     let mut out = Vec::with_capacity(headings.len());
     for heading in headings {
-        if heading.source == HeadingSource::RawHtml && rule.raw_html == RawHtml::Ignored {
+        let read = match heading.source {
+            HeadingSource::RawHtml => rule.raw_html == RawHtml::Anchored,
+            HeadingSource::DefinitionTerm => rule.terms == Terms::Anchored,
+            HeadingSource::Markdown | HeadingSource::AsciiDoc | HeadingSource::Rst => true,
+        };
+        if !read {
             continue;
         }
         let base = match (&heading.attribute, rule.attribute) {

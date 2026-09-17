@@ -116,6 +116,15 @@ pub enum RawHtml {
     Ignored,
 }
 
+/// Whether the renderer builds an identity from a definition-list term. Only
+/// Hugo does, under `autoDefinitionTermID`, and it numbers a repeat on the
+/// same counter the headings use.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Terms {
+    Anchored,
+    Ignored,
+}
+
 /// How a repeated identity is made unique.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Duplicates {
@@ -147,12 +156,13 @@ pub struct AnchorRule {
     pub duplicates: Duplicates,
     pub attribute: Attribute,
     pub raw_html: RawHtml,
+    pub terms: Terms,
 }
 
-/// Every renderer rule the resolver knows. Adding one can only grow the set an
-/// anchor may match, so the set is the union and a missing rule is the only
-/// way to report a live anchor as absent.
-pub const RULES: [AnchorRule; 12] = [
+/// The rule github.com publishes heading identities under, which is also the
+/// one Hugo's default `autoHeadingIDType` spells and the one the term rule
+/// below reads its construct with.
+const fn github() -> AnchorRule {
     AnchorRule {
         name: "github",
         typography: Typography::Plain,
@@ -172,7 +182,26 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::Dash,
         attribute: Attribute::Literal,
         raw_html: RawHtml::Anchored,
-    },
+        terms: Terms::Ignored,
+    }
+}
+
+/// The identity Hugo publishes for a definition-list term under
+/// `autoDefinitionTermID`, which is the slug its heading rule builds, on the
+/// counter its headings occupy. The rule sits beside the table rather than
+/// inside it because it reads a construct no renderer in the table reads, so
+/// what it adds to the union is the terms and nothing else.
+pub const DEFINITION_TERMS: AnchorRule = AnchorRule {
+    name: "definition-term",
+    terms: Terms::Anchored,
+    ..github()
+};
+
+/// Every renderer rule the resolver knows. Adding one can only grow the set an
+/// anchor may match, so the set is the union and a missing rule is the only
+/// way to report a live anchor as absent.
+pub const RULES: [AnchorRule; 12] = [
+    github(),
     AnchorRule {
         name: "gitea",
         typography: Typography::Plain,
@@ -192,6 +221,7 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::Collide,
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
+        terms: Terms::Ignored,
     },
     AnchorRule {
         name: "forgejo",
@@ -212,6 +242,7 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::Dash,
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
+        terms: Terms::Ignored,
     },
     AnchorRule {
         name: "mdbook",
@@ -232,6 +263,7 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::Dash,
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
+        terms: Terms::Ignored,
     },
     AnchorRule {
         name: "mdbook-smart",
@@ -252,6 +284,7 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::Dash,
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
+        terms: Terms::Ignored,
     },
     AnchorRule {
         name: "goldmark",
@@ -272,6 +305,7 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::Dash,
         attribute: Attribute::Literal,
         raw_html: RawHtml::Ignored,
+        terms: Terms::Ignored,
     },
     AnchorRule {
         name: "python-markdown",
@@ -292,6 +326,7 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::Underscore,
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
+        terms: Terms::Ignored,
     },
     AnchorRule {
         name: "pymdownx",
@@ -312,6 +347,7 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::Underscore,
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
+        terms: Terms::Ignored,
     },
     AnchorRule {
         name: "mdit-vue",
@@ -332,6 +368,7 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::Dash,
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
+        terms: Terms::Ignored,
     },
     AnchorRule {
         name: "kramdown",
@@ -352,6 +389,7 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::Dash,
         attribute: Attribute::Literal,
         raw_html: RawHtml::Ignored,
+        terms: Terms::Ignored,
     },
     AnchorRule {
         name: "asciidoctor",
@@ -372,6 +410,7 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::UnderscoreFromTwo,
         attribute: Attribute::Literal,
         raw_html: RawHtml::Ignored,
+        terms: Terms::Ignored,
     },
     AnchorRule {
         name: "docutils",
@@ -392,6 +431,7 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::Dash,
         attribute: Attribute::Literal,
         raw_html: RawHtml::Ignored,
+        terms: Terms::Ignored,
     },
 ];
 
@@ -426,13 +466,32 @@ const MKDOCS_DIRECTIVE: DeclarationRule = DeclarationRule {
     declared_by: crate::route::MKDOCS.declared_by,
 };
 
+/// The shortcode a hook the site declares expands before the page is
+/// rendered. What arrives in the comment's place is a program's output, so it
+/// is read under the same declaration the snippet line is.
+const MKDOCS_SHORTCODE: DeclarationRule = DeclarationRule {
+    name: "mkdocs-shortcode",
+    spelling: "an HTML comment naming a hook's shortcode, `<!-- md:name -->`",
+    adapters: &[Adapter::Markdown],
+    declared_by: crate::route::MKDOCS.declared_by,
+};
+
+/// The tab whose identity the tabbed extension slugs under the settings the
+/// site writes down, which is why it is read under the same declaration.
+const MKDOCS_CONTENT_TAB: DeclarationRule = DeclarationRule {
+    name: "mkdocs-content-tab",
+    spelling: "a content tab opening a quoted title, `=== \"Title\"`",
+    adapters: &[Adapter::Markdown],
+    declared_by: crate::route::MKDOCS.declared_by,
+};
+
 const SPHINX_DECLARED_BY: &[&str] = crate::route::SPHINX.declared_by;
 
 /// Every way a document names its own identities rather than leaving them to a
-/// renderer's slug, plus the two spellings a declared generator owns, grouped
+/// renderer's slug, plus the spellings a declared generator owns, grouped
 /// by the profile that reads each one. An identity rule joins the union beside
 /// the renderer rules, so it can only grow the set an anchor may match.
-pub const DECLARATIONS: [DeclarationRule; 15] = [
+pub const DECLARATIONS: [DeclarationRule; 18] = [
     DeclarationRule {
         name: "html-id",
         spelling: "an `id` or `name` attribute on a raw HTML element",
@@ -441,7 +500,7 @@ pub const DECLARATIONS: [DeclarationRule; 15] = [
     },
     DeclarationRule {
         name: "attr-list",
-        spelling: "an attribute block alone on a block's last line, `{#id}`",
+        spelling: "an attribute block alone on a block's first or last line, `{#id}`",
         adapters: &[Adapter::Markdown],
         declared_by: &[],
     },
@@ -451,8 +510,16 @@ pub const DECLARATIONS: [DeclarationRule; 15] = [
         adapters: &[Adapter::Markdown],
         declared_by: &[],
     },
+    DeclarationRule {
+        name: "definition-term",
+        spelling: "a term line above a `: ` definition line",
+        adapters: &[Adapter::Markdown],
+        declared_by: &[],
+    },
     MKDOCS_SNIPPET,
     MKDOCS_DIRECTIVE,
+    MKDOCS_SHORTCODE,
+    MKDOCS_CONTENT_TAB,
     DeclarationRule {
         name: "myst-target",
         spelling: "a target alone on its line, `(name)=`",
