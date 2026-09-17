@@ -1,9 +1,10 @@
 # Limits and refusals
 
-The report has a closed set of named resource ceilings. Crossing a measured ceiling produces
-a typed error carrying the wire resource name, configured limit, and observed lower bound;
-a run that cannot complete exits 2. The table is rendered from the Rust defaults and checked
-in CI, so a default cannot change without updating this page.
+The report has a closed set of named resource ceilings. Crossing a snapshot ceiling produces
+a typed error carrying the wire resource name, configured limit, and observed lower bound,
+and a run that cannot complete exits 2. A per-document ceiling costs that one document
+instead, as the refusal rules further down set out. The table is rendered from the Rust
+defaults and checked in CI, so a default cannot change without updating this page.
 
 These are accounting ceilings, not all wall-clock deadlines. Document bytes are charged
 before parsing, parser node and nesting totals after the grammar returns, and
@@ -126,15 +127,27 @@ A crossing, as the report records it:
 Both numbers travel with the error, so the reader knows how far past the ceiling the input
 went without rerunning anything.
 
-Refusals follow one rule: when the input cannot be trusted, no complete pass is produced.
+Refusals follow one rule: when the run cannot be trusted, no complete pass is produced.
 The machine report records the refusal and exit class 2. A base commit the store does not
-hold, a tracked file whose object is missing, an
-index with an unresolved merge conflict, a document whose bytes will not decode, a name
-outside the path grammar, a control file with a duplicated JSON key: each has a named
-error code (`GIT_OBJECT_MISSING`, `DOCUMENT_INVALID`, `UNREPRESENTABLE_PATH`, and the rest
-of a closed list), and each ends the run at exit 2. A name that is merely not UTF-8 is
-not on that list: it is an ordinary document whose path the report writes as hex. The
-alternative in every one of these cases is a report that looks complete and is not.
+hold, a tracked file whose object is missing, an index with an unresolved merge conflict, a
+name outside the path grammar, a control file with a duplicated JSON key: each has a named
+error code (`GIT_OBJECT_MISSING`, `UNREPRESENTABLE_PATH`, and the rest of a closed list),
+and each ends the run at exit 2. A name that is merely not UTF-8 is not on that list: it is
+an ordinary document whose path the report writes as hex. The alternative in every one of
+these cases is a report that looks complete and is not.
+
+One file is not the run. A document whose bytes will not decode as its format requires, and
+a document that crosses one of the five per-document ceilings, say nothing about the rest of
+the tree, so neither ends the run. Such a document is unsupported: it is counted in the
+summary, named in the human output, and its report row carries `undecodable-document` or
+`resource-ceiling-crossed`. An `unsupported-document-format` finding records that its
+references went unchecked. What the old refusal protected still holds. The file is never
+quietly skipped, its references are never counted as checked, and a repository policy that
+protects that path fails the run through `coverage-reduced`.
+
+The five per-document ceilings are `document-blob-bytes`, `raw-link-destination-bytes`,
+`parser-nesting`, `parser-nodes-per-document`, and `references-per-document`. Every other
+ceiling on this page bounds a whole snapshot or the run itself, so crossing one is a refusal.
 
 The closed list, one fixed sentence per code, generated from
 [`AnalysisErrorCode::meaning`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs) and checked in CI.
@@ -166,7 +179,7 @@ exit-2 log says how to unblock the run without this page open.
 - `GIT_INTENT_TO_ADD`: the index holds an intent-to-add entry whose content is not staged; stage the file or drop the intent entry before checking the index
 - `GIT_SNAPSHOT_CHANGED`: the staged index changed while the run was reading it; rerun when the repository is quiet
 - `UNREPRESENTABLE_PATH`: a tree or index name is outside the path grammar, a backslash, a NUL, or a dot segment; the exact bytes are disclosed as hex
-- `DOCUMENT_INVALID`: a discovered document's bytes cannot be decoded as its format requires; the run refuses instead of skipping the file and passing
+- `DOCUMENT_INVALID`: a document's bytes cannot be decoded as its format requires; the scanner reports that document as unsupported with the reason on its document row rather than ending the run
 - `PARSER_ERROR`: the pinned parser failed on a document; the document is named and the run is incomplete rather than the file silently dropped
 - `PARSER_PANIC`: the pinned parser panicked on a document; the panic is caught and reported, and the run is incomplete
 - `INVALID_SOURCE_SPAN`: the parser returned a node whose byte span does not address the document; the parse is not trusted

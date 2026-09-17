@@ -54,7 +54,7 @@ when you pass `--index`. Amiss answers four questions about them, and nothing el
 The fourth question matters as much as the first three. A checker that silently skips what
 it can't handle is worse than no checker, since its green claims more than it checked. So
 everything Amiss cannot read or follow becomes a visible row in the report, and a document
-it cannot decode at all fails the run instead of dropping out of it.
+it cannot decode at all is named there as unsupported instead of dropping out of it.
 
 ## What a run never does
 

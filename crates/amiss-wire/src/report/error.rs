@@ -156,7 +156,7 @@ declare_taxonomy! {
             metadata: Some(&GIT),
         },
         DocumentInvalid => {
-            meaning: "a discovered document's bytes cannot be decoded as its format requires; the run refuses instead of skipping the file and passing",
+            meaning: "a document's bytes cannot be decoded as its format requires; the scanner reports that document as unsupported with the reason on its document row rather than ending the run",
             metadata: Some(&PARSE),
         },
         ParserError => {

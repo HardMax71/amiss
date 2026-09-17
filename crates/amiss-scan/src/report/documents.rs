@@ -7,6 +7,16 @@ use amiss_wire::report::model::{
 use crate::discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind};
 use crate::document::Classification;
 
+/// A blob's raw digest exists exactly when the run held its bytes, which is
+/// what content availability states for a document no ceiling let it scan.
+fn read_availability(record: &DocumentRecord) -> ContentAvailability {
+    if record.raw_digest.is_some() {
+        ContentAvailability::Available
+    } else {
+        ContentAvailability::NotRead
+    }
+}
+
 fn side_facets(
     record: &DocumentRecord,
 ) -> (
@@ -50,6 +60,18 @@ fn side_facets(
             model::DocumentStatus::Unsupported,
             Some(UnsupportedReason::UnsupportedDocumentFormat),
             ContentAvailability::Available,
+            None,
+        ),
+        DocumentStatus::Unsupported(UnsupportedKind::Undecodable) => (
+            model::DocumentStatus::Unsupported,
+            Some(UnsupportedReason::UndecodableDocument),
+            ContentAvailability::Available,
+            None,
+        ),
+        DocumentStatus::Unsupported(UnsupportedKind::Ceiling) => (
+            model::DocumentStatus::Unsupported,
+            Some(UnsupportedReason::ResourceCeilingCrossed),
+            read_availability(record),
             None,
         ),
         DocumentStatus::Failed(_) => (

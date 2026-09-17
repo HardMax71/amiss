@@ -87,6 +87,8 @@ fn a_snapshot_discovers_every_class_in_path_order() {
                 DocumentStatus::Unsupported(UnsupportedKind::Gitlink) => "gitlink",
                 DocumentStatus::Unsupported(UnsupportedKind::LfsPointer) => "lfs-pointer",
                 DocumentStatus::Unsupported(UnsupportedKind::Format) => "unsupported-format",
+                DocumentStatus::Unsupported(UnsupportedKind::Undecodable) => "undecodable",
+                DocumentStatus::Unsupported(UnsupportedKind::Ceiling) => "ceiling",
                 DocumentStatus::Failed(_) => "failed",
             };
             (
@@ -287,7 +289,7 @@ fn snapshot_budgets_end_discovery() {
 }
 
 #[test]
-fn an_oversized_document_fails_alone() {
+fn an_oversized_document_stops_at_its_own_row() {
     let dir = fixture();
     let tight = ScanLimits {
         document_blob_bytes: 24,
@@ -301,12 +303,12 @@ fn an_oversized_document_fails_alone() {
         .unwrap();
     assert_eq!(
         readme.status,
-        DocumentStatus::Failed(Error::ResourceLimit {
-            resource: ResourceName::DocumentBlobBytes,
-            configured_limit: 24,
-            observed_lower_bound: 32,
-        }),
-        "the header-declared size is observed exactly and only this document fails"
+        DocumentStatus::Unsupported(UnsupportedKind::Ceiling),
+        "a per-document ceiling is the document's boundary, not the run's"
+    );
+    assert!(
+        readme.raw_digest.is_none(),
+        "the blob was never read, so the row holds no digest for it"
     );
     assert!(
         got.documents
