@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.1](https://github.com/HardMax71/amiss/compare/v0.29.0...v0.29.1) - 2026-09-17
+
+### Changes
+
+- *(action)* drop the case expansion macOS bash cannot read
+
 ## [0.29.0](https://github.com/HardMax71/amiss/compare/v0.28.0...v0.29.0) - 2026-09-17
 
 ### Changes
