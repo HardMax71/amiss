@@ -168,6 +168,7 @@ pub enum UnsupportedSemantics<P> {
     Fragment(TaggedBlobTarget<P>),
     CodeFragment(Target<P>),
     SiteRoute,
+    UnmodelledRoute,
     NetworkPath,
     AttributeDependent,
     DuplicateLabel,
@@ -181,6 +182,7 @@ impl<P> UnsupportedSemantics<P> {
             Self::Query(target) | Self::CodeFragment(target) => target.is_lfs_pointer(),
             Self::Fragment(TaggedBlobTarget::Blob(blob)) => blob.content.is_lfs_pointer(),
             Self::SiteRoute
+            | Self::UnmodelledRoute
             | Self::NetworkPath
             | Self::AttributeDependent
             | Self::DuplicateLabel
@@ -205,6 +207,7 @@ pub enum UnsupportedSemanticsReason {
     NetworkPath,
     Query,
     SiteRoute,
+    UnmodelledRoute,
     #[strum(default, transparent)]
     Unrecognized(String),
 }

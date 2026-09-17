@@ -175,6 +175,86 @@ const SPHINX_SOURCE: [(&str, Staged<'static>); 5] = [
     ),
 ];
 
+/// A Hugo site under `site/`: a page writing the destination its own render
+/// hook rewrites, a sibling page the tree holds, an anchor into that page
+/// that no heading publishes, and a page outside the site whose missing
+/// destination is still a missing file.
+const HUGO_SITE: [(&str, Staged<'static>); 4] = [
+    (
+        "site/hugo.toml",
+        Staged::File(b"baseURL = 'https://example.org/'\n"),
+    ),
+    (
+        "site/content/en/guide.md",
+        Staged::File(
+            b"# Guide\n\n[glossary](g)\n[install](install.md)\n[setup](install.md#absent)\n",
+        ),
+    ),
+    (
+        "site/content/en/install.md",
+        Staged::File(b"# Install\n\n## Setup\n"),
+    ),
+    (
+        "notes/readme.md",
+        Staged::File(b"# Notes\n\n[gone](absent.md)\n"),
+    ),
+];
+
+/// Two mdBooks on one site: the outer book at the repository root and an
+/// archived one under `second/`, whose page climbs out of its own root the
+/// way the URL it is served at does. One climb reaches the outer book's
+/// source, one reaches a page no book answers, one climbs past the outermost
+/// root, and a source destination the tree lacks stays a missing file.
+const MDBOOK_SITE: [(&str, Staged<'static>); 5] = [
+    ("book.toml", Staged::File(b"[book]\ntitle = 'Guide'\n")),
+    (
+        "src/ch01.md",
+        Staged::File(b"# One\n\n[std](../std/index.html)\n[next](ch02.md)\n"),
+    ),
+    ("src/ch02.md", Staged::File(b"# Two\n")),
+    (
+        "second/book.toml",
+        Staged::File(b"[book]\ntitle = 'Archive'\n"),
+    ),
+    (
+        "second/src/ch01.md",
+        Staged::File(
+            b"# Old\n\n[current](../ch01.html)\n[gone](../ch09.html)\n[source](ch07.md)\n",
+        ),
+    ),
+];
+
+/// A Zola site under `docs/`: `config.toml` beside the `content` directory it
+/// anchors, a page writing the content-root prefix to a page that exists and
+/// to one that does not, and a theme page whose colocated asset is missing
+/// beside it. The `config.toml` under `.cargo/` has no content directory, so
+/// it anchors nothing.
+const ZOLA_SITE: [(&str, Staged<'static>); 6] = [
+    (
+        "docs/config.toml",
+        Staged::File(b"base_url = 'https://example.org'\n"),
+    ),
+    (
+        "docs/content/documentation/overview.md",
+        Staged::File(
+            b"# Overview\n\n[page](@/documentation/page.md)\n[gone](@/documentation/absent.md)\n",
+        ),
+    ),
+    (
+        "docs/content/documentation/page.md",
+        Staged::File(b"# Page\n"),
+    ),
+    (
+        "docs/content/themes/persona/index.md",
+        Staged::File(b"# Persona\n\n[report](pagespeed-report.svg)\n"),
+    ),
+    (".cargo/config.toml", Staged::File(b"[build]\njobs = 3\n")),
+    (
+        ".cargo/notes.md",
+        Staged::File(b"# Notes\n\n[page](@/documentation/page.md)\n"),
+    ),
+];
+
 /// # Errors
 ///
 /// Any filesystem failure.
@@ -201,4 +281,25 @@ pub fn mkdocs_site() -> std::io::Result<CommitChain> {
 /// Any filesystem failure.
 pub fn sphinx_source() -> std::io::Result<CommitChain> {
     staged_repository(&SPHINX_SOURCE)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn hugo_site() -> std::io::Result<CommitChain> {
+    staged_repository(&HUGO_SITE)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn mdbook_site() -> std::io::Result<CommitChain> {
+    staged_repository(&MDBOOK_SITE)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn zola_site() -> std::io::Result<CommitChain> {
+    staged_repository(&ZOLA_SITE)
 }

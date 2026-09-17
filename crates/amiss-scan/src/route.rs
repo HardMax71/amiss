@@ -9,7 +9,9 @@ use crate::discovery::{DocumentStatus, Located, SnapshotDiscovery};
 /// A spelling a router serves for a page whose source file is named
 /// otherwise. The first three were harvested from the router itself and hold
 /// in every tree; the rest were read from a generator's own resolver and hold
-/// only under the file that declares that generator.
+/// only under the file that declares that generator. The last two name what a
+/// build serves instead of the tree, so they reach no file and declare a
+/// boundary where the tree holds none.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Spelling {
@@ -22,6 +24,9 @@ pub enum Spelling {
     DocumentId,
     SourceRoot,
     DirectoryUrl,
+    BookRoute,
+    BuiltPage,
+    BuiltRoute,
 }
 
 /// One router's route rule: the spellings it serves for a source file beyond
@@ -76,10 +81,58 @@ pub(crate) const SPHINX: RouteRule = RouteRule {
     serves: &[Spelling::SourceRoot],
 };
 
+pub(crate) const MDBOOK_PAGES: RouteRule = RouteRule {
+    name: "mdbook-pages",
+    declared_by: &["book.toml"],
+    serves: &[Spelling::BookRoute, Spelling::BuiltPage],
+};
+
+pub(crate) const ZOLA: RouteRule = RouteRule {
+    name: "zola",
+    declared_by: &["config.toml"],
+    serves: &[Spelling::ContentRoot],
+};
+
+const ASTRO: RouteRule = RouteRule {
+    name: "astro",
+    declared_by: &[
+        "astro.config.ts",
+        "astro.config.mts",
+        "astro.config.js",
+        "astro.config.mjs",
+        "astro.config.cjs",
+    ],
+    serves: &[Spelling::BuiltRoute],
+};
+
+const ELEVENTY: RouteRule = RouteRule {
+    name: "eleventy",
+    declared_by: &[
+        "eleventy.config.ts",
+        "eleventy.config.js",
+        "eleventy.config.mjs",
+        "eleventy.config.cjs",
+        ".eleventy.js",
+    ],
+    serves: &[Spelling::BuiltRoute],
+};
+
+const HUGO: RouteRule = RouteRule {
+    name: "hugo",
+    declared_by: &["hugo.toml", "hugo.yaml"],
+    serves: &[Spelling::BuiltRoute],
+};
+
+const JEKYLL: RouteRule = RouteRule {
+    name: "jekyll",
+    declared_by: &["_config.yml"],
+    serves: &[Spelling::BuiltRoute],
+};
+
 /// Every router rule the resolver knows. A spelling reaches a source file only
 /// when that file is in the tree, so a rule can widen what resolves and can
 /// never invent a target.
-pub const ROUTERS: [RouteRule; 7] = [
+pub const ROUTERS: [RouteRule; 13] = [
     RouteRule {
         name: "mdbook",
         declared_by: &[],
@@ -103,6 +156,12 @@ pub const ROUTERS: [RouteRule; 7] = [
     DOCUSAURUS,
     MKDOCS,
     SPHINX,
+    MDBOOK_PAGES,
+    ZOLA,
+    ASTRO,
+    ELEVENTY,
+    HUGO,
+    JEKYLL,
 ];
 
 /// Antora's resource families: the coordinate an author writes before `$`,
@@ -235,18 +294,52 @@ pub fn anchors(
             .into_iter()
             .collect(),
         Adapter::Markdown | Adapter::Mdx => {
-            match mkdocs_anchors(snapshot, document, construct, path_part) {
-                served if served.is_empty() => {
-                    docusaurus_anchors(snapshot, document, is_image, path_part)
-                }
-                served => served,
-            }
+            markdown_anchors(snapshot, document, construct, is_image, path_part)
         }
         Adapter::Rst => sphinx_anchor(snapshot, document, construct, path_part)
             .into_iter()
             .collect(),
         Adapter::PlainAdvisory => Vec::new(),
     }
+}
+
+/// The Markdown rules in the order they are asked. The first rule that claims
+/// the destination answers, and a rule claims one only where its own
+/// generator is declared above the document.
+fn markdown_anchors(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    construct: Option<SourceConstruct>,
+    is_image: bool,
+    path_part: &str,
+) -> Vec<(Vec<u8>, String)> {
+    let published = mkdocs_anchors(snapshot, document, construct, path_part);
+    if !published.is_empty() {
+        return published;
+    }
+    if let Some(relative) = path_part.strip_prefix("@/")
+        && let Some(content) = zola_content(snapshot, document)
+    {
+        return vec![(content, relative.to_owned())];
+    }
+    let site = docusaurus_anchors(snapshot, document, is_image, path_part);
+    if !site.is_empty() {
+        return site;
+    }
+    mdbook_anchors(snapshot, document, path_part)
+}
+
+/// Whether the build answers this path instead of the tree. A generator on
+/// the document's ancestor chain either serves every relative destination
+/// from a page URL this engine does not model, or serves the built page a
+/// path names, and neither is a file any tree holds.
+#[must_use]
+pub fn unplaced(snapshot: &SnapshotDiscovery, document: &RepoPath, missing: &RepoPath) -> bool {
+    let page = output_extension(missing.as_bytes()).is_some();
+    ROUTERS.iter().any(|rule| {
+        (rule.serves(Spelling::BuiltRoute) || (page && rule.serves(Spelling::BuiltPage)))
+            && declared_root(snapshot, document.as_bytes(), rule).is_some()
+    })
 }
 
 /// The directory a document sits in, without its trailing separator; empty
@@ -395,6 +488,85 @@ fn docusaurus_anchors(
         }
     }
     out
+}
+
+/// Where the page's own URL puts a destination that climbs out of the book.
+/// mdBook serves a page under a book's `src` at its path under the book root,
+/// one directory shallower than the source, so a destination climbing past
+/// that root names a page of the book that holds it and is read back as a
+/// source under that book's own `src`. The reading beside the document comes
+/// first, so the finding still names the path the author wrote.
+fn mdbook_anchors(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    path_part: &str,
+) -> Vec<(Vec<u8>, String)> {
+    let mut relative = path_part;
+    let mut climbed = 0_usize;
+    while let Some(rest) = relative.strip_prefix("../") {
+        relative = rest;
+        climbed = climbed.saturating_add(1);
+    }
+    if climbed == 0 || relative.is_empty() {
+        return Vec::new();
+    }
+    let raw = document.as_bytes();
+    let Some(root) = declared_root(snapshot, raw, &MDBOOK_PAGES) else {
+        return Vec::new();
+    };
+    let Some(page) = raw
+        .strip_prefix(join(&root, b"src").as_slice())
+        .and_then(|rest| rest.strip_prefix(b"/"))
+    else {
+        return Vec::new();
+    };
+    let depth = page.split(|byte| *byte == b'/').count().saturating_sub(1);
+    let Some(above) = climbed.checked_sub(depth).filter(|above| *above > 0) else {
+        return Vec::new();
+    };
+    let mut ancestor = root.as_slice();
+    for _ in 0..above {
+        if ancestor.is_empty() {
+            return Vec::new();
+        }
+        ancestor = directory(ancestor);
+    }
+    let Some(owner) = declared_root(
+        snapshot,
+        &join(ancestor, relative.as_bytes()),
+        &MDBOOK_PAGES,
+    ) else {
+        return Vec::new();
+    };
+    let Some(under) = ancestor
+        .strip_prefix(owner.as_slice())
+        .map(|rest| rest.strip_prefix(b"/").unwrap_or(rest))
+    else {
+        return Vec::new();
+    };
+    let source = join(&owner, b"src");
+    let source = if under.is_empty() {
+        source
+    } else {
+        join(&source, under)
+    };
+    vec![
+        (directory(raw).to_vec(), path_part.to_owned()),
+        (source, relative.to_owned()),
+    ]
+}
+
+/// Zola's content root: the `content` directory beside the `config.toml`
+/// that declares the site, which is also what tells that file apart from the
+/// Hugo configuration spelled the same way.
+fn zola_content(snapshot: &SnapshotDiscovery, document: &RepoPath) -> Option<Vec<u8>> {
+    let root = declared_root(snapshot, document.as_bytes(), &ZOLA)?;
+    let content = RepoPath::from_bytes(join(&root, b"content"))?;
+    matches!(
+        snapshot.locate(&content),
+        Some(Located::ImpliedTree | Located::Entry(GitMode::Tree, _))
+    )
+    .then(|| content.as_bytes().to_vec())
 }
 
 /// Every route the snapshot's documents publish, and the document publishing

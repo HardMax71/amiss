@@ -18,7 +18,9 @@ use crate::declared::Declarations;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::{Classification, classify};
 use crate::resources::{Aggregate, ScanResources};
-use crate::route::{anchors, candidates, directory, generator_alias, template_expression};
+use crate::route::{
+    anchors, candidates, directory, generator_alias, template_expression, unplaced,
+};
 
 mod anchor;
 mod content;
@@ -283,28 +285,11 @@ fn resolve_destination(
         ));
     }
 
-    if let Some(raw_fragment) = &fragment
-        && decode_fragment(raw_fragment).is_none()
+    if fragment
+        .as_deref()
+        .is_some_and(|raw| decode_fragment(raw).is_none())
     {
-        let intent = if path_part.starts_with('/') && !path_part.starts_with("//") {
-            Intent {
-                kind: IntentKind::SiteRoute,
-                commit_oid: None,
-                repository_path: None,
-                target_kind: None,
-                external_scheme: None,
-                query,
-                fragment,
-            }
-        } else {
-            unsupported_intent(query, fragment)
-        };
-        return Ok((
-            intent,
-            Resolution::Invalid {
-                reason: InvalidReference::FragmentEncoding,
-            },
-        ));
+        return Ok(undecodable_fragment(path_part, query, fragment));
     }
 
     if let Some(resolution) = unreadable(path_part) {
@@ -362,7 +347,15 @@ fn resolve_destination(
             row,
         ));
     }
-    native(resolver, is_image, beside, &anchors, query, fragment, forge)
+    native(
+        resolver,
+        is_image,
+        document_path,
+        &anchors,
+        query,
+        fragment,
+        forge,
+    )
 }
 
 /// Native destinations: one terminal slash is an authored directory hint on a
@@ -371,16 +364,18 @@ fn resolve_destination(
 /// The reading from the document's own directory fixes the intent wherever a
 /// rule kept one, since that is the path the author wrote, and the first
 /// anchor the tree holds, as written or under a router spelling, is the
-/// target that answers.
+/// target that answers. A path a declared generator serves from its own build
+/// is undecided rather than absent, since no tree holds that answer.
 fn native(
     resolver: &mut Resolver<'_>,
     is_image: bool,
-    beside: &[u8],
+    document: &RepoPath,
     anchors: &[(Vec<u8>, String)],
     query: Option<String>,
     fragment: Option<String>,
     forge: Option<ForgeDialect>,
 ) -> Result<(Intent, Resolution), Error> {
+    let beside = directory(document.as_bytes());
     let authored = anchors
         .iter()
         .find(|(parent, _)| parent == beside)
@@ -403,7 +398,42 @@ fn native(
         fragment.as_deref(),
         forge,
     )?;
+    let undecided = matches!(&row, Resolution::Missing(Missing::PathNotFound { path, .. })
+        if unplaced(resolver.snapshot, document, path));
+    let row = if undecided {
+        Resolution::UnsupportedSemantics(UnsupportedSemantics::UnmodelledRoute)
+    } else {
+        row
+    };
     Ok((repository_intent(path, target_kind, query, fragment), row))
+}
+
+/// A fragment whose escapes do not decode ends the reading before the tree is
+/// asked, and a leading slash still names the site route it named.
+fn undecodable_fragment(
+    path_part: &str,
+    query: Option<String>,
+    fragment: Option<String>,
+) -> (Intent, Resolution) {
+    let intent = if path_part.starts_with('/') && !path_part.starts_with("//") {
+        Intent {
+            kind: IntentKind::SiteRoute,
+            commit_oid: None,
+            repository_path: None,
+            target_kind: None,
+            external_scheme: None,
+            query,
+            fragment,
+        }
+    } else {
+        unsupported_intent(query, fragment)
+    };
+    (
+        intent,
+        Resolution::Invalid {
+            reason: InvalidReference::FragmentEncoding,
+        },
+    )
 }
 
 fn repository_intent(

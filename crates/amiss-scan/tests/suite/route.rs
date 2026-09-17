@@ -592,3 +592,113 @@ fn a_sphinx_source_directory_anchors_absolute_doc_roles_at_its_conf() {
     ]);
     assert_eq!(outcomes(&chain), want);
 }
+
+/// Under a generator whose URL model this engine does not implement, a
+/// relative destination the tree does not hold is the build's answer rather
+/// than a missing file, while a destination the tree does hold still
+/// resolves, an anchor into it is still read, and a document outside the site
+/// keeps its missing path. The three other rules of this kind differ only by
+/// the file that declares them.
+#[test]
+fn a_hugo_site_leaves_an_unresolved_relative_destination_to_its_build() {
+    let chain = amiss_fixtures::hugo_site().expect("the fixture stages");
+    let guide = "site/content/en/guide.md";
+    let install = "site/content/en/install.md";
+    let want = expected(vec![
+        row(
+            guide,
+            Some("site/content/en/g"),
+            ResolutionTag::UnsupportedSemantics,
+            None,
+        ),
+        row(guide, Some(install), ResolutionTag::Resolved, Some(install)),
+        row(guide, Some(install), ResolutionTag::Missing, None),
+        row(
+            "notes/readme.md",
+            Some("notes/absent.md"),
+            ResolutionTag::Missing,
+            Some("notes/absent.md"),
+        ),
+    ]);
+    assert_eq!(outcomes(&chain), want);
+}
+
+/// Under `book.toml`, a page is served one directory above its source, so a
+/// destination climbing past the book root is read back under the source
+/// directory of the book that holds the page it names. A built page no book
+/// answers belongs to the site around it, a climb past the outermost root
+/// reaches the same answer, and a source destination the tree lacks is a
+/// missing file as before.
+#[test]
+fn an_mdbook_page_climbs_out_of_its_book_the_way_its_url_does() {
+    let chain = amiss_fixtures::mdbook_site().expect("the fixture stages");
+    let old = "second/src/ch01.md";
+    let want = expected(vec![
+        row(
+            "src/ch01.md",
+            Some("std/index.html"),
+            ResolutionTag::UnsupportedSemantics,
+            None,
+        ),
+        row(
+            "src/ch01.md",
+            Some("src/ch02.md"),
+            ResolutionTag::Resolved,
+            Some("src/ch02.md"),
+        ),
+        row(
+            old,
+            Some("second/ch01.html"),
+            ResolutionTag::Resolved,
+            Some("src/ch01.md"),
+        ),
+        row(
+            old,
+            Some("second/ch09.html"),
+            ResolutionTag::UnsupportedSemantics,
+            None,
+        ),
+        row(
+            old,
+            Some("second/src/ch07.md"),
+            ResolutionTag::Missing,
+            Some("second/src/ch07.md"),
+        ),
+    ]);
+    assert_eq!(outcomes(&chain), want);
+}
+
+/// Under a `config.toml` beside a `content` directory, the `@/` prefix opens
+/// a path from that directory, and what it reaches there is an ordinary
+/// lookup: a page that exists resolves and one that does not is missing at
+/// the content root. A colocated asset beside a page stays the missing file
+/// it is, and a `config.toml` with no content directory beside it anchors
+/// nothing.
+#[test]
+fn a_zola_site_anchors_the_content_root_prefix_at_its_content_directory() {
+    let chain = amiss_fixtures::zola_site().expect("the fixture stages");
+    let overview = "docs/content/documentation/overview.md";
+    let page = "docs/content/documentation/page.md";
+    let want = expected(vec![
+        row(overview, Some(page), ResolutionTag::Resolved, Some(page)),
+        row(
+            overview,
+            Some("docs/content/documentation/absent.md"),
+            ResolutionTag::Missing,
+            Some("docs/content/documentation/absent.md"),
+        ),
+        row(
+            "docs/content/themes/persona/index.md",
+            Some("docs/content/themes/persona/pagespeed-report.svg"),
+            ResolutionTag::Missing,
+            Some("docs/content/themes/persona/pagespeed-report.svg"),
+        ),
+        row(
+            ".cargo/notes.md",
+            Some(".cargo/@/documentation/page.md"),
+            ResolutionTag::Missing,
+            Some(".cargo/@/documentation/page.md"),
+        ),
+    ]);
+    assert_eq!(outcomes(&chain), want);
+}

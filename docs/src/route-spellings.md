@@ -71,6 +71,12 @@ never its contents.
 | `docusaurus` | `docusaurus.config.ts`, `docusaurus.config.mts`, `docusaurus.config.cts`, `docusaurus.config.js`, `docusaurus.config.mjs`, `docusaurus.config.cjs` | `site-alias`, `content-root`, `document-id` |
 | `mkdocs` | `mkdocs.yml`, `mkdocs.yaml` | `directory-url` |
 | `sphinx` | `conf.py` | `source-root` |
+| `mdbook-pages` | `book.toml` | `book-route`, `built-page` |
+| `zola` | `config.toml` | `content-root` |
+| `astro` | `astro.config.ts`, `astro.config.mts`, `astro.config.js`, `astro.config.mjs`, `astro.config.cjs` | `built-route` |
+| `eleventy` | `eleventy.config.ts`, `eleventy.config.js`, `eleventy.config.mjs`, `eleventy.config.cjs`, `.eleventy.js` | `built-route` |
+| `hugo` | `hugo.toml`, `hugo.yaml` | `built-route` |
+| `jekyll` | `_config.yml` | `built-route` |
 <!-- amiss-doc-contract:declared-routers:end -->
 
 `antora-resource` reads an AsciiDoc destination as an Antora resource ID,
@@ -150,7 +156,7 @@ extensionless name takes, the same suffix the relative form already took. A plai
 with a leading slash is still a site route, since Sphinx emits it as written, and a `:doc:`
 target in a tree with no `conf.py` above the document stays the declared site route it was.
 
-Each of these widens what resolves and nothing else, like the three spellings: an anchored
+Each of the spellings above widens what resolves and nothing else, like the three: an anchored
 destination is looked up in the tree and is missing when the tree does not hold it, so
 `xref:load-templates.adoc[]` in `modules/api/pages/index.adoc` is still missing while
 `modules/api/pages/load-templates.adoc` is not there. One thing does move: the intent. A
@@ -203,6 +209,59 @@ expression this way, which is why the rows are the delimiters rather than the na
 generator. A tree that holds a real file whose name spells an expression, as a cookiecutter
 template does, gets this answer for it instead of the file.
 
+## What the build answers instead of the tree
+
+A generator that does not put its pages where its sources are breaks the assumption behind
+every rule above, that a relative destination names a place in the tree. Hugo, Jekyll,
+Eleventy and Astro each resolve one against the URL the page is served at, and that URL comes
+out of a configuration this engine does not open. Twelve ordinary projects put a number on it:
+of 1,596 missing targets, the 1,149 from repositories built on a generator with no rule here
+held 41 real breaks. So `built-route` answers such a destination with
+`unsupported-reference-semantics` and a reason saying the route model is not modelled, the way
+an absolute site route already does, instead of naming a file nobody wrote.
+
+The selection is the same as every rule above: the file has to sit on the document's ancestor
+chain, and only the path side moves. An anchor into a document the tree holds is still read,
+because the identities a document publishes are enumerable whatever a site does with its URLs,
+which is why helix keeps all nine of its anchor findings and its one missing path. A tree
+carrying none of these files keeps every claim it had, which is how the Kubernetes community
+repository keeps all 254 of its missing targets.
+
+mdBook is modelled rather than declared, because its URLs are in the tree. A book's root is the
+directory holding `book.toml`, its pages are the Markdown under `src`, and each page is served
+one directory shallower than its source, so `second/src/ch01.md` is `second/ch01.html`. A
+destination climbing past that root is therefore read back under the `src` of whichever book
+holds the page it names, and that is `book-route`: the rust book's
+`second-edition/src/ch09-02-recoverable-errors-with-result.md` writes
+`../ch09-02-recoverable-errors-with-result.html`, means the current edition's copy, and 241 of
+that repository's 403 missing targets are that one shape.
+
+`built-page` is the rest of the same book. A destination ending in `.html` that no book source
+answers names a page of the built site rather than a file. The rust book's `redirects/` tree
+writes 79 of those and its chapters write 33 more, climbing to `std`, `reference` and
+`nomicon` on the same domain. None of them is a break and none is placeable, so all take the
+boundary, and what stays missing is what always was: 28 images under `nostarch/` and two paths
+in a crate README.
+
+Zola is modelled through the one prefix it spells. `@/` opens a path from the `content`
+directory beside `config.toml`, so `@/documentation/page.md` in Zola's own repository is
+`docs/content/documentation/page.md`, and 59 of its 80 missing targets resolve that way while
+the other 21 stay the dangling theme files they are. That directory is also how a Zola
+configuration is told from a Hugo one: both may be called `config.toml` and the name says
+nothing, so Hugo is read from `hugo.toml` or `hugo.yaml`, the spelling it has preferred since
+0.110, and a bare `config.toml` is read as Zola's only when a `content` directory sits beside
+it. A Rust workspace's `.cargo/config.toml` has no content directory beside it, so it anchors
+nothing and ripgrep, bat and helix keep every claim they had. Where a tree spells only
+`config.toml`, the Zola reading wins, since it can add an answer and can never take a claim
+away.
+
+Jekyll's permalink template is what this leaves undone. `docs/_config.yml` in Jekyll's own
+repository sets `permalink: "/:collection/:path/"`, every page URL then ends in a slash, and a
+`../` climbs one level less than the file path does, which is 20 of that repository's 24
+missing targets. Reading the template means opening the configuration file, and no rule here
+opens one, so the boundary answers the whole `docs/` tree instead and those 20 go with it. All
+three real breaks sit in `.github/`, outside the tree that file declares, and they stay.
+
 ## What this costs
 
 A repository with no site at all now resolves `./guide` when `guide.md` exists, and on
@@ -221,7 +280,8 @@ whole against an empty base under the observe profile. Three completed, at hugoD
 `620696ab3b07`, jest `f49721c78e19`, and jekyll `7697d249793d`, and their counts below are
 from those reports. The fourth, docusaurus `16f537309e35`, produced no report: it ran to the
 end of evaluation and then refused at output, so nothing is counted from it. Of the three
-that completed, only jest's shape became a row, and it took a later survey to write it.
+that completed, jest's shape became a spelling and took a later survey to write, while Hugo's
+and Jekyll's became rows that declare a boundary instead of serving a path.
 
 Hugo's own documentation writes `[glob pattern](g)` and resolves `g` in its own
 `render-link.html`, 734 references to a path that exists nowhere. Its 101 missing anchors are
@@ -251,9 +311,12 @@ that site's permalinks mirror its paths, which is a configuration and not a prop
 Asked the same destination, mdbook serves nothing, mkdocs rejects it in the source with a
 warning naming the `.md` file, and vitepress emits it verbatim into a build holding only
 `page.html`, dead on any host despite its own dead-link checker accepting it. One router, by
-configuration, is not a rule.
+configuration, is not a spelling. What that configuration does decide is where every page
+lands, and the `built-route` row says so rather than guessing at the template.
 
-What Hugo needs instead is the generated class, arriving there as transclusion and as a
+Hugo's `g` was the case for the generated class, arriving as transclusion and as a
 repository's own render hook. The exact-path core of that class is answered now, from the
 tracked ignore file recorded in [Reference coverage](completed/reference-coverage.md), and
-both of those arrivals sit outside it.
+both of those arrivals still sit outside it. What moved is the verdict rather than the class:
+a destination a render hook rewrites is undecided instead of missing, so hugoDocs reports 123
+missing targets where it reported 618, and every one of them is an anchor.
