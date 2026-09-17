@@ -90,6 +90,7 @@ pub struct SnapshotDiscovery {
     pub path_defects: Vec<PathDefect>,
     pub entries: BTreeMap<RepoPath, (GitMode, Oid)>,
     pub labels: BTreeMap<String, LabelState>,
+    pub published_routes: BTreeMap<RepoPath, RepoPath>,
 }
 
 /// What the snapshot's documents say about one `.. _name:` label: the one
@@ -185,6 +186,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         tree_entries: 0,
         path_defects: Vec::new(),
         entries: BTreeMap::new(),
+        published_routes: BTreeMap::new(),
     }
 }
 
@@ -435,6 +437,7 @@ pub(crate) fn discover_walk(
             }
         }
     }
+    discovery.published_routes = crate::route::published_routes(&discovery);
     Ok(discovery)
 }
 
@@ -484,6 +487,7 @@ pub fn discover_index(
         };
         record_document(&context, git, scan, &mut discovery, path, &tree_entry)?;
     }
+    discovery.published_routes = crate::route::published_routes(&discovery);
     Ok(discovery)
 }
 

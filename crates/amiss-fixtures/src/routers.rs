@@ -49,13 +49,16 @@ const ANTORA_COMPONENT: [(&str, Staged<'static>); 8] = [
 /// versioned twin, each linking a bare Markdown path that lives at the content
 /// root, one at the site root, one nowhere, and the `@site/` alias to a static
 /// asset that exists and one that does not, and a URL whose last segment spells
-/// a Markdown file. The repository `README.md` writes
+/// a Markdown file. The same page names three routes rather than paths: the
+/// identity a sibling declares in its frontmatter, the site-absolute slug
+/// another declares, and the path a document declaring neither is published
+/// at, beside a route nothing publishes. The repository `README.md` writes
 /// the same destinations from outside the site, where the bare path reaches
 /// nothing and the alias has no site to name, and beside them the shapes a
 /// docusaurus tree writes that are paths under no site at all: a webpack
 /// inline request, a name that merely carries a bang, and a directory whose
 /// own name opens with an at sign.
-const DOCUSAURUS_SITE: [(&str, Staged<'static>); 10] = [
+const DOCUSAURUS_SITE: [(&str, Staged<'static>); 13] = [
     (
         "website/docusaurus.config.ts",
         Staged::File(b"export default {};\n"),
@@ -66,8 +69,21 @@ const DOCUSAURUS_SITE: [(&str, Staged<'static>); 10] = [
             b"[static](static-assets.mdx) [absent](absent.mdx) [note](root-note.md) \
               [logo](@site/static/img/logo.png) [gone](@site/static/img/gone.png) \
               ![logo](@site/static/img/logo.png) [beside](./static-assets.mdx) \
-              [remote](https://example.com/docs/README.md)\n",
+              [remote](https://example.com/docs/README.md) [cli](cli) \
+              [unclaimed](absent-id) [setup](../../guides/setup) [notes](notes)\n",
         ),
+    ),
+    (
+        "website/docs/api/themes/command-line.mdx",
+        Staged::File(b"---\nid: cli\ntitle: Command line\n---\n\n# CLI\n"),
+    ),
+    (
+        "website/docs/api/themes/notes.mdx",
+        Staged::File(b"# Notes\n"),
+    ),
+    (
+        "website/docs/setup.mdx",
+        Staged::File(b"---\nslug: /guides/setup\n---\n\n# Setup\n"),
     ),
     (
         "website/docs/static-assets.mdx",
@@ -99,15 +115,18 @@ const DOCUSAURUS_SITE: [(&str, Staged<'static>); 10] = [
 /// directory URL that the tree answers with a page source and one it answers
 /// with nothing, a markdown link the generator rewrites from the source
 /// instead, and a nested page whose raw image climbs out of its own published
-/// directory. `notes/index.md` writes the same directory URL from outside the
-/// site, where it stays a directory.
-const MKDOCS_SITE: [(&str, Staged<'static>); 6] = [
+/// directory while its raw link stays inside it. That page also writes the
+/// expression a build fills in, and the index links a file whose own name
+/// carries a brace. A document declares an identity no mkdocs tree publishes,
+/// and `notes/index.md` writes the same directory URL from outside the site,
+/// where it stays a directory.
+const MKDOCS_SITE: [(&str, Staged<'static>); 8] = [
     ("site/mkdocs.yml", Staged::File(b"site_name: Widgets\n")),
     (
         "site/docs/index.md",
         Staged::File(
             b"# Widgets\n\n<a href=\"getting-started/\">Start</a>\n<a href=\"absent/\">Gone</a>\n\n\
-              [start](getting-started.md)\n",
+              [start](getting-started.md)\n[named](named-page)\n[brace](a{b}.md)\n",
         ),
     ),
     (
@@ -115,9 +134,15 @@ const MKDOCS_SITE: [(&str, Staged<'static>); 6] = [
         Staged::File(b"# Getting started\n"),
     ),
     (
+        "site/docs/named.md",
+        Staged::File(b"---\nid: named-page\n---\n\n# Named\n"),
+    ),
+    ("site/docs/a{b}.md", Staged::Absent(b"# Brace\n")),
+    (
         "site/docs/user-guide/choosing-your-theme.md",
         Staged::File(
-            b"# Themes\n\n<img src=\"../../img/light.png\">\n<img src=\"../../img/gone.png\">\n",
+            b"# Themes\n\n<img src=\"../../img/light.png\">\n<img src=\"../../img/gone.png\">\n\
+              <a href=\"absent/\">Gone</a>\n<a href=\"{{ page.url }}\">Self</a>\n",
         ),
     ),
     ("site/docs/img/light.png", Staged::File(b"png\n")),

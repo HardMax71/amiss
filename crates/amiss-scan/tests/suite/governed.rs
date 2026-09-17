@@ -180,6 +180,7 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
     entries.insert(path.clone(), (GitMode::RegularFile, oid.clone()));
     SnapshotDiscovery {
         labels: BTreeMap::new(),
+        published_routes: BTreeMap::new(),
         documents: vec![DocumentRecord {
             path,
             classification: Classification::StructuredMarkdown,

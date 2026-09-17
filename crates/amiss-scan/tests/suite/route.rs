@@ -336,7 +336,11 @@ fn an_antora_component_anchors_resource_ids_at_the_family_directory() {
 /// own directory does not hold is asked under the content root and then the
 /// site directory, `@site/` names a path from the site directory for links
 /// and images alike, a `./` destination stays beside the document, and a URL
-/// is external whatever its last segment spells. The
+/// is external whatever its last segment spells. A destination that is a
+/// route rather than a path reaches the document published there: the
+/// identity a frontmatter `id` declares, the site-absolute `slug` another
+/// declares, and the path of a document declaring neither, while a route
+/// nothing publishes stays missing. The
 /// intent keeps the spelling the author wrote while the resolution names the
 /// file that answered, and a document outside the site keeps the bare path it
 /// wrote while the alias becomes a destination this run cannot answer. A
@@ -389,6 +393,30 @@ fn a_docusaurus_site_answers_bare_paths_from_its_content_root_and_the_site_alias
         row(page, Some(beside), ResolutionTag::Missing, Some(beside)),
         row(page, None, ResolutionTag::External, None),
         row(
+            page,
+            Some("website/docs/api/themes/cli"),
+            ResolutionTag::Resolved,
+            Some("website/docs/api/themes/command-line.mdx"),
+        ),
+        row(
+            page,
+            Some("website/docs/api/themes/absent-id"),
+            ResolutionTag::Missing,
+            Some("website/docs/api/themes/absent-id"),
+        ),
+        row(
+            page,
+            Some("website/docs/guides/setup"),
+            ResolutionTag::Resolved,
+            Some("website/docs/setup.mdx"),
+        ),
+        row(
+            page,
+            Some("website/docs/api/themes/notes"),
+            ResolutionTag::Resolved,
+            Some("website/docs/api/themes/notes.mdx"),
+        ),
+        row(
             versioned,
             Some("website/versioned_docs/version-1.0/api/themes/static-assets.mdx"),
             ResolutionTag::Resolved,
@@ -424,7 +452,11 @@ fn a_docusaurus_site_answers_bare_paths_from_its_content_root_and_the_site_alias
 /// answers a directory URL with the page source, a nested page's image climbs
 /// out of the directory its own name opened, a markdown link keeps the
 /// source-relative reading the generator rewrites, and a document with no
-/// `mkdocs.yml` above it keeps the directory it promised.
+/// `mkdocs.yml` above it keeps the directory it promised. Every one of them
+/// is named by the reading from the document's own directory, so no finding
+/// carries the published directory the rule anchored at. An expression the
+/// build fills in is not a path at all, while a file whose own name carries a
+/// brace is, and a frontmatter identity is a route no mkdocs tree publishes.
 #[test]
 fn a_mkdocs_site_reads_a_raw_html_destination_from_the_published_directory() {
     let chain = amiss_fixtures::mkdocs_site().expect("the fixture stages");
@@ -446,17 +478,36 @@ fn a_mkdocs_site_reads_a_raw_html_destination_from_the_published_directory() {
         ),
         row(index, Some(start), ResolutionTag::Resolved, Some(start)),
         row(
+            index,
+            Some("site/docs/named-page"),
+            ResolutionTag::Missing,
+            Some("site/docs/named-page"),
+        ),
+        row(
+            index,
+            Some("site/docs/a{b}.md"),
+            ResolutionTag::Resolved,
+            Some("site/docs/a{b}.md"),
+        ),
+        row(
             themes,
-            Some("site/docs/img/light.png"),
+            Some("site/img/light.png"),
             ResolutionTag::Resolved,
             Some("site/docs/img/light.png"),
         ),
         row(
             themes,
-            Some("site/docs/img/gone.png"),
+            Some("site/img/gone.png"),
             ResolutionTag::Missing,
-            Some("site/docs/img/gone.png"),
+            Some("site/img/gone.png"),
         ),
+        row(
+            themes,
+            Some("site/docs/user-guide/absent"),
+            ResolutionTag::Missing,
+            Some("site/docs/user-guide/absent"),
+        ),
+        row(themes, None, ResolutionTag::UnsupportedSemantics, None),
         row(
             "notes/index.md",
             Some("notes/getting-started"),

@@ -65,6 +65,7 @@ pub struct Scanned {
     pub opaque: Opaque,
     pub governed: Vec<GovernedSource>,
     pub declared_anchors: Vec<String>,
+    pub declared_name: Option<String>,
     pub anchor_source: Option<AnchorSource>,
 }
 
@@ -145,6 +146,7 @@ pub fn scan_bytes(
             opaque: Opaque::default(),
             governed: Vec::new(),
             declared_anchors: Vec::new(),
+            declared_name: crate::route::declared_name(adapter, source),
             anchor_source: None,
         });
     };
@@ -204,6 +206,7 @@ pub fn scan_bytes(
         opaque: extraction.opaque,
         governed,
         declared_anchors: extraction.declared_anchors,
+        declared_name: crate::route::declared_name(adapter, source),
         anchor_source: Some(AnchorSource {
             headings: extraction.headings,
             html_anchors: extraction.html_anchors,

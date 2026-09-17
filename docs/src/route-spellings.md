@@ -68,7 +68,7 @@ never its contents.
 | Router | Selected by | Serves |
 | --- | --- | --- |
 | `antora` | `antora.yml` | `antora-resource` |
-| `docusaurus` | `docusaurus.config.ts`, `docusaurus.config.mts`, `docusaurus.config.cts`, `docusaurus.config.js`, `docusaurus.config.mjs`, `docusaurus.config.cjs` | `site-alias`, `content-root` |
+| `docusaurus` | `docusaurus.config.ts`, `docusaurus.config.mts`, `docusaurus.config.cts`, `docusaurus.config.js`, `docusaurus.config.mjs`, `docusaurus.config.cjs` | `site-alias`, `content-root`, `document-id` |
 | `mkdocs` | `mkdocs.yml`, `mkdocs.yaml` | `directory-url` |
 | `sphinx` | `conf.py` | `source-root` |
 <!-- amiss-doc-contract:declared-routers:end -->
@@ -111,6 +111,26 @@ site is built, and nothing here says which directory it names. That is
 same reason. Only the opening is read, so a tree with a real `@internal/` directory resolves
 that path as written.
 
+`document-id` is the identity a document declares for itself. Docusaurus publishes a page at
+the `id` in its frontmatter rather than at its file name, so jest's `docs/CLI.md` opens with
+`id: cli`, the site serves it at `cli`, and every link to it writes `cli`, which names no file
+in the tree. A `slug` overrides the id, read from the document's own directory or, with a
+leading slash, from the content root it sits in, and a document declaring neither is published
+at its own path without the source extension, which is how a bare `notes` reaches `notes.mdx`.
+The routes are collected once per snapshot, from the documents it already holds, and a
+destination the tree does not answer is looked up in that collection after the three
+spellings, so a real file always wins. A route two documents claim is left out rather than
+decided between them.
+
+This is the one rule the document's own ancestor chain does not select. A site names its
+content directories in the configuration file, which this engine never opens, and jest's site
+sits in `website/` while the documents it publishes sit in `../docs`, so selecting on the
+chain would miss every one of them. Any `docusaurus.config.*` in the tree turns the collection
+on, and a tree with none has no collection at all. Inside a document the rule reads two
+frontmatter keys written on lines of their own; the region stays opaque to the grammar, and a
+value that is not a plain scalar is declined rather than guessed at. A page that declares a
+site-absolute slug also moves its own URL, and a destination relative to that URL is not read.
+
 `directory-url` reads a raw HTML destination in a document under a `mkdocs.yml` the way the
 browser does. mkdocs rewrites the destination of a Markdown link and leaves an `<a href>` or
 an `<img src>` written by hand alone, so that one is resolved against the URL the page is
@@ -136,8 +156,17 @@ destination is looked up in the tree and is missing when the tree does not hold 
 `modules/api/pages/load-templates.adoc` is not there. One thing does move: the intent. A
 routed `guide` keeps `guide` as the path the author meant, while an Antora xref's intent is
 the family path and a Sphinx `:doc:` target's is the docname under `conf.py`, because the
-author never meant a sibling file. A Docusaurus bare path keeps the sibling as its intent,
-because Docusaurus does try the sibling first.
+author never meant a sibling file.
+
+Where a rule keeps the reading from the document's own directory, that reading is the intent
+and the finding names it. A Docusaurus bare path keeps the sibling, since Docusaurus tries the
+sibling first, and a raw `<img src="../../img/light.png">` under mkdocs keeps `img/light.png`,
+the path a forge asks for, while the published directory still answers it with
+`docs/img/light.png`. The published directory is a URL rather than a place in the tree, so
+naming it in a finding puts a directory nobody wrote into the report: a destination under
+`docs/en/docs/fastapi-people.md` that reached nothing used to be reported as
+`docs/en/docs/fastapi-people/{{ sponsor.url }}`, and neither `fastapi-people/` nor the rest of
+it is in that file.
 
 One opening is not a path under any rule. A bundler's inline request syntax reserves it for
 the loaders the request disables, so `[assets](!file-loader!./asset.pdf)` names a loader chain
@@ -154,6 +183,25 @@ anywhere else is an ordinary path.
 The two forms webpack documents for its own loaders are both here: `!` disables the
 configured normal loaders and `-!` the pre-loaders, and the `!!` that disables every loader
 opens with the first of them.
+
+An expression the build fills in is not a path either. `<a href="{{ sponsor.url }}">` in
+fastapi's `docs/en/docs/fastapi-people.md` names a sponsor's site once the page is generated
+and names nothing at all in the tree, so it is `unsupported-reference-semantics` with the
+attribute-dependent reason rather than a missing file called `{{ sponsor.url }}`. That is 39
+of the 79 missing targets a fastapi clone reported.
+
+<!-- amiss-doc-contract:template-expressions:start -->
+| Expression opens with | and closes with |
+| --- | --- |
+| `{{` | `}}` |
+| `{%` | `%}` |
+<!-- amiss-doc-contract:template-expressions:end -->
+
+Both delimiters have to be there, in that order, so a file whose name carries one brace is an
+ordinary path and resolves as written. Jinja, Liquid, Nunjucks and Handlebars all spell an
+expression this way, which is why the rows are the delimiters rather than the name of one
+generator. A tree that holds a real file whose name spells an expression, as a cookiecutter
+template does, gets this answer for it instead of the file.
 
 ## What this costs
 
@@ -172,8 +220,8 @@ on them were run on 2026-07-26 to find out what a new row would have to answer, 
 whole against an empty base under the observe profile. Three completed, at hugoDocs
 `620696ab3b07`, jest `f49721c78e19`, and jekyll `7697d249793d`, and their counts below are
 from those reports. The fourth, docusaurus `16f537309e35`, produced no report: it ran to the
-end of evaluation and then refused at output, so nothing is counted from it. For the three
-that completed, a row is not the answer.
+end of evaluation and then refused at output, so nothing is counted from it. Of the three
+that completed, only jest's shape became a row, and it took a later survey to write it.
 
 Hugo's own documentation writes `[glob pattern](g)` and resolves `g` in its own
 `render-link.html`, 734 references to a path that exists nowhere. Its 101 missing anchors are
@@ -183,8 +231,10 @@ identity with `autoDefinitionTermID`, so `module.md`'s `files` term is published
 heading pulled in by an `{{% include %}}` shortcode. Jest, on Docusaurus, links a document by
 the identity that document declares in its own front matter: `Configuration.md` opens with
 `id: configuration`, its page is published at that name, and 104 references reach it by URL
-rather than by path. The identity is in the tree, but reading it means parsing front matter
-this engine keeps opaque and then indexing every document by what it declares.
+rather than by path. That one is the `document-id` spelling above, written after the same
+shape turned up across six ordinary projects. On a later clone it answered 127 of jest's 130
+missing paths, and the three left are real: `tutorial-react` is still in two versioned copies
+and gone from the current documents and the two newest copies.
 
 Docusaurus itself refused at first, its findings serializing past the output reservation
 described in [Limits and refusals](limits.md). With that raised it scans, and with the
@@ -203,8 +253,7 @@ warning naming the `.md` file, and vitepress emits it verbatim into a build hold
 `page.html`, dead on any host despite its own dead-link checker accepting it. One router, by
 configuration, is not a rule.
 
-What Hugo and Jest need instead is the generated class, arriving there as transclusion,
-as a repository's own render hook, and as an identifier that was never a path. The exact-path
-core of that class is answered now, from the tracked ignore file recorded in
-[Reference coverage](completed/reference-coverage.md), and all three of those arrivals sit
-outside it.
+What Hugo needs instead is the generated class, arriving there as transclusion and as a
+repository's own render hook. The exact-path core of that class is answered now, from the
+tracked ignore file recorded in [Reference coverage](completed/reference-coverage.md), and
+both of those arrivals sit outside it.

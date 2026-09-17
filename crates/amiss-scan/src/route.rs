@@ -1,8 +1,10 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use amiss_wire::controls::{GitMode, SourceConstruct};
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::uri::scheme;
 
-use crate::discovery::{Located, SnapshotDiscovery};
+use crate::discovery::{DocumentStatus, Located, SnapshotDiscovery};
 
 /// A spelling a router serves for a page whose source file is named
 /// otherwise. The first three were harvested from the router itself and hold
@@ -17,6 +19,7 @@ pub enum Spelling {
     AntoraResource,
     SiteAlias,
     ContentRoot,
+    DocumentId,
     SourceRoot,
     DirectoryUrl,
 }
@@ -54,7 +57,11 @@ const DOCUSAURUS: RouteRule = RouteRule {
         "docusaurus.config.mjs",
         "docusaurus.config.cjs",
     ],
-    serves: &[Spelling::SiteAlias, Spelling::ContentRoot],
+    serves: &[
+        Spelling::SiteAlias,
+        Spelling::ContentRoot,
+        Spelling::DocumentId,
+    ],
 };
 
 pub(crate) const MKDOCS: RouteRule = RouteRule {
@@ -141,6 +148,22 @@ pub fn bundler_request(path_part: &str) -> bool {
         .iter()
         .flat_map(|(_, openings)| openings.iter())
         .any(|opening| path_part.starts_with(opening))
+}
+
+/// The delimiters a template engine substitutes before a page is served.
+/// Jinja, Liquid, Nunjucks and Handlebars all spell an expression this way.
+pub const TEMPLATE_EXPRESSIONS: [(&str, &str); 2] = [("{{", "}}"), ("{%", "%}")];
+
+/// Whether a destination is an expression the build fills in rather than a
+/// path. Both delimiters must be there in order, so a file whose name merely
+/// carries a brace is a path like any other.
+#[must_use]
+pub fn template_expression(semantic: &str) -> bool {
+    TEMPLATE_EXPRESSIONS.iter().any(|(open, close)| {
+        semantic
+            .split_once(open)
+            .is_some_and(|(_, rest)| rest.contains(close))
+    })
 }
 
 /// Every source path a modelled router would serve for this destination, in a
@@ -374,6 +397,125 @@ fn docusaurus_anchors(
     out
 }
 
+/// Every route the snapshot's documents publish, and the document publishing
+/// each. A route two documents claim is left out rather than decided between
+/// them.
+#[must_use]
+pub(crate) fn published_routes(snapshot: &SnapshotDiscovery) -> BTreeMap<RepoPath, RepoPath> {
+    let mut routes: BTreeMap<RepoPath, RepoPath> = BTreeMap::new();
+    if !declares_docusaurus(snapshot) {
+        return routes;
+    }
+    let mut claimed_twice: BTreeSet<RepoPath> = BTreeSet::new();
+    for record in &snapshot.documents {
+        let DocumentStatus::Scanned(scanned) = &record.status else {
+            continue;
+        };
+        if !matches!(record.adapter, Some(Adapter::Markdown | Adapter::Mdx)) {
+            continue;
+        }
+        let Some(route) = published_route(snapshot, &record.path, scanned.declared_name.as_deref())
+        else {
+            continue;
+        };
+        if routes.insert(route.clone(), record.path.clone()).is_some() {
+            claimed_twice.insert(route);
+        }
+    }
+    for route in claimed_twice {
+        routes.remove(&route);
+    }
+    routes
+}
+
+/// Where one document is published: the name it declares in place of its own
+/// file name, that name under the content root it sits in when it opens with
+/// a slash, and the route its own path spells when it declares nothing.
+fn published_route(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    declared: Option<&str>,
+) -> Option<RepoPath> {
+    let raw = document.as_bytes();
+    let Some(name) = declared else {
+        return RepoPath::from_bytes(page_route(raw));
+    };
+    let Some(absolute) = name.strip_prefix('/') else {
+        return RepoPath::from_bytes(join(directory(raw), name.as_bytes()));
+    };
+    let site = declared_root(snapshot, raw, &DOCUSAURUS)?;
+    let root = content_root(&site, raw).unwrap_or(site);
+    RepoPath::from_bytes(join(&root, absolute.as_bytes()))
+}
+
+/// Whether this snapshot is published by Docusaurus at all. The site
+/// directory names the directories it reads in a configuration this engine
+/// does not read, and a site under `website/` commonly reads `../docs`, so
+/// the declaration is read from the whole tree rather than from the
+/// document's own ancestor chain.
+fn declares_docusaurus(snapshot: &SnapshotDiscovery) -> bool {
+    snapshot.entries.iter().any(|(path, (mode, _))| {
+        matches!(mode, GitMode::RegularFile | GitMode::ExecutableFile)
+            && DOCUSAURUS.declared_by.iter().any(|name| {
+                path.as_bytes().rsplit(|byte| *byte == b'/').next() == Some(name.as_bytes())
+            })
+    })
+}
+
+/// The name a document declares for its own page in frontmatter, which is
+/// `slug` before `id`, each a plain scalar on a line of its own. Nothing else
+/// in the region is read, and the region stays opaque to the grammar.
+#[must_use]
+pub(crate) fn declared_name(adapter: Adapter, source: &[u8]) -> Option<String> {
+    if !matches!(adapter, Adapter::Markdown | Adapter::Mdx) {
+        return None;
+    }
+    let region = amiss_md::frontmatter::recognize(source)?;
+    let body = source.get(region.bom_bytes..region.suffix_offset)?;
+    let mut id = None;
+    let mut slug = None;
+    for line in amiss_md::lines::scan(body) {
+        let content = line.content(body);
+        if let Some(value) = scalar(content, b"slug:") {
+            slug = slug.or(Some(value));
+        } else if let Some(value) = scalar(content, b"id:") {
+            id = id.or(Some(value));
+        }
+    }
+    slug.or(id).map(str::to_owned)
+}
+
+/// One key's value where the key opens the line: a scalar closed by the quote
+/// it opened with, or plain text up to an inline comment.
+fn scalar<'a>(line: &'a [u8], key: &[u8]) -> Option<&'a str> {
+    let text = std::str::from_utf8(line.strip_prefix(key)?)
+        .ok()?
+        .trim_matches([' ', '\t']);
+    for quote in ['"', '\''] {
+        if let Some(inner) = text
+            .strip_prefix(quote)
+            .and_then(|rest| rest.strip_suffix(quote))
+        {
+            return spelled(inner);
+        }
+    }
+    spelled(
+        text.split_once(" #")
+            .map_or(text, |(value, _comment)| value)
+            .trim_end(),
+    )
+}
+
+/// A value this reader spells out rather than guesses at: one line of
+/// ordinary text. A block or flow opening, an alias, and an empty value are
+/// declarations it declines.
+fn spelled(value: &str) -> Option<&str> {
+    let declined = value.is_empty()
+        || value.starts_with(['>', '|', '&', '*', '{', '[', '"', '\''])
+        || value.contains(char::is_control);
+    (!declined).then_some(value)
+}
+
 /// A destination the browser resolves rather than the generator: mkdocs
 /// publishes every page at a directory of its own name and rewrites no
 /// destination written as raw HTML, so such a destination is relative to the
@@ -398,7 +540,7 @@ fn mkdocs_anchors(
     }
     let relative = path_part.strip_suffix('/').unwrap_or(path_part);
     let beside = directory(document.as_bytes());
-    let published = page_directory(document.as_bytes());
+    let published = page_route(document.as_bytes());
     let mut out = vec![(published, relative.to_owned())];
     if !out.iter().any(|(held, _)| held == beside) {
         out.push((beside.to_vec(), relative.to_owned()));
@@ -406,11 +548,11 @@ fn mkdocs_anchors(
     out
 }
 
-/// The directory a page is published at: the source name without its
-/// extension, or the document's own directory when the source is that
-/// directory's index, which is the pair of names mkdocs builds to
-/// `index.html`.
-fn page_directory(document: &[u8]) -> Vec<u8> {
+/// The route a page is published at, which mkdocs serves from a directory of
+/// that name: the source name without its extension, or the document's own
+/// directory when the source is that directory's index, the pair of names
+/// both mkdocs and Docusaurus publish at the directory itself.
+fn page_route(document: &[u8]) -> Vec<u8> {
     let parent = directory(document);
     let name = document.rsplit(|byte| *byte == b'/').next().unwrap_or(b"");
     let stem = match name.iter().rposition(|byte| *byte == b'.') {

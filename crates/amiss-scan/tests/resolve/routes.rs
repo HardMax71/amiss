@@ -171,6 +171,41 @@ fn an_asciidoc_page_identity_is_a_catalogue_question() {
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
 }
 
+/// A destination carrying a template expression is filled in when the site is
+/// built, so no tree answers it whatever the dialect. Both delimiters must be
+/// there in order, so a name that merely carries a brace stays a path.
+#[test]
+fn a_template_expression_is_not_a_path_in_any_dialect() {
+    let mut bed = bed();
+    for filled in [
+        "{{ sponsor.url }}",
+        "img/{{ sponsor.img }}",
+        "{% url 'x' %}",
+    ] {
+        let row = bed
+            .run_as(Adapter::Markdown, None, "docs/index.md", false, filled)
+            .unwrap_or_else(|_defect| panic!("resolve {filled}"))
+            .1;
+        assert!(
+            matches!(
+                row,
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent)
+            ),
+            "{filled}: {row:?}"
+        );
+    }
+    for written in ["a{b}.md", "guide{.md", "sponsor}}.md"] {
+        let row = bed
+            .run_as(Adapter::Markdown, None, "docs/index.md", false, written)
+            .unwrap_or_else(|_defect| panic!("resolve {written}"))
+            .1;
+        let Resolution::Missing(Missing::PathNotFound { path, .. }) = &row else {
+            panic!("{written} is a path the tree does not hold: {row:?}");
+        };
+        assert_eq!(path.as_str(), Some(format!("docs/{written}").as_str()));
+    }
+}
+
 #[test]
 fn an_attribute_reference_waits_for_the_build_and_empty_braces_do_not() {
     let mut bed = bed();

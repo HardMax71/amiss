@@ -18,7 +18,7 @@ use crate::declared::Declarations;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::{Classification, classify};
 use crate::resources::{Aggregate, ScanResources};
-use crate::route::{anchors, candidates, directory, generator_alias};
+use crate::route::{anchors, candidates, directory, generator_alias, template_expression};
 
 mod anchor;
 mod content;
@@ -264,6 +264,7 @@ fn resolve_destination(
     semantic: &str,
 ) -> Result<(Intent, Resolution), Error> {
     let (path_part, query, fragment) = split_components(semantic);
+    let beside = directory(document_path.as_bytes());
     let mut anchors = anchors(
         resolver.snapshot,
         adapter,
@@ -272,8 +273,9 @@ fn resolve_destination(
         is_image,
         path_part,
     );
-    if adapter == Adapter::AsciiDoc
-        && ((is_image && anchors.is_empty()) || awaits_attribute(semantic))
+    if template_expression(semantic)
+        || (adapter == Adapter::AsciiDoc
+            && ((is_image && anchors.is_empty()) || awaits_attribute(semantic)))
     {
         return Ok((
             unsupported_intent(query, fragment),
@@ -332,10 +334,7 @@ fn resolve_destination(
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
             ));
         }
-        anchors.push((
-            directory(document_path.as_bytes()).to_vec(),
-            path_part.to_owned(),
-        ));
+        anchors.push((beside.to_vec(), path_part.to_owned()));
     }
     if adapter == Adapter::AsciiDoc && names_a_page_identity(path_part) {
         return Ok((
@@ -363,45 +362,39 @@ fn resolve_destination(
             row,
         ));
     }
-    native(resolver, is_image, &anchors, query, fragment, forge)
+    native(resolver, is_image, beside, &anchors, query, fragment, forge)
 }
 
 /// Native destinations: one terminal slash is an authored directory hint on a
 /// link and invalid on an image; segments decode once and are contained under
 /// each anchoring directory in turn while normalizing `.` and internal `..`.
-/// The first anchor fixes the intent, and the first one the tree holds, as
-/// written or under a router spelling, is the target that answers.
+/// The reading from the document's own directory fixes the intent wherever a
+/// rule kept one, since that is the path the author wrote, and the first
+/// anchor the tree holds, as written or under a router spelling, is the
+/// target that answers.
 fn native(
     resolver: &mut Resolver<'_>,
     is_image: bool,
+    beside: &[u8],
     anchors: &[(Vec<u8>, String)],
     query: Option<String>,
     fragment: Option<String>,
     forge: Option<ForgeDialect>,
 ) -> Result<(Intent, Resolution), Error> {
-    let mut intent: Option<(RepoPath, TargetKind)> = None;
-    let mut served: Option<RepoPath> = None;
-    for (parent, relative) in anchors {
-        let (path, target_kind) = match normalized_path_under(parent, is_image, relative) {
-            Ok(target) => target,
-            Err(resolution) if intent.is_none() => {
-                return Ok((unsupported_intent(query, fragment), resolution));
-            }
-            Err(_) => continue,
-        };
-        let route = routed(resolver.snapshot, &path, target_kind);
-        let located = resolver.snapshot.locate(&route).is_some();
-        if intent.is_none() {
-            intent = Some((path, target_kind));
-        }
-        if located {
-            served = Some(route);
-            break;
-        }
-    }
-    let Some((path, target_kind)) = intent else {
-        return Err(Error::Internal);
+    let authored = anchors
+        .iter()
+        .find(|(parent, _)| parent == beside)
+        .or_else(|| anchors.first())
+        .ok_or(Error::Internal)?;
+    let (path, target_kind) = match normalized_path_under(&authored.0, is_image, &authored.1) {
+        Ok(target) => target,
+        Err(resolution) => return Ok((unsupported_intent(query, fragment), resolution)),
     };
+    let served = anchors.iter().find_map(|(parent, relative)| {
+        let (candidate, kind) = normalized_path_under(parent, is_image, relative).ok()?;
+        let route = routed(resolver.snapshot, &candidate, kind);
+        resolver.snapshot.locate(&route).is_some().then_some(route)
+    });
     let row = lookup(
         resolver,
         served.as_ref().unwrap_or(&path),
@@ -461,9 +454,10 @@ fn awaits_attribute(semantic: &str) -> bool {
 
 /// The path this reference is answered against. A destination the tree holds
 /// is its own answer; otherwise the first router spelling that reaches an
-/// ordinary file stands in for it. A promised directory is never re-spelled,
-/// and a spelling reaches nothing that is not already a file, so this can only
-/// turn an absent target into a present one.
+/// ordinary file stands in for it, and last the document published at that
+/// route. A promised directory is never re-spelled, and every spelling names
+/// a file the tree already holds, so this can only turn an absent target into
+/// a present one.
 fn routed(snapshot: &SnapshotDiscovery, path: &RepoPath, target_kind: TargetKind) -> RepoPath {
     if target_kind == TargetKind::Tree || snapshot.locate(path).is_some() {
         return path.clone();
@@ -479,7 +473,10 @@ fn routed(snapshot: &SnapshotDiscovery, path: &RepoPath, target_kind: TargetKind
                 ))
             )
         })
-        .map_or_else(|| path.clone(), |(_, candidate)| candidate)
+        .map_or_else(
+            || snapshot.published_routes.get(path).unwrap_or(path).clone(),
+            |(_, candidate)| candidate,
+        )
 }
 
 /// The last question a path the tree does not hold is asked. Only ignore files
