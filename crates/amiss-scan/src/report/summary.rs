@@ -88,7 +88,7 @@ fn reference_counts(comparisons: &[Comparison]) -> ReferenceCounts {
             IntentKind::ExternalUrl => {
                 counts.external_out_of_scope = counts.external_out_of_scope.saturating_add(1);
             }
-            IntentKind::SiteRoute
+            IntentKind::SiteRoute | IntentKind::Label
                 if matches!(&observation.resolution, Resolution::UnsupportedSemantics(_)) =>
             {
                 counts.unsupported = counts.unsupported.saturating_add(1);

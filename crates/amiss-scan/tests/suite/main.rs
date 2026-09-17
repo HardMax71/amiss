@@ -11,6 +11,7 @@ mod discovery;
 mod document_contract;
 mod evaluate;
 mod floor;
+mod generated;
 mod governed;
 mod identity;
 mod index_identity;

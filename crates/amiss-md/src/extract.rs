@@ -330,14 +330,22 @@ impl Sweep<'_> {
             Kind::Definition(_) => self.orphan(node, path, *owners),
             Kind::Text(value) => {
                 if owners.paragraph.is_some() {
-                    self.snippets
-                        .extend(value.lines().filter_map(|line| snippet(line, span)));
+                    for line in value.lines() {
+                        self.snippets.extend(snippet(line, span));
+                        self.snippets.extend(directive(line, span));
+                        self.declared.extend(heading::myst_target(line));
+                    }
                 }
                 if path.last().is_some_and(|index| *index > 0) {
                     self.declared.extend(heading::inline_attribute(value));
                 }
             }
-            Kind::Root | Kind::InlineCode(_) | Kind::CodeBlock(_) | Kind::Other => {}
+            Kind::InlineCode(_) => {
+                if let Some((construct, raw, semantic, role_span)) = role(self.suffix, span) {
+                    self.push(construct, raw, semantic, role_span, path, *owners);
+                }
+            }
+            Kind::Root | Kind::CodeBlock(_) | Kind::Other => {}
         }
         Ok(true)
     }
@@ -472,6 +480,94 @@ fn snippet(line: &str, span: (usize, usize)) -> Option<Transclusion> {
         span,
         kind,
     })
+}
+
+/// The mkdocstrings instruction: `:::`, then whitespace, then what a
+/// generator renders in its place. The rendered output carries identities
+/// derived from something outside the tree, so the edge names what would
+/// arrive and is refused rather than followed. An admonition fence, `:::note`,
+/// carries no whitespace after the marker and names nothing.
+fn directive(line: &str, span: (usize, usize)) -> Option<Transclusion> {
+    let argument = line
+        .trim()
+        .strip_prefix(":::")?
+        .strip_prefix([' ', '\t'])?
+        .trim();
+    (!argument.is_empty()).then(|| Transclusion {
+        target: argument.to_owned(),
+        span,
+        kind: Err(TransclusionRefusal::DynamicTarget),
+    })
+}
+
+/// A `MyST` cross-reference role, `` {doc}`quickstart` ``, read back from the
+/// code span the role body parses as. `doc` and `ref` are the two Sphinx
+/// answers this engine holds: a docname takes the profile's own suffix, and
+/// every other role names something a domain inventory outside the tree
+/// answers, which is what prefixing the role name spells.
+fn role(
+    suffix: &str,
+    span: (usize, usize),
+) -> Option<(SourceConstruct, String, String, (usize, usize))> {
+    let (name, start) = role_name(suffix, span.0)?;
+    let body = code_body(suffix, span)?;
+    let target = body
+        .rsplit_once('<')
+        .and_then(|(_, tail)| tail.strip_suffix('>'))
+        .unwrap_or(body)
+        .trim();
+    if target.is_empty() || target.contains('`') {
+        return None;
+    }
+    let (construct, semantic) = match name {
+        "doc" => (SourceConstruct::RstDocRole, docname(target)),
+        "ref" => (SourceConstruct::RstRefRole, target.to_owned()),
+        _ => (SourceConstruct::RstRefRole, format!("{name}:{target}")),
+    };
+    Some((construct, target.to_owned(), semantic, (start, span.1)))
+}
+
+/// The role name written immediately before a code span, with where it opens.
+/// A name is the Sphinx character class, and a word character, an escape, or a
+/// second brace before it means the braces are prose rather than a role.
+fn role_name(suffix: &str, at: usize) -> Option<(&str, usize)> {
+    let head = suffix.get(..at)?.strip_suffix('}')?;
+    let open = head.rfind('{')?;
+    let name = head.get(open.saturating_add(1)..)?;
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "-_+:.".contains(character))
+    {
+        return None;
+    }
+    let before = head.get(..open)?.chars().next_back();
+    let prefixed = before.is_some_and(|character| {
+        character.is_alphanumeric() || matches!(character, '\\' | '_' | '{')
+    });
+    (!prefixed).then_some((name, open))
+}
+
+/// The source text a code span holds, without the backtick runs that delimit
+/// it. The parser publishes the span, so the opening run fixes both ends.
+fn code_body(suffix: &str, span: (usize, usize)) -> Option<&str> {
+    let raw = suffix.get(span.0..span.1)?;
+    let ticks = raw.len().saturating_sub(raw.trim_start_matches('`').len());
+    (ticks > 0)
+        .then(|| raw.get(ticks..raw.len().saturating_sub(ticks)))
+        .flatten()
+}
+
+/// A docname is extensionless in Sphinx, so the profile's own suffix is
+/// appended; a source-root-absolute name keeps its slash and stays a declared
+/// site route, because the engine does not know the Sphinx root.
+fn docname(target: &str) -> String {
+    let last = target.rsplit('/').next().unwrap_or(target);
+    if target.starts_with('/') || last.contains('.') {
+        target.to_owned()
+    } else {
+        format!("{target}.md")
+    }
 }
 
 /// The body of a single- or double-quoted token, both marks the same one.

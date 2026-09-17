@@ -48,8 +48,10 @@ carried rather than one being chosen for the reader.
 An identity can also be written down rather than derived, and then it belongs to the
 author rather than to the renderer. Each of these spellings joins the union for every
 renderer, because accepting an identity a given renderer would not publish can only leave a
-finding unreported, never invent one. One row is gated on a file in the tree, the way the
-route rules are; the rest are read wherever their profile is.
+finding unreported, never invent one. Two of the rows write down no identity: they are the
+spellings a declared generator owns, one saying the page's identities are built elsewhere and
+one naming a reference. Three rows are gated on a file in the tree, the way the route rules
+are; the rest are read wherever their profile is.
 
 <!-- amiss-doc-contract:declared-identities:start -->
 | Declaration | Spelling | Read in | Selected by |
@@ -58,6 +60,9 @@ route rules are; the rest are read wherever their profile is.
 | `attr-list` | an attribute block alone on a block's last line, `{#id}` | `markdown` | any tree |
 | `attr-list-inline` | an attribute block directly after an inline construct, `**text**{#id}` | `markdown` | any tree |
 | `mkdocs-snippet` | a `--8<--` line naming a quoted path, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
+| `mkdocs-directive` | a `:::` line naming what a generator renders, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
+| `myst-target` | a target alone on its line, `(name)=` | `markdown` | any tree |
+| `myst-role` | a cross-reference role, `` {doc}`name` `` | `markdown` | `conf.py` |
 | `mdx-comment` | an MDX comment ending a heading, `{/* #id */}` | `mdx` | any tree |
 | `mdx-heading-id` | an MDX expression ending a heading, `{#id}` | `mdx` | any tree |
 | `jsx-id` | an `id` attribute on a lowercase JSX element | `mdx` | any tree |
@@ -128,6 +133,29 @@ where MkDocs runs, so a page whose whole body is `--8<-- "CONTRIBUTING.md"` publ
 the repository's own contributing guide publishes. Only the single-line form with a quoted
 path is read; a path carrying a section coordinate names part of a file, which this engine
 cannot reproduce, so that edge is refused and absence in the page stays undecided.
+
+`mkdocs-directive` is the line that pulls content in from outside the tree, and the one
+edge this engine reads and then stops at. `::: pydantic.config` asks mkdocstrings for the
+documentation of a Python object and `::: mkdocs-click` asks that plugin for a command
+tree, so the headings the built page carries come from a program rather than from a file.
+The page keeps everything it writes itself: an anchor naming one of its own headings still
+resolves, and an anchor naming none of them is declared unsupported instead of reported
+absent, which is the same answer a snippet the engine cannot follow gives. Only the form
+with whitespace after the marker is an instruction, so the `:::note` and bare `:::` fences
+Docusaurus writes name no generator; a VitePress container such as `::: tip` is the same
+shape, and it is read only in a tree that declares MkDocs, which a VitePress tree does not.
+That is the gate: without `mkdocs.yml` or `mkdocs.yaml` above the document, three colons are
+three colons.
+
+`myst-target` and `myst-role` are the two MyST spellings, which is how a Sphinx project
+writes its pages in Markdown. `(name)=` alone on its line is the target: the renderer writes
+that identity onto the block after it, and Sphinx keeps the same name as a label, so it also
+joins the label table a `{ref}` is answered from. The role is the reference,
+`` {doc}`quickstart` `` where reStructuredText writes `` :doc:`quickstart` ``, and
+[Resolution](resolution.md) says which roles are answered and which are counted and left
+alone. The target is read wherever the spelling appears, because an identity can only widen
+the set an anchor may match, while a role is read only under a `conf.py`, so a brace before a
+code span in an ordinary Markdown file stays the prose it is.
 
 The last rows belong to the other two profiles. `asciidoc-anchor` is the anchor an
 AsciiDoc author writes on a line of its own, `[[id]]` or `[#id]`, in either case with the

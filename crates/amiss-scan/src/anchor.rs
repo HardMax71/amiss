@@ -1,6 +1,9 @@
 mod identity;
 
-use amiss_wire::model::Adapter;
+use amiss_wire::model::{Adapter, RepoPath};
+
+use crate::discovery::SnapshotDiscovery;
+use crate::route::{ROUTERS, Spelling, declared_root};
 
 pub use identity::{anchor_set, identities};
 
@@ -392,10 +395,10 @@ pub const RULES: [AnchorRule; 12] = [
     },
 ];
 
-/// One identity a document writes down rather than a renderer deriving it from
-/// heading text: the spelling an author uses, the profiles that read it, and
-/// the file whose presence on the document's ancestor chain turns it on. A
-/// rule declared by nothing is read in every tree.
+/// One spelling a document or its generator declares rather than a renderer
+/// deriving it from heading text: the spelling an author uses, the profiles
+/// that read it, and the file whose presence on the document's ancestor chain
+/// turns it on. A rule declared by nothing is read in every tree.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DeclarationRule {
     pub name: &'static str,
@@ -413,11 +416,26 @@ pub(crate) const MKDOCS_SNIPPET: DeclarationRule = DeclarationRule {
     declared_by: crate::route::MKDOCS.declared_by,
 };
 
+/// The instruction a documentation generator answers, which stands for output
+/// this engine cannot reproduce; the identities it publishes are outside the
+/// tree. It is read under the same declaration the snippet line is.
+const MKDOCS_DIRECTIVE: DeclarationRule = DeclarationRule {
+    name: "mkdocs-directive",
+    spelling: "a `:::` line naming what a generator renders, alone on the line",
+    adapters: &[Adapter::Markdown],
+    declared_by: crate::route::MKDOCS.declared_by,
+};
+
+/// The file that declares Sphinx, which is what the two `MyST` rows are read
+/// under. `sphinx_governed` answers the same question from the route table,
+/// and a test holds the two spellings together.
+const SPHINX_DECLARED_BY: &[&str] = &["conf.py"];
+
 /// Every way a document names its own identities rather than leaving them to a
-/// renderer's slug, grouped by the profile that reads each one. Each joins the
-/// union beside the renderer rules, so a rule here can only grow the set an
-/// anchor may match.
-pub const DECLARATIONS: [DeclarationRule; 12] = [
+/// renderer's slug, plus the two spellings a declared generator owns, grouped
+/// by the profile that reads each one. An identity rule joins the union beside
+/// the renderer rules, so it can only grow the set an anchor may match.
+pub const DECLARATIONS: [DeclarationRule; 15] = [
     DeclarationRule {
         name: "html-id",
         spelling: "an `id` or `name` attribute on a raw HTML element",
@@ -437,6 +455,19 @@ pub const DECLARATIONS: [DeclarationRule; 12] = [
         declared_by: &[],
     },
     MKDOCS_SNIPPET,
+    MKDOCS_DIRECTIVE,
+    DeclarationRule {
+        name: "myst-target",
+        spelling: "a target alone on its line, `(name)=`",
+        adapters: &[Adapter::Markdown],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "myst-role",
+        spelling: "a cross-reference role, `` {doc}`name` ``",
+        adapters: &[Adapter::Markdown],
+        declared_by: SPHINX_DECLARED_BY,
+    },
     DeclarationRule {
         name: "mdx-comment",
         spelling: "an MDX comment ending a heading, `{/* #id */}`",
@@ -486,3 +517,14 @@ pub const DECLARATIONS: [DeclarationRule; 12] = [
         declared_by: &[],
     },
 ];
+
+/// Whether a Sphinx declaration sits above this document, which is what turns
+/// the `MyST` spellings on. The route table reads the same file to anchor a
+/// source-root docname, so the answer is taken from there rather than spelled
+/// twice.
+pub(crate) fn sphinx_governed(snapshot: &SnapshotDiscovery, document: &RepoPath) -> bool {
+    ROUTERS
+        .iter()
+        .filter(|rule| rule.serves(Spelling::SourceRoot))
+        .any(|rule| declared_root(snapshot, document.as_bytes(), rule).is_some())
+}

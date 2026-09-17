@@ -3,13 +3,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, TreeEntry, ValueCap, parse_tree};
-use amiss_wire::controls::{GitMode, ResourceName};
+use amiss_wire::controls::{GitMode, ResourceName, SourceConstruct};
 use amiss_wire::model::{Adapter, Oid, RepoPath};
 
 use crate::document::{Classification, classify, excluded_by_built_in, native_adapter};
 use crate::policy::Includes;
 use crate::resources::{ScanIdentity, ScanMemo, ScanResources, crossing};
-use crate::scan::{Scanned, replay_scan_charges, scan_bytes};
+use crate::scan::{Scanned, ScannedOccurrence, replay_scan_charges, scan_bytes};
 use crate::{Error, GitDefect, lfs};
 
 /// The deliberate object and format boundaries a discovered document side can
@@ -42,30 +42,61 @@ pub struct DocumentRecord {
     pub raw_digest: Option<amiss_wire::model::Digest>,
 }
 
-/// The snapshot's label table: every `.. _name:` a scanned reStructuredText
-/// document declares, which is the nearest tree-derivable stand-in for the
-/// index Sphinx builds for `:ref:`. A name declared twice is marked rather
-/// than guessed between.
-fn collect_labels(
-    scan: &mut ScanResources,
-    labels: &mut BTreeMap<String, LabelState>,
-    path: &RepoPath,
-    status: &DocumentStatus,
-) -> Result<(), Error> {
-    let DocumentStatus::Scanned(scanned) = status else {
-        return Ok(());
-    };
-    if scanned.adapter != Adapter::Rst {
-        return Ok(());
-    }
-    for label in &scanned.declared_anchors {
-        scan.charge_label()?;
-        labels
-            .entry(amiss_rst::normalized_label(label))
-            .and_modify(|state| *state = LabelState::Duplicated)
-            .or_insert_with(|| LabelState::Declared(path.clone()));
+/// What a Sphinx declaration decides once the walk is over: which documents
+/// read a cross-reference role, and whose declared names join the label table
+/// a role is answered from. Neither question can be asked during the walk,
+/// because `conf.py` sits beside documents the walk reaches before it.
+///
+/// The label table is every name a document whose profile reads roles
+/// declares, which is the nearest tree-derivable stand-in for the index Sphinx
+/// builds for `:ref:`. A name declared twice is marked rather than guessed
+/// between. A document no declaration governs keeps no role, so a brace before
+/// a code span there is the prose it looks like.
+fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> Result<(), Error> {
+    let governed: Vec<bool> = discovery
+        .documents
+        .iter()
+        .map(|record| {
+            record.adapter == Some(Adapter::Markdown)
+                && crate::anchor::sphinx_governed(discovery, &record.path)
+        })
+        .collect();
+    let SnapshotDiscovery {
+        documents, labels, ..
+    } = discovery;
+    for (record, governed) in documents.iter_mut().zip(governed) {
+        let DocumentStatus::Scanned(scanned) = &mut record.status else {
+            continue;
+        };
+        let reads_roles = match scanned.adapter {
+            Adapter::Rst => true,
+            Adapter::Markdown => governed,
+            Adapter::Mdx | Adapter::AsciiDoc | Adapter::PlainAdvisory => false,
+        };
+        if !reads_roles {
+            if scanned.occurrences.iter().any(role_occurrence) {
+                Arc::make_mut(scanned)
+                    .occurrences
+                    .retain(|entry| !role_occurrence(entry));
+            }
+            continue;
+        }
+        for label in &scanned.declared_anchors {
+            scan.charge_label()?;
+            labels
+                .entry(amiss_rst::normalized_label(label))
+                .and_modify(|state| *state = LabelState::Duplicated)
+                .or_insert_with(|| LabelState::Declared(record.path.clone()));
+        }
     }
     Ok(())
+}
+
+fn role_occurrence(entry: &ScannedOccurrence) -> bool {
+    matches!(
+        entry.occurrence.construct,
+        SourceConstruct::RstDocRole | SourceConstruct::RstRefRole
+    )
 }
 
 /// One refused path: the defect, and the raw bytes of the name that tripped
@@ -239,7 +270,6 @@ fn record_document(
         &path,
         entry,
     )?;
-    collect_labels(scan, &mut discovery.labels, &path, &status)?;
     discovery.documents.push(DocumentRecord {
         path,
         classification,
@@ -438,6 +468,9 @@ pub(crate) fn discover_walk(
         }
     }
     discovery.published_routes = crate::route::published_routes(&discovery);
+    if let WalkMode::Documents { scan, .. } = &mut mode {
+        settle_roles(scan, &mut discovery)?;
+    }
     Ok(discovery)
 }
 
@@ -488,6 +521,7 @@ pub fn discover_index(
         record_document(&context, git, scan, &mut discovery, path, &tree_entry)?;
     }
     discovery.published_routes = crate::route::published_routes(&discovery);
+    settle_roles(scan, &mut discovery)?;
     Ok(discovery)
 }
 
