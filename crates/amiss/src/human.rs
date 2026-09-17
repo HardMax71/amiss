@@ -429,7 +429,7 @@ fn unscanned<P, R, M, E, A>(
         .documents
         .iter()
         .filter_map(|row| {
-            let reason = row.candidate.as_ref()?.unsupported_reason?;
+            let reason = row.candidate.as_ref()?.unsupported_reason.as_ref()?;
             Some((&row.path, reason))
         })
         .collect();
