@@ -486,7 +486,12 @@ fn action_dispatcher_tracks_the_packaged_runtime() {
         "the verdict step always runs, exports exit class 2 when the scan never wrote one, and always names the one report path with an empty file removed"
     );
     assert!(
-        runtime.contains("if [ \"${ANNOTATIONS,,}\" != \"true\" ]"),
+        !runtime.contains(",,}") && !runtime.contains("^^}"),
+        "the runtime runs on the bash 3.2 macOS ships, which has no case expansion"
+    );
+    assert!(
+        runtime.contains("tr '[:upper:]' '[:lower:]'")
+            && runtime.contains("if [ \"$wanted\" != \"true\" ]"),
         "the annotations input is read case-insensitively"
     );
     assert_action_feedback_contract(&dispatcher, &runtime);

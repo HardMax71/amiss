@@ -170,8 +170,9 @@ runs:
           && { [ "$EVENT_NAME" != "push" ] || [ "$REF_TYPE" = "branch" ]; }; then
           host="${SERVER_URL#*://}"
           host="${host%/}"
+          lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
           {
-            printf 'identity=%s/%s\n' "${host,,}" "${REPOSITORY,,}"
+            printf 'identity=%s/%s\n' "$(lower "$host")" "$(lower "$REPOSITORY")"
             printf 'ref=refs/heads/%s\n' "$BRANCH"
             printf 'default-ref=refs/heads/%s\n' "$DEFAULT_BRANCH"
           } >> "$GITHUB_OUTPUT"
@@ -295,7 +296,8 @@ runs:
         REPORT: ${{ steps.scan.outputs.report }}
       run: |
         set -euo pipefail
-        if [ "${ANNOTATIONS,,}" != "true" ] || [ ! -s "$REPORT" ]; then
+        wanted="$(printf '%s' "$ANNOTATIONS" | tr '[:upper:]' '[:lower:]')"
+        if [ "$wanted" != "true" ] || [ ! -s "$REPORT" ]; then
           exit 0
         fi
         jq -r '
