@@ -80,11 +80,86 @@ const MKDOCS_SNIPPETS: [(&str, Staged<'static>); 8] = [
     ),
 ];
 
+/// A mkdocs site under `site/` whose API page is a generator instruction:
+/// one heading the page writes itself and a body the generator fills in.
+/// `README.md` links the heading, an identity only the generator knows, and a
+/// heading an ordinary page never had. `note.md` opens an admonition fence,
+/// which names no generator, and `outside/api.md` writes the same instruction
+/// where no `mkdocs.yml` governs it.
+const MKDOCS_GENERATED: [(&str, Staged<'static>); 6] = [
+    (
+        "README.md",
+        Staged::File(
+            b"[a](site/docs/api.md#widgets-api)\n\n[b](site/docs/api.md#widgets.core.Widget)\n\n\
+              [c](site/docs/guide.md#absent)\n\n[d](site/docs/note.md#absent)\n\n\
+              [e](outside/api.md#widgets.core.Widget)\n",
+        ),
+    ),
+    ("site/mkdocs.yml", Staged::File(b"site_name: widgets\n")),
+    (
+        "site/docs/api.md",
+        Staged::File(
+            b"# Widgets API\n\n::: widgets.core\n    options:\n      show_root_heading: true\n",
+        ),
+    ),
+    ("site/docs/guide.md", Staged::File(b"# Guide\n")),
+    (
+        "site/docs/note.md",
+        Staged::File(b"# Note\n\n:::note\nRead this.\n:::\n"),
+    ),
+    (
+        "outside/api.md",
+        Staged::File(b"# Widgets API\n\n::: widgets.core\n"),
+    ),
+];
+
+/// A Sphinx project whose documents are `MyST` Markdown. `docs/index.md` writes
+/// a docname that resolves, one that does not, a source-root docname, a label
+/// a page declares, a label nobody declares, a Python domain role, and a link
+/// into the identity the target declares. `outside/notes.md` writes the same
+/// role where no `conf.py` governs it.
+const SPHINX_MYST: [(&str, Staged<'static>); 4] = [
+    (
+        "docs/conf.py",
+        Staged::File(b"extensions = ['myst_parser']\n"),
+    ),
+    (
+        "docs/index.md",
+        Staged::File(
+            b"# Index\n\nSee {doc}`quickstart`.\n\nSee {doc}`gone`.\n\nSee {doc}`/quickstart`.\n\n\
+              See {ref}`install-step`.\n\nSee {ref}`absent-step`.\n\n\
+              See {py:class}`widgets.Widget`.\n\nSee [the step](quickstart.md#install-step).\n",
+        ),
+    ),
+    (
+        "docs/quickstart.md",
+        Staged::File(b"# Quickstart\n\n(install-step)=\n\n## Install\n"),
+    ),
+    (
+        "outside/notes.md",
+        Staged::File(b"# Notes\n\nSee {doc}`quickstart`.\n"),
+    ),
+];
+
 /// # Errors
 ///
 /// Any filesystem failure.
 pub fn mdx_identities() -> std::io::Result<CommitChain> {
     staged_repository(&MDX_IDENTITIES)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn mkdocs_generated() -> std::io::Result<CommitChain> {
+    staged_repository(&MKDOCS_GENERATED)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn sphinx_myst() -> std::io::Result<CommitChain> {
+    staged_repository(&SPHINX_MYST)
 }
 
 /// # Errors

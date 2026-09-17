@@ -29,6 +29,14 @@ pub(super) fn paragraph_attribute(node: &Node) -> Option<String> {
     attribute_id(inner)
 }
 
+/// The identity a `MyST` target declares, `(name)=` alone on its line, which
+/// the renderer writes onto the block that follows it. Sphinx stores the same
+/// name as a label, so a `{ref}` role looks it up there too.
+pub(super) fn myst_target(line: &str) -> Option<String> {
+    let inner = line.trim().strip_prefix('(')?.strip_suffix(")=")?;
+    (!inner.is_empty() && !inner.contains([')', '('])).then(|| inner.to_owned())
+}
+
 /// The identity an attribute block declares for the inline construct it
 /// directly follows, which is the other half of what `attr_list` reads. The
 /// block opens the text, because anything between it and the construct breaks

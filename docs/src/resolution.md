@@ -222,8 +222,8 @@ name, which is why the grammar profile says `docutils-rst-sphinx-refs`. A relati
 `:doc:` target takes the source suffix and resolves like any repository path. A
 source-root-absolute one resolves under the directory holding `conf.py` when that file sits
 above the document in the tree, and stays a declared site route when nothing names the
-Sphinx root. A `:ref:` resolves against the snapshot's label table, built during
-discovery from every `.. _name:` a scanned reStructuredText document declares and
+Sphinx root. A `:ref:` resolves against the snapshot's label table, built after
+discovery from every name a document whose profile reads roles declares and
 bounded by `declared-labels-per-snapshot`: a unique declaration resolves to its
 declaring document, a name nobody declares is a missing target, and a name declared
 twice is undecided rather than guessed between. Labels follow the Docutils simple-name
@@ -237,6 +237,19 @@ stay unsupported, while absent, partial, stale, malformed, or mismatched evidenc
 missing. The engine never fetches an inventory. Every other role stays an open extension point,
 declared rather than read into.
 
+A Sphinx project that writes its pages in Markdown spells the same two roles in MyST, and they
+are answered the same way. `` {doc}`quickstart` `` is the docname `:doc:` names, taking `.md`
+rather than `.rst`, and `` {ref}`install-step` `` is the label `:ref:` names, looked up in the
+same table, which a MyST document fills through `(name)=` and its attribute blocks. A
+source-root docname such as `` {doc}`/api` `` stays a declared site route in a Markdown
+document, because the root lookup that answers one is read for reStructuredText alone. Every
+other role is counted and left alone: `` {py:class}`Widget` ``, `` {func}`echo` `` and
+`` {issue}`4211` `` name a domain inventory Sphinx builds while it runs or a link template
+`conf.py` holds, so each is recorded as unsupported semantics rather than resolved, guessed,
+or reported missing. Nothing here is read without a `conf.py` above the document: a role is a
+role only in a tree that declares Sphinx, and the count says how many references the run saw
+rather than how many it answered.
+
 Heading evaluation expands the closed local include subset in source order. An AsciiDoc
 `include::path[]` or option-free, document-level reStructuredText `include` participates when its
 literal relative target was already scanned under the same adapter; each nested path is relative to
@@ -244,7 +257,10 @@ the file that includes it. An MDX partial joins the same subset: a default impor
 Markdown document rendered as an element, which is how Docusaurus composes one page out of
 several files, and the identities flow to the page rather than back to the partial. So does a
 MkDocs snippet line, `--8<-- "path"`, under a tree that declares MkDocs, resolved from the
-directory holding that declaration rather than from beside the document.
+directory holding that declaration rather than from beside the document. A generator
+instruction under the same declaration, `::: pydantic.config`, is an edge this engine reads
+and cannot follow, because what it pulls in is built by a program rather than held by the
+tree, so the page keeps the identities it writes itself and absence in it stays undecided.
 An option-free `literalinclude` contributes no parsed headings. The graph
 is bounded by `references-per-document`, `parser-nesting`, and
 `aggregate-heading-anchor-evaluation-bytes-per-snapshot`. A cycle, an unscanned or non-local target,
