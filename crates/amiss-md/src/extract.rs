@@ -268,6 +268,8 @@ impl Sweep<'_> {
             }
             Kind::Html => {
                 self.html.push(span);
+                self.snippets
+                    .extend(shortcode(self.suffix.get(span.0..span.1), span));
                 for destination in html::collect_regions(self.suffix, &[span], html::destinations) {
                     let mut tag_path = path.to_vec();
                     tag_path.push(destination.within);
@@ -286,9 +288,8 @@ impl Sweep<'_> {
             Kind::TableCell => owners.cell = Some(span),
             Kind::Paragraph => {
                 owners.paragraph = Some(span);
-                if let Some(id) = heading::paragraph_attribute(node) {
-                    self.declared.push(id);
-                }
+                self.declared.extend(heading::paragraph_attribute(node));
+                self.headings.extend(heading::definition_terms(node));
             }
             Kind::Link { url } => {
                 let children_end = node.children.last().map(|child| child.span.1);
@@ -333,6 +334,7 @@ impl Sweep<'_> {
                     for line in value.lines() {
                         self.snippets.extend(snippet(line, span));
                         self.snippets.extend(directive(line, span));
+                        self.snippets.extend(content_tab(line, span));
                         self.declared.extend(heading::myst_target(line));
                     }
                 }
@@ -488,13 +490,37 @@ fn snippet(line: &str, span: (usize, usize)) -> Option<Transclusion> {
 /// arrive and is refused rather than followed. An admonition fence, `:::note`,
 /// carries no whitespace after the marker and names nothing.
 fn directive(line: &str, span: (usize, usize)) -> Option<Transclusion> {
-    let argument = line
-        .trim()
-        .strip_prefix(":::")?
-        .strip_prefix([' ', '\t'])?
-        .trim();
-    (!argument.is_empty()).then(|| Transclusion {
-        target: argument.to_owned(),
+    generated(
+        line.trim().strip_prefix(":::")?.strip_prefix([' ', '\t']),
+        span,
+    )
+}
+
+/// A content tab, `=== "Title"`, optionally opening a set or selected. The
+/// tabbed extension publishes an identity for the title under the slug
+/// function a site configures, and combines it with the heading above where
+/// the site asks for that, so the tab names what would arrive and is refused.
+fn content_tab(line: &str, span: (usize, usize)) -> Option<Transclusion> {
+    let opened = line.trim().strip_prefix("===")?;
+    let title = opened.strip_prefix(['!', '+']).unwrap_or(opened);
+    generated(quoted(title.strip_prefix([' ', '\t'])?.trim()), span)
+}
+
+/// The shortcode a declared hook expands before anything is rendered,
+/// `<!-- md:setting name -->`. What the hook writes in the comment's place
+/// carries identities of its own, so the edge names the shortcode and is
+/// refused rather than followed.
+fn shortcode(region: Option<&str>, span: (usize, usize)) -> Option<Transclusion> {
+    let comment = region?.split_once("<!--")?.1.split_once("-->")?.0;
+    generated(comment.trim().strip_prefix("md:"), span)
+}
+
+/// The edge a spelling a program answers writes: it names what would arrive
+/// rather than a path the tree holds, so it is refused instead of followed.
+fn generated(target: Option<&str>, span: (usize, usize)) -> Option<Transclusion> {
+    let named = target.map(str::trim).filter(|name| !name.is_empty())?;
+    Some(Transclusion {
+        target: named.to_owned(),
         span,
         kind: Err(TransclusionRefusal::DynamicTarget),
     })

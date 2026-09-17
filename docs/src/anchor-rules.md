@@ -45,22 +45,26 @@ carried rather than one being chosen for the reader.
 
 ## What a document declares
 
-An identity can also be written down rather than derived, and then it belongs to the
-author rather than to the renderer. Each of these spellings joins the union for every
-renderer, because accepting an identity a given renderer would not publish can only leave a
-finding unreported, never invent one. Two of the rows write down no identity: they are the
-spellings a declared generator owns, one saying the page's identities are built elsewhere and
-one naming a reference. Three rows are gated on a file in the tree, the way the route rules
-are; the rest are read wherever their profile is.
+An identity can also be written down rather than left to a heading's slug, and then it
+belongs to the author or to a construct no heading rule reads. Each of these spellings
+joins the union for every renderer, because accepting an identity a given renderer would
+not publish can only leave a finding unreported, never invent one. Four of the rows write
+down no identity: they are the spellings a declared generator, hook or extension owns,
+three saying the page's identities are built elsewhere and one naming a reference. Five
+rows are gated on a file in the tree, the way the route rules are; the rest are read
+wherever their profile is.
 
 <!-- amiss-doc-contract:declared-identities:start -->
 | Declaration | Spelling | Read in | Selected by |
 | --- | --- | --- | --- |
 | `html-id` | an `id` or `name` attribute on a raw HTML element | `markdown` | any tree |
-| `attr-list` | an attribute block alone on a block's last line, `{#id}` | `markdown` | any tree |
+| `attr-list` | an attribute block alone on a block's first or last line, `{#id}` | `markdown` | any tree |
 | `attr-list-inline` | an attribute block directly after an inline construct, `**text**{#id}` | `markdown` | any tree |
+| `definition-term` | a term line above a `: ` definition line | `markdown` | any tree |
 | `mkdocs-snippet` | a `--8<--` line naming a quoted path, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `mkdocs-directive` | a `:::` line naming what a generator renders, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
+| `mkdocs-shortcode` | an HTML comment naming a hook's shortcode, `<!-- md:name -->` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
+| `mkdocs-content-tab` | a content tab opening a quoted title, `=== "Title"` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `myst-target` | a target alone on its line, `(name)=` | `markdown` | any tree |
 | `myst-role` | a cross-reference role, `` {doc}`name` `` | `markdown` | `conf.py` |
 | `mdx-comment` | an MDX comment ending a heading, `{/* #id */}` | `mdx` | any tree |
@@ -80,7 +84,15 @@ block whose last line is nothing but an attribute block declares that identity f
 which is how `[](){#anchor-point}` and a `{#section}` line under a paragraph work; an
 attribute block trailing other text on the same line declares nothing, and one inside a
 fence is code. The extension reads the block in the document's own literal text, so a
-block inside inline code is code and declares nothing.
+block inside inline code is code and declares nothing. A quoted value is one attribute
+however many spaces it holds, so
+`### with pip <small>recommended</small> { #with-pip data-toc-label="with pip" }` still
+names `with-pip`.
+
+The other end of the block is MyST's `attrs_block`, which writes the identity of what
+follows on the line above it rather than on the last line of the block itself.
+`{#paragraph-target}` alone above a paragraph names that paragraph, and the identity is
+the same one the trailing form declares, so both ends are read.
 
 `attr-list-inline` is the extension's other half, the block that attaches to the inline
 construct it directly follows rather than to the block around it. That is how
@@ -88,6 +100,16 @@ construct it directly follows rather than to the block around it. That is how
 the sentence carries on after it, and the identity is the same one the block form declares.
 The block opens the text that follows the construct, because anything between the two
 breaks the pairing.
+
+`definition-term` is the one row derived from the document's text rather than written
+down by its author. Hugo publishes an identity for a definition-list term under
+`autoDefinitionTermID`, slugged by the rule its headings take and numbered on the counter
+its headings occupy, so a `matchers` term above a later `## Matchers` publishes `matchers`
+and then `matchers-1`. The term is the line above a line opening with `: `, and a second
+definition under one term names no new term. Hugo's own flag decides whether any of this is
+published and this engine does not read it, so a term joins the union wherever the
+spelling appears. A page that writes a definition list in a tree Hugo never builds gains an
+identity nothing publishes, which can leave a finding unreported and cannot invent one.
 
 The two MDX rows are the same heading identity written two ways, because the attribute
 spelling is an expression in that grammar. `mdx-heading-id` is the classic
@@ -146,6 +168,23 @@ Docusaurus writes name no generator; a VitePress container such as `::: tip` is 
 shape, and it is read only in a tree that declares MkDocs, which a VitePress tree does not.
 That is the gate: without `mkdocs.yml` or `mkdocs.yaml` above the document, three colons are
 three colons.
+
+`mkdocs-shortcode` is the page a hook rewrites before anything is rendered. Material for
+MkDocs ships one that replaces every `<!-- md:name argument -->` comment in the Markdown,
+so `#### <!-- md:setting config.blog_dir -->` reaches the built page as a heading whose
+identity is `config.blog_dir`. A comment carries no text under any rule in the table, so
+what this engine reads there is an empty heading, which is not what the page publishes. The
+page keeps every heading it writes itself and an anchor naming none of them is declared
+unsupported instead of reported absent, which is the answer the generator instruction
+gives. Without that declaration above the document a comment is a comment.
+
+`mkdocs-content-tab` is the same answer for `pymdownx.tabbed`. A tab opens with
+`=== "Title"`, and the extension publishes an identity for the title under the slug
+function the site configures, combined with the heading above it where
+`combine_header_slug` asks for that. Both settings sit inside `mkdocs.yml`, whose presence
+is all this engine reads, so a page carrying a tab leaves its identity set incomplete
+rather than guessing which of the two spellings the build wrote. Three equals signs with
+nothing quoted after them are prose.
 
 `myst-target` and `myst-role` are the two MyST spellings, which is how a Sphinx project
 writes its pages in Markdown. `(name)=` alone on its line is the target: the renderer writes
