@@ -500,6 +500,76 @@ fn every_row_names_its_places_reasons_and_meaning_verbatim() {
     assert_eq!(String::from_utf8(stdout).unwrap(), expected);
 }
 
+/// The documents a run did not scan are named under the same ten-line window
+/// the feedback rows take, and a full replay names all of them. Without the
+/// list a reader gets a total and no way to learn which files it counts.
+#[test]
+fn the_documents_a_run_did_not_scan_are_named_under_their_own_window() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    for index in 0..12 {
+        fs::write(root.join(format!("plan-{index}.org")), "* Plan\n").unwrap();
+    }
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
+    let check = |format: &str| {
+        amiss(&[
+            "check",
+            "--repo",
+            &repo,
+            "--object-format",
+            "sha1",
+            "--base",
+            &base,
+            "--index",
+            "--profile",
+            "observe",
+            "--format",
+            format,
+        ])
+    };
+
+    let (code, stdout, stderr) = check("human");
+    assert_eq!((code, stderr.as_str()), (0, ""));
+    let text = String::from_utf8(stdout).unwrap();
+    let named = |text: &str| {
+        text.lines()
+            .filter(|line| line.starts_with("unsupported \"plan-"))
+            .count()
+    };
+    assert_eq!(named(&text), 10, "ten rows and no more: {text}");
+    assert!(
+        text.contains("unsupported overflow: 2 more in the full report"),
+        "the window states what it hid: {text}"
+    );
+    assert!(
+        text.contains("unsupported 12 "),
+        "the total counts every one of them: {text}"
+    );
+
+    let (_code, wire, _stderr) = check("json");
+    let report_path = format!("{repo}/unscanned.json");
+    fs::write(&report_path, wire).unwrap();
+    let (code, replayed, stderr) = amiss(&[
+        "render",
+        "--report",
+        &report_path,
+        "--format",
+        "human",
+        "--full",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""));
+    assert_eq!(
+        named(&String::from_utf8(replayed).unwrap()),
+        12,
+        "the full replay hides none of them"
+    );
+}
+
 /// One target many documents point at is one row, and its places carry
 /// their own ten-line window; a full replay prints all of them.
 #[test]
