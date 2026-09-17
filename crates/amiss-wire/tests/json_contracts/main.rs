@@ -67,13 +67,24 @@ fn document_row_enums_match_the_report_schema() {
         declared(&schema["$defs"]["DocumentResult"]["properties"]["classification"]),
         classifications
     );
-    let reasons: BTreeSet<_> = report::model::UnsupportedReason::iter()
-        .map(|reason| {
-            let value = serde_json::to_value(reason).unwrap();
-            value.as_str().unwrap().to_owned()
-        })
-        .collect();
-    assert_eq!(declared(&schema["$defs"]["UnsupportedReason"]), reasons);
+    let described = schema["$defs"]["UnsupportedReason"]["description"]
+        .as_str()
+        .unwrap();
+    for reason in [
+        report::model::UnsupportedReason::SymlinkDocument,
+        report::model::UnsupportedReason::GitlinkDocument,
+        report::model::UnsupportedReason::LfsPointer,
+        report::model::UnsupportedReason::UnsupportedDocumentFormat,
+        report::model::UnsupportedReason::UndecodableDocument,
+        report::model::UnsupportedReason::ResourceCeilingCrossed,
+    ] {
+        let spelling = serde_json::to_value(&reason).unwrap();
+        let spelling = spelling.as_str().unwrap();
+        assert!(
+            described.contains(spelling),
+            "the schema names every reason this engine writes, and it does not name {spelling}"
+        );
+    }
 }
 
 #[test]

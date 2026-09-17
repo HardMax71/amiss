@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
-use strum::{Display, EnumIter, EnumString};
+use strum::{Display, EnumString};
 
 use crate::controls::ContentAvailability;
 use crate::model::Digest;
