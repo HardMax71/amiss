@@ -108,7 +108,7 @@ pub const ENGINE_DOMAIN: &str = "amiss/scanner-engine";
 pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
 pub const PAYLOAD_SCHEMA: &str = "amiss/scanner-report-payload";
 /// The wire's own version: a reshape mints the next major, as a major release.
-pub const COMPATIBILITY: &str = "2";
+pub const COMPATIBILITY: &str = "3";
 pub const ADAPTER_CONTRACT_SCHEMA: &str = "amiss/scanner-adapter-contract";
 pub const BUILT_IN_POLICY: &str = "scanner-policy-defaults";
 pub const SANDBOX_SCHEMA: &str = "amiss/scanner-sandbox-profile";

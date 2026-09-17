@@ -1,7 +1,8 @@
 use amiss_wire::repo_path_text;
 use amiss_wire::report::IntentKind;
 use amiss_wire::report::model::{
-    MissingResolution, RepoPath, Resolution, UnsupportedSemanticsResolution, occurrences,
+    MissingResolution, RepoPath, Resolution, UnsupportedSemanticsReason,
+    UnsupportedSemanticsResolution, occurrences,
 };
 use amiss_wire::resolution::{BlobTarget, Target};
 
@@ -112,7 +113,10 @@ fn sphinx_labels_resolve_through_the_label_table() {
     assert_eq!(
         count(|resolution| matches!(
             resolution,
-            Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution::DuplicateLabel {})
+            Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
+                reason: UnsupportedSemanticsReason::DuplicateLabel,
+                ..
+            })
         )),
         1,
         "one duplicated: {labels:?}"
@@ -120,7 +124,10 @@ fn sphinx_labels_resolve_through_the_label_table() {
     assert_eq!(
         count(|resolution| matches!(
             resolution,
-            Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution::ExternalInventory {})
+            Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
+                reason: UnsupportedSemanticsReason::ExternalInventory,
+                ..
+            })
         )),
         1,
         "one another project's: {labels:?}"

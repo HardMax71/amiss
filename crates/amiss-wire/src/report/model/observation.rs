@@ -8,9 +8,9 @@ use crate::model::Digest;
 use crate::model::{Adapter, Oid};
 pub use crate::resolution::{
     ExternalReference as ExternalResolutionReason, InvalidReference as InvalidResolutionReason,
-    UnsupportedTargetTag as UnsupportedTargetReason,
+    UnsupportedSemanticsReason, UnsupportedTargetTag as UnsupportedTargetReason,
 };
-use crate::resolution::{TaggedBlobTarget, Target, VersionScope};
+use crate::resolution::{Target, VersionScope};
 
 use super::RepoPath;
 use crate::report::ReportDefect;
@@ -101,17 +101,14 @@ pub struct ObservationIdInput<P = RepoPath> {
 
 pub type MissingResolution<P = RepoPath> = crate::controls::MissingResolution<P>;
 
+/// One unevaluated meaning: the reason it was left, and the target the reason
+/// located when it located one.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "reason", rename_all = "kebab-case", deny_unknown_fields)]
-pub enum UnsupportedSemanticsResolution<P = RepoPath> {
-    AttributeDependent {},
-    CodeFragment { target: Target<P> },
-    DuplicateLabel {},
-    ExternalInventory {},
-    Fragment { target: TaggedBlobTarget<P> },
-    NetworkPath {},
-    Query { target: Target<P> },
-    SiteRoute {},
+#[serde(deny_unknown_fields)]
+pub struct UnsupportedSemanticsResolution<P = RepoPath> {
+    pub reason: UnsupportedSemanticsReason,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<Target<P>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]

@@ -528,9 +528,9 @@ fn public_readers_reject_object_shaped_string_tags() {
 /// must keep clearing the rolling schema and reader: additions leave it
 /// clean, so a failure here is a payload reshape, which the frozen major
 /// forbids. The one lawful mismatch is a minting window: the last release
-/// wrote the previous major, the founding `experimental` before `1` or `1`
-/// before `2`, the reader no longer accepts it, and the next release refresh
-/// restores the full check.
+/// wrote the previous major, the founding `experimental` before `1`, `1`
+/// before `2` or `2` before `3`, the reader no longer accepts it, and the
+/// next release refresh restores the full check.
 #[test]
 fn the_last_released_example_still_clears_the_rolling_contract() {
     let root = repository_root();
@@ -555,6 +555,11 @@ fn the_last_released_example_still_clears_the_rolling_contract() {
                 defects.push(format!("rejected by the report reader: {error}"));
             }
         }
+        Some("2") => assert_eq!(
+            amiss_wire::report::COMPATIBILITY,
+            "3",
+            "only the tolerant-reason major may follow a compatibility-2 release",
+        ),
         Some("1") => assert_eq!(
             amiss_wire::report::COMPATIBILITY,
             "2",
@@ -584,11 +589,11 @@ fn the_last_released_example_still_clears_the_rolling_contract() {
 #[test]
 fn the_first_frozen_example_binds_the_major() {
     let root = repository_root();
-    let bytes = fs::read(root.join("spec/examples/scanner-report.frozen-2.json"))
+    let bytes = fs::read(root.join("spec/examples/scanner-report.frozen-3.json"))
         .expect("the frozen example is readable");
     let retained = hex::encode(sha2::Sha256::digest(&bytes));
     assert_eq!(
-        retained, "b2ccf849d0c31b361344694fde89177573a7dbd7b2d01f6c65db2b7e755fc7a6",
+        retained, "d02c36603c703656c51ee94f7bd4074a94a5e16287fafcf651a5baab07a58a64",
         "the frozen fixture is permanent; a new major mints a new fixture instead",
     );
     let example: serde_json::Value =
@@ -612,7 +617,7 @@ fn the_first_frozen_example_binds_the_major() {
     assert!(
         defects.is_empty(),
         "the rolling contract no longer accepts the first frozen example; \
-         this reshape mints wire major 2 and a major release:\n{}",
+         this reshape mints wire major 4 and a major release:\n{}",
         defects.join("\n"),
     );
 }
@@ -768,16 +773,29 @@ fn report_example_is_schema_clean_and_matches_its_canonical_form() {
     }
 }
 
-/// The fixture that opened major 1 stays in the tree as its record. Its
-/// bytes never change, and nothing else is asked of it now that the
-/// rolling contract is major 2.
+/// The fixture that opened each closed major stays in the tree as its
+/// record. Their bytes never change, and nothing else is asked of them now
+/// that the rolling contract is major 3.
 #[test]
-fn the_record_of_major_one_is_permanent() {
-    let bytes = fs::read(repository_root().join("spec/examples/scanner-report.frozen-1.json"))
-        .expect("the frozen-1 record is readable");
-    assert_eq!(
-        hex::encode(sha2::Sha256::digest(&bytes)),
-        "3fff8892cabc5bf6a9aae730ed11ac37f6c96ecd1efbc3d04786367d36f39d7a",
-        "the record of major 1 is permanent",
-    );
+fn the_records_of_the_closed_majors_are_permanent() {
+    for (major, name, retained) in [
+        (
+            1,
+            "scanner-report.frozen-1.json",
+            "3fff8892cabc5bf6a9aae730ed11ac37f6c96ecd1efbc3d04786367d36f39d7a",
+        ),
+        (
+            2,
+            "scanner-report.frozen-2.json",
+            "b2ccf849d0c31b361344694fde89177573a7dbd7b2d01f6c65db2b7e755fc7a6",
+        ),
+    ] {
+        let bytes = fs::read(repository_root().join("spec/examples").join(name))
+            .expect("the frozen record is readable");
+        assert_eq!(
+            hex::encode(sha2::Sha256::digest(&bytes)),
+            retained,
+            "the record of major {major} is permanent",
+        );
+    }
 }

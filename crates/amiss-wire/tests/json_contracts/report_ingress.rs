@@ -1,7 +1,10 @@
-use amiss_wire::envelope::{Payload as _, document_digest};
+use amiss_wire::envelope::{Payload as _, document_digest, sealed_digest};
 use amiss_wire::report::{
-    PAYLOAD_SCHEMA, ReportDefect,
-    model::{ReportEnvelope, ReportPayload, ReportStatus},
+    PAYLOAD_SCHEMA, ReportDefect, emit_report, emit_sealed,
+    model::{
+        DocumentStatus, ReportEnvelope, ReportPayload, ReportStatus, Resolution, Sides,
+        UnsupportedReason, UnsupportedSemanticsResolution,
+    },
 };
 use sha2::Digest as _;
 
@@ -60,8 +63,8 @@ fn formatting_and_escaped_members_preserve_report_identity() {
         serde_json::to_string(&report.payload_digest).unwrap(),
     );
     let escaped = reordered.replace(
-        "\"compatibility\":\"2\"",
-        "\"\\u0063ompatibility\" : \"\\u0032\"",
+        "\"compatibility\":\"3\"",
+        "\"\\u0063ompatibility\" : \"\\u0033\"",
     );
     assert_ne!(escaped, reordered);
     for input in [
@@ -140,4 +143,53 @@ fn payload_digest_precedes_the_semantic_verdict() {
         <ReportPayload>::parse(&serde_json_canonicalizer::to_vec(&report).unwrap()).map(drop),
         Err(ReportDefect::InvalidResult)
     );
+}
+
+#[test]
+fn an_unfamiliar_reason_survives_a_read_and_a_rewrite() {
+    let mut report: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
+    let document: UnsupportedReason = "generated-page".parse().unwrap();
+    assert_eq!(
+        document,
+        UnsupportedReason::Unrecognized("generated-page".to_owned())
+    );
+    for side in report
+        .payload
+        .documents
+        .iter_mut()
+        .flat_map(|row| [row.base.as_mut(), row.candidate.as_mut()])
+        .flatten()
+    {
+        side.status = DocumentStatus::Unsupported;
+        side.unsupported_reason = Some(document.clone());
+    }
+    let semantics = UnsupportedSemanticsResolution {
+        reason: "unmodelled-route".parse().unwrap(),
+        target: None,
+    };
+    let mut carried = 0_u32;
+    for comparison in &mut report.payload.observations {
+        let side = match &mut comparison.sides {
+            Sides::Same(occurrence) => Some(occurrence.as_mut()),
+            Sides::Each(pair) => pair.base.as_mut().or(pair.candidate.as_mut()),
+        };
+        if let Some(occurrence) = side {
+            occurrence.resolution = Resolution::UnsupportedSemantics(semantics.clone());
+            carried += 1;
+        }
+    }
+    assert!(carried > 0);
+
+    let spelled = report.payload.spell().unwrap();
+    report.payload_digest = sealed_digest(PAYLOAD_SCHEMA, &spelled);
+    let mut wire = Vec::new();
+    emit_sealed(&report.schema, &spelled, report.payload_digest, &mut wire).unwrap();
+    let text = std::str::from_utf8(&wire).unwrap();
+    assert!(text.contains("\"unsupported_reason\":\"generated-page\""));
+    assert!(text.contains("\"reason\":\"unmodelled-route\""));
+
+    let read = <ReportPayload>::parse(&wire).unwrap();
+    let mut rewritten = Vec::new();
+    emit_report(&read, &mut rewritten).unwrap();
+    assert_eq!(rewritten, wire);
 }

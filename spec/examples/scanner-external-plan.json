@@ -28,11 +28,11 @@
         "tree_oid": "7eed0bc378155f11543b2261997a1f363557e8cd"
       },
       "mode": "commit-pair",
-      "payload_digest": "sha256:bba7c5a63d9b96b4f89cf9ad31e690ba19211dffcfd185629386372be3f1b02f"
+      "payload_digest": "sha256:b9b3bccd18ee91a6693ce48d52869580ced85a4e09aa0afc5febbdc68337d03d"
     },
     "retained_count": 0,
     "schema": "amiss/external-plan-payload"
   },
-  "payload_digest": "sha256:f85d1b04321cc0e4660c07c11354ac32cb1a4ffc826a5bc0c94a4be431e66c04",
+  "payload_digest": "sha256:c961e134d9fd152950ae8762061e46d23736248fabda3957328859a74a72f68c",
   "schema": "amiss/external-plan-envelope"
 }

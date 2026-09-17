@@ -22,7 +22,7 @@ use amiss_wire::model::{ArtifactId, ForgeDialect, ObjectFormat, Oid, RepositoryI
 use amiss_wire::report::IntentKind;
 use amiss_wire::report::model::{
     ExternalResolutionReason, InvalidResolutionReason, MissingResolution, ObservationComparison,
-    Occurrence, RepoPath, ReportEnvelope, ReportPayload, Resolution,
+    Occurrence, RepoPath, ReportEnvelope, ReportPayload, Resolution, UnsupportedSemanticsReason,
     UnsupportedSemanticsResolution, occurrences,
 };
 use amiss_wire::requests::{
@@ -402,9 +402,10 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
             .iter()
             .filter(|row| matches!(
                 row.resolution,
-                Resolution::UnsupportedSemantics(
-                    UnsupportedSemanticsResolution::ExternalInventory {}
-                )
+                Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
+                    reason: UnsupportedSemanticsReason::ExternalInventory,
+                    ..
+                })
             ))
             .count(),
         2,
@@ -532,7 +533,10 @@ fn assert_site_routes(payload: &ReportPayload) {
             .filter(
                 |(row, _)| occurrences(row).base.is_some_and(|base| matches!(
                     base.resolution,
-                    Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution::SiteRoute {})
+                    Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
+                        reason: UnsupportedSemanticsReason::SiteRoute,
+                        ..
+                    })
                 ))
             )
             .count(),
@@ -578,7 +582,10 @@ fn assert_site_routes(payload: &ReportPayload) {
             .iter()
             .filter(|side| matches!(
                 side.resolution,
-                Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution::SiteRoute {})
+                Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
+                    reason: UnsupportedSemanticsReason::SiteRoute,
+                    ..
+                })
             ))
             .count(),
         11,

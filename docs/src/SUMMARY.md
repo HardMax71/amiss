@@ -63,6 +63,7 @@
     - [Reference coverage](completed/reference-coverage.md)
     - [Live provider evidence](completed/live-provider-evidence.md)
     - [A settled wire](completed/a-settled-wire.md)
+    - [A reason may grow](completed/a-reason-may-grow.md)
     - [Projection contracts](completed/projection-contracts.md)
     - [Authoritative semantic artifacts](completed/authoritative-semantic-artifacts.md)
     - [Offline audit sidecars](completed/offline-audit-sidecars.md)

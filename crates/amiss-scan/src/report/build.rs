@@ -112,7 +112,7 @@ pub(crate) fn construct_with_site(
 
     let payload = model::ReportPayload {
         schema: model::ReportPayloadSchema::Current,
-        compatibility: model::ReportCompatibility::Two,
+        compatibility: model::ReportCompatibility::Three,
         engine: engine_block(&setup.engine).map_err(|_defect| crate::Error::Internal)?,
         evaluation: model::Evaluation::Resolved(Box::new(evaluation(setup))),
         controls: controls(setup)?,
@@ -376,7 +376,7 @@ pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Result<Bu
     let error_count = u64::try_from(errors.len()).unwrap_or(u64::MAX);
     let payload = model::ReportPayload {
         schema: model::ReportPayloadSchema::Current,
-        compatibility: model::ReportCompatibility::Two,
+        compatibility: model::ReportCompatibility::Three,
         engine: engine_block(&setup.engine).map_err(|_defect| crate::Error::Internal)?,
         evaluation: model::Evaluation::Resolved(Box::new(evaluation(setup))),
         controls: controls(setup)?,

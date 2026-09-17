@@ -9,7 +9,7 @@ the contract's numbers are integers, never floats.
 
 The outer envelope has three members: its schema, the payload, and `payload_digest`, a hash
 of the payload's canonical bytes. The payload carries its own schema, `compatibility`
-(the wire's own version, `2` since the one-occurrence reshape), and an engine block whose `engine_digest` names the
+(the wire's own version, `3` since the tolerant-reason reshape), and an engine block whose `engine_digest` names the
 binary that produced it. Every digest in the system is domain-separated, meaning the hash
 input starts with a label naming its purpose, so a digest computed for one context cannot be
 replayed as a digest for another.
@@ -54,9 +54,23 @@ Writers retain explicit nullable members. Direct Serde decoding treats an omitte
 `Option<T>` field as `None`, like `null`; report admission still checks the original envelope
 against its typed canonical representation, so omitted output members cannot borrow its digest.
 
-Resolution tags select closed bodies: fields belonging to another kind or reason are
-rejected. Targets, blob evidence and version scopes reuse the producer's types; a fragment
-target must carry the `blob` tag and its complete blob evidence.
+Resolution tags select closed bodies: fields belonging to another kind are rejected, and
+targets, blob evidence and version scopes reuse the producer's types.
+
+One value inside those bodies is not closed. A reason says why an answer could not be
+given, and the answer itself sits beside it: a document row's `unsupported_reason` next to
+its `status`, an `unsupported-semantics` row's `reason` next to its `kind`. A consumer that
+meets a spelling it has never seen still knows the document went unscanned, or the
+reference went unevaluated, so those two are open strings inside the major. A reader keeps
+a spelling it does not know and writes it back byte for byte, which the payload digest
+requires of it. The unsupported-semantics row is one shape for every reason, the reason and
+the target it located when it located one, so a new reason needs no new row; the engine
+writes a target for `query`, `code-fragment` and `fragment` and for nothing else.
+
+Everything a consumer has to name in order to judge stays closed and still refuses a value
+it does not know: every kind, disposition, status, schema name, and `compatibility` itself.
+The `missing` reasons stay closed as well, since each one selects which evidence its row
+carries and each feeds the finding key.
 
 Observation comparisons, occurrences, intents and identity inputs are closed too. An
 occurrence is its identity input plus its outcome: `observation_id_input` carries the
@@ -164,7 +178,7 @@ The envelope, down to its top-level keys:
   "schema": "amiss/scanner-report-envelope",
   "payload": {
     "schema": "amiss/scanner-report-payload",
-    "compatibility": "2",
+    "compatibility": "3",
     "engine": { "engine_digest": "sha256:..." },
     "evaluation": {},
     "controls": {},
@@ -310,13 +324,15 @@ emitted bytes with an independent schema validator, checks the canonical example
 that the schema identifiers match the writer constants in the
 [documentation contract test](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/documentation_contracts).
 
-The wire is versioned by its own `compatibility` field, not by the engine release: `2`
-since the one-occurrence reshape, additive within the major. A `2` report may gain
-optional fields as `2` rolls forward, and nothing a `2.0` consumer parsed ever changes
-meaning or disappears. The promise is mechanical: the frozen example that opened the major
-is retained permanently beside the rolling one, a contract test requires every later schema
-in the major to keep validating it, and a second test holds the example the last release
-shipped to the same bar. Reshaping past that promise mints `3`, and that release is a major
-one. Every reader of `2` refuses a `1` report: the render and refs verbs, the external
-plan, and the controller. The record of how the contract earned the freeze, and of the
-reshape that minted `2`, is in [A settled wire](completed/a-settled-wire.md).
+The wire is versioned by its own `compatibility` field, not by the engine release: `3`
+since the tolerant-reason reshape, additive within the major. A `3` report may gain
+optional fields and new reason spellings as `3` rolls forward, and nothing a `3.0` consumer
+parsed ever changes meaning or disappears. The promise is mechanical: the frozen example
+that opened the major is retained permanently beside the rolling one, a contract test
+requires every later schema in the major to keep validating it, and a second test holds the
+example the last release shipped to the same bar. Reshaping past that promise mints `4`,
+and that release is a major one. Every reader of `3` refuses a `2` report: the render and
+refs verbs, the external plan, and the controller. The record of how the contract earned
+the freeze, and of the reshape that minted `2`, is in
+[A settled wire](completed/a-settled-wire.md); the record of `3` is in
+[A reason may grow](completed/a-reason-may-grow.md).

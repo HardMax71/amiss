@@ -219,12 +219,9 @@
       ]
     },
     "UnsupportedReason": {
-      "enum": [
-        "symlink-document",
-        "gitlink-document",
-        "lfs-pointer",
-        "unsupported-document-format"
-      ]
+      "description": "Why a discovered document was not scanned. Descriptive, so the set grows inside the major: this engine writes symlink-document, gitlink-document, lfs-pointer or unsupported-document-format, and a consumer that meets another spelling keeps it and still reads the unsupported status beside it.",
+      "type": "string",
+      "minLength": 1
     },
     "NullableUnsupportedReason": {
       "oneOf": [
@@ -2843,50 +2840,8 @@
         }
       }
     },
-    "TargetUnsupportedSemanticsResolution": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "kind",
-        "reason",
-        "target"
-      ],
-      "properties": {
-        "kind": {
-          "const": "unsupported-semantics"
-        },
-        "reason": {
-          "enum": [
-            "query",
-            "code-fragment"
-          ]
-        },
-        "target": {
-          "$ref": "#/$defs/ResolutionTarget"
-        }
-      }
-    },
-    "FragmentUnsupportedSemanticsResolution": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "kind",
-        "reason",
-        "target"
-      ],
-      "properties": {
-        "kind": {
-          "const": "unsupported-semantics"
-        },
-        "reason": {
-          "const": "fragment"
-        },
-        "target": {
-          "$ref": "#/$defs/BlobResolutionTarget"
-        }
-      }
-    },
-    "RouteUnsupportedSemanticsResolution": {
+    "UnsupportedSemanticsResolution": {
+      "description": "A reference whose meaning this run did not evaluate. The reason is descriptive, so the set grows inside the major: this engine writes query, code-fragment, fragment, site-route, network-path, attribute-dependent, duplicate-label or external-inventory, and a consumer that meets another spelling keeps it and still reads the unsupported-semantics kind beside it. A reason that located a target carries it; query, code-fragment and fragment do, and fragment's target is always a blob.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -2898,28 +2853,13 @@
           "const": "unsupported-semantics"
         },
         "reason": {
-          "enum": [
-            "site-route",
-            "network-path",
-            "attribute-dependent",
-            "duplicate-label",
-            "external-inventory"
-          ]
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "$ref": "#/$defs/ResolutionTarget"
         }
       }
-    },
-    "UnsupportedSemanticsResolution": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/TargetUnsupportedSemanticsResolution"
-        },
-        {
-          "$ref": "#/$defs/FragmentUnsupportedSemanticsResolution"
-        },
-        {
-          "$ref": "#/$defs/RouteUnsupportedSemanticsResolution"
-        }
-      ]
     },
     "UnsupportedVersionResolution": {
       "type": "object",
@@ -5543,7 +5483,7 @@
           "const": "amiss/scanner-report-payload"
         },
         "compatibility": {
-          "const": "2"
+          "const": "3"
         },
         "engine": {
           "$ref": "#/$defs/Engine"
@@ -5622,5 +5562,5 @@
       }
     }
   },
-  "description": "The report contract, versioned by the in-payload compatibility field: 2 since the one-occurrence reshape, additive within the major; a reshape mints 3."
+  "description": "The report contract, versioned by the in-payload compatibility field: 3 since the tolerant-reason reshape, additive within the major; a reshape mints 4. Within the major a descriptive reason grows: the document row's unsupported reason and the unsupported-semantics reason are open strings, while every kind, status, disposition, schema name and the compatibility value itself stays closed and a reader refuses a spelling it does not know."
 }

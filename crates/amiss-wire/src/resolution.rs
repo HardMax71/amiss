@@ -189,6 +189,26 @@ impl<P> UnsupportedSemantics<P> {
     }
 }
 
+/// Why a reference's meaning was left unevaluated, as the wire spells it. The
+/// engine writes only what it can produce; a reader keeps a spelling it does
+/// not know and re-emits it, so the set grows inside a major.
+#[derive(
+    Clone, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
+pub enum UnsupportedSemanticsReason {
+    AttributeDependent,
+    CodeFragment,
+    DuplicateLabel,
+    ExternalInventory,
+    Fragment,
+    NetworkPath,
+    Query,
+    SiteRoute,
+    #[strum(default, transparent)]
+    Unrecognized(String),
+}
+
 /// Version-scoped forge references identify a contained path under a named
 /// ref, a full immutable commit and path, or no trustworthy path at all.
 #[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]

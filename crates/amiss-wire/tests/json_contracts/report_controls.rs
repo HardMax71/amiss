@@ -132,7 +132,7 @@ fn complete_report_payloads_reject_unknown_members_with_matching_digests() {
     cases.extend(super::report_rows::reports().unwrap());
     cases.push(
         serde_json::from_slice(include_bytes!(
-            "../../../../spec/examples/scanner-report.frozen-2.json"
+            "../../../../spec/examples/scanner-report.frozen-3.json"
         ))
         .unwrap(),
     );

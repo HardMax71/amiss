@@ -56,8 +56,8 @@ pub enum ReportPayloadSchema {
     strum::EnumString,
 )]
 pub enum ReportCompatibility {
-    #[strum(serialize = "2")]
-    Two,
+    #[strum(serialize = "3")]
+    Three,
 }
 
 pub type ReportEnvelope<P = ReportPayload> = Envelope<P>;

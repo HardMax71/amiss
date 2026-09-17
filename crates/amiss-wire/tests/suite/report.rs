@@ -402,7 +402,7 @@ fn the_sorted_spelling_is_the_canonical_form() {
     assert_eq!(<ReportPayload>::SPELLING, Spelling::SortedKeys);
     for example in [
         &include_bytes!("../../../../spec/examples/scanner-report.json")[..],
-        &include_bytes!("../../../../spec/examples/scanner-report.frozen-2.json")[..],
+        &include_bytes!("../../../../spec/examples/scanner-report.frozen-3.json")[..],
     ] {
         let envelope: ReportEnvelope = serde_json::from_slice(example).unwrap();
         assert_eq!(
