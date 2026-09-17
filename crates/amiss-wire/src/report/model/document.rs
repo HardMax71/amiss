@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
-use strum::{Display, EnumString};
+use strum::{Display, EnumIter, EnumString};
 
 use crate::controls::ContentAvailability;
 use crate::model::Digest;
@@ -75,7 +75,9 @@ pub enum DocumentStatus {
 pub enum UnsupportedReason {
     GitlinkDocument,
     LfsPointer,
+    ResourceCeilingCrossed,
     SymlinkDocument,
+    UndecodableDocument,
     UnsupportedDocumentFormat,
     #[strum(default, transparent)]
     Unrecognized(String),

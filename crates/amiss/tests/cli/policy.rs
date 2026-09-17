@@ -80,6 +80,56 @@ fn policy_include_authors_one_row_and_previews_the_exact_staged_matches() {
     );
 }
 
+/// A document the parser rejects no longer ends the run, so the guard that
+/// replaces the refusal has to hold: a repository that protects that path in
+/// its own policy fails when the file stops being scannable, under every
+/// profile, with the rule naming what happened.
+#[test]
+fn a_protected_document_that_stops_decoding_fails_the_run() {
+    let fx = fixture();
+    let root = fx.root();
+    fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        r#"{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":["docs/guide.md"],"finding_dispositions":[]}"#,
+    )
+    .unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "protect"]);
+    let protected = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    fs::write(root.join("docs/guide.md"), b"# Guide \xff\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "undecodable"]);
+    let undecodable = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &protected,
+        "--candidate",
+        &undecodable,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 1, "the protected path stopped being scannable");
+    let payload = payload(&stdout);
+    let rules: Vec<&str> = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| finding["kind"] == "coverage-reduced")
+        .filter_map(|finding| finding["key_input"]["scope"]["rule_id"].as_str())
+        .collect();
+    assert_eq!(rules, vec!["coverage/repository-inventory-unsupported"]);
+}
+
 #[test]
 fn repository_policy_includes_raises_and_weakening() {
     let fx = fixture();
