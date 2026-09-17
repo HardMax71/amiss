@@ -34,10 +34,10 @@ inputs:
 outputs:
   exit-class:
     description: the engine's exit class, 0, 1, or 2
-    value: ${{ steps.scan.outputs.exit-class }}
+    value: ${{ steps.verdict.outputs.exit-class }}
   report:
     description: path to the machine report, one canonical JSON line
-    value: ${{ steps.scan.outputs.report }}
+    value: ${{ steps.verdict.outputs.report }}
 
 runs:
   using: composite
@@ -112,6 +112,19 @@ runs:
         REF_TYPE: ${{ github.ref_type }}
       run: |
         set -euo pipefail
+        repo() { git -C "$INPUT_REPO" "$@"; }
+        # a pull_request_target checkout is the base branch, and the pull request's own objects are never fetched
+        deepened=
+        deepen() {
+          [ -z "$deepened" ] && [ "$EVENT_NAME" != pull_request_target ] || return 1
+          deepened=1
+          [ "$(repo rev-parse --is-shallow-repository)" = true ] || return 1
+          repo fetch --quiet --deepen=1 origin "$(repo rev-parse HEAD)"
+        }
+        present() {
+          repo cat-file -e "$1^{commit}" 2>/dev/null && return 0
+          deepen && repo cat-file -e "$1^{commit}" 2>/dev/null
+        }
         base="$INPUT_BASE"
         candidate="$INPUT_CANDIDATE"
         if [ -z "$candidate" ]; then
@@ -123,24 +136,29 @@ runs:
         fi
         if [ -z "$base" ]; then
           case "$EVENT_NAME" in
-            pull_request)
-              base="$(git -C "$INPUT_REPO" rev-parse --verify --quiet "${candidate}^1" || true)"
-              ;;
             pull_request_target) base="$PR_BASE" ;;
             merge_group) base="$MG_BASE" ;;
             push) base="$PUSH_BEFORE" ;;
           esac
         fi
         if [ -z "${base//0/}" ] || [ "$base" = "$candidate" ]; then
-          base="$(git -C "$INPUT_REPO" rev-parse --verify --quiet "${candidate}^" || true)"
+          base="$(repo rev-parse --verify --quiet "${candidate}^1" || true)"
+          if [ -z "$base" ] && deepen; then
+            base="$(repo rev-parse --verify --quiet "${candidate}^1" || true)"
+          fi
         fi
         if [ -z "$base" ]; then
-          echo "::error title=amiss::no base commit could be derived for a ${EVENT_NAME} event; pass the base input"
+          echo "::error title=amiss::the checkout holds no parent of ${candidate}, so no base commit could be derived for a ${EVENT_NAME} event; give actions/checkout fetch-depth: 2"
           exit 2
         fi
+        case "$EVENT_NAME" in
+          pull_request) hint="give actions/checkout fetch-depth: 2" ;;
+          pull_request_target) hint="a pull_request_target checkout is the base branch, so give actions/checkout ref: the pull request head sha (github.event.pull_request.head.sha) with fetch-depth: 0" ;;
+          *) hint="give actions/checkout fetch-depth: 0" ;;
+        esac
         for oid in "$base" "$candidate"; do
-          if ! git -C "$INPUT_REPO" cat-file -e "${oid}^{commit}" 2>/dev/null; then
-            echo "::error title=amiss::commit ${oid} is not in the checkout; give actions/checkout fetch-depth: 0, or 2 for pull requests"
+          if ! present "$oid"; then
+            echo "::error title=amiss::commit ${oid} is not in the checkout; ${hint}"
             exit 2
           fi
         done
@@ -152,8 +170,9 @@ runs:
           && { [ "$EVENT_NAME" != "push" ] || [ "$REF_TYPE" = "branch" ]; }; then
           host="${SERVER_URL#*://}"
           host="${host%/}"
+          lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
           {
-            printf 'identity=%s/%s\n' "${host,,}" "${REPOSITORY,,}"
+            printf 'identity=%s/%s\n' "$(lower "$host")" "$(lower "$REPOSITORY")"
             printf 'ref=refs/heads/%s\n' "$BRANCH"
             printf 'default-ref=refs/heads/%s\n' "$DEFAULT_BRANCH"
           } >> "$GITHUB_OUTPUT"
@@ -222,11 +241,17 @@ runs:
           jq -r '
             def html: gsub("&"; "&amp;") | gsub("<"; "&lt;")
               | gsub(">"; "&gt;") | gsub("\""; "&quot;");
+            def code: "<code>" + (tojson | .[1:-1] | html) + "</code>";
             def target:
-              if type == "string" then "<code>" + (tojson | html) + "</code>"
+              if type == "string" then code
               elif type == "object" and .bytes_hex != null then
                 "<code>bytes " + (.bytes_hex | html) + "</code>"
               else "an unresolved destination"
+              end;
+            def where:
+              if .annotation == null then ""
+              else " at <code>" + (.annotation.path | tojson | .[1:-1] | html)
+                + ":\(.annotation.span.start_line)</code>"
               end;
             def told($text): ($text // "") as $d
               | if $d == "" then "" else ": " + $d end;
@@ -239,7 +264,9 @@ runs:
                     ($p.feedback.items[:10][]
                      | "- **\((.action[0:1] | ascii_upcase) + .action[1:])** "
                        + (.target | target)
-                       + " — \(.location_count) affected place\(if .location_count == 1 then "" else "s" end)"),
+                       + " \(.finding_kinds | join(", "))"
+                       + where
+                       + ", \(.location_count) affected place\(if .location_count == 1 then "" else "s" end)"),
                     (($p.feedback.items | length) - 10
                      | if . > 0 then
                          "- \(.) more item\(if . == 1 then "" else "s" end) in report."
@@ -269,25 +296,33 @@ runs:
         REPORT: ${{ steps.scan.outputs.report }}
       run: |
         set -euo pipefail
-        if [ "$ANNOTATIONS" != "true" ] || [ ! -s "$REPORT" ]; then
+        wanted="$(printf '%s' "$ANNOTATIONS" | tr '[:upper:]' '[:lower:]')"
+        if [ "$wanted" != "true" ] || [ ! -s "$REPORT" ]; then
           exit 0
         fi
         jq -r '
           def d: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
           def p: d | gsub(":"; "%3A") | gsub(","; "%2C");
+          def spelled:
+            if type == "string" then d
+            elif type == "object" and .bytes_hex != null then "bytes \(.bytes_hex)"
+            else empty end;
           def why($text): ($text // "") as $m
             | if $m == "" then "" else "; " + ($m|d) end;
+          def led($lead): (spelled // "") | if . == "" then "" else $lead + . end;
           (.payload as $p
            | if $p.feedback.status == "available" then
                $p.feedback.items[:10][]
                | select(.action == "fix" and .annotation != null)
+               | .annotation as $at
+               | ([$p.findings[] | select(.location.path == $at.path and .location.span == $at.span)]
+                  | first | .candidate_fact.evidence.resolution // {}) as $resolution
                | (if .effective_disposition == "fail" then "error" else "warning" end) as $level
-               | (if (.target | type) == "string" then " target \(.target|d)"
-                  elif (.target | type) == "object" and .target.bytes_hex != null then
-                    " target bytes \(.target.bytes_hex)"
-                  else "" end) as $target
-               | "::\($level) file=\(.annotation.path|p),line=\(.annotation.span.start_line),endLine=\(.annotation.span.end_line),col=\(.annotation.span.start_column),endColumn=\(.annotation.span.end_column),title=amiss Fix::Fix"
-                 + $target
+               | "::\($level) file=\($at.path|p),line=\($at.span.start_line),endLine=\($at.span.end_line),col=\($at.span.start_column),endColumn=\($at.span.end_column),title=amiss Fix::Fix \(.finding_kinds | join(", "))"
+                 + (.target | led(": target "))
+                 + why($resolution.reason)
+                 + ($resolution.near | led(", near "))
+                 + ($resolution.same_object_at | led(", same bytes at "))
                  + "; \(.location_count) affected place\(if .location_count == 1 then "" else "s" end)"
              else
                $p.errors[:10][]
@@ -302,8 +337,20 @@ runs:
              end)
         ' "$REPORT"
 
+    # The report output always names the path, so an upload step never sees an
+    # empty input; a run that wrote nothing leaves no file there.
     - id: verdict
+      if: always()
       shell: bash
       env:
         STATUS: ${{ steps.scan.outputs.exit-class }}
-      run: exit "$STATUS"
+      run: |
+        set -euo pipefail
+        status="${STATUS:-2}"
+        report="${RUNNER_TEMP}/amiss-report.json"
+        [ -s "$report" ] || rm -f "$report"
+        {
+          printf 'exit-class=%s\n' "$status"
+          printf 'report=%s\n' "$report"
+        } >> "$GITHUB_OUTPUT"
+        exit "$status"
