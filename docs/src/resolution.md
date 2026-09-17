@@ -130,8 +130,10 @@ and mode read"];
 ```
 
 A relative destination the tree does not hold is asked once more, under the spellings a
-documentation router serves: `guide` and `guide.html` for `guide.md`, and a directory's
-`index` for its `README.md`. The first spelling that names a file resolves the reference to
+documentation router serves: `guide` and `guide.html` for `guide.md`, a directory's
+`index` for its `README.md`, and last the route a document publishes for itself, which is the
+`id` or `slug` its frontmatter declares in a tree that holds a `docusaurus.config.*`. The
+first spelling that names a file resolves the reference to
 that file, and the report names the file that answered while the occurrence keeps the
 destination the author wrote. A spelling reaches nothing that is not already in the tree, so
 it can widen what resolves and never invents a target; a promised directory and a
@@ -143,11 +145,20 @@ holding `conf.py`, a raw HTML destination under a `mkdocs.yml` at the directory 
 published at. The file's presence selects the rule and nothing inside it is read. An alias
 with no such file above the document is `unsupported-reference-semantics` rather than a
 directory of that name, since the value arrives when the site is built.
+
 [What a documentation router serves](route-spellings.md) holds the spellings, the routers
 they were harvested from, the generator rules and what selects each, and what the union costs.
 
-A destination no spelling reaches is `kind: missing` with `reason: path-not-found`, and
-that row carries `near`: the one tracked path equal to the missed one apart from case,
+A destination holding `{{ ... }}` or `{% ... %}` never reaches the tree at all. The build
+fills it in, so it takes the same `unsupported-reference-semantics` an AsciiDoc `{attribute}`
+takes, and a file whose own name carries a single brace stays a path.
+
+A destination no spelling reaches is `kind: missing` with `reason: path-not-found`. The path
+that row names is the destination read from the document's own directory wherever a rule kept
+that reading, so a finding never carries a directory a rule anchored at: a raw
+`<img src="../../img/gone.png">` under a `mkdocs.yml` is missing at `img/gone.png` rather than
+under the directory the page is published at. The row also carries `near`: the one tracked
+path equal to the missed one apart from case,
 when exactly one exists and null otherwise. It answers the break a case-insensitive
 working copy hides, where `Guide.md` opens locally and resolves nowhere on the tree the
 forge and Linux CI read. A repository holding both spellings names a real ambiguity and

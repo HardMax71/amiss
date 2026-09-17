@@ -666,6 +666,7 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
     let oid = Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap();
     SnapshotDiscovery {
         labels: std::collections::BTreeMap::new(),
+        published_routes: std::collections::BTreeMap::new(),
         documents: paths
             .iter()
             .map(|path| DocumentRecord {

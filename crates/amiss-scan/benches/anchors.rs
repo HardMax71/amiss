@@ -151,6 +151,7 @@ fn late_policy_bound_adapter(bencher: Bencher<'_, '_>) {
         path_defects: Vec::new(),
         entries: BTreeMap::new(),
         labels: BTreeMap::new(),
+        published_routes: BTreeMap::new(),
     };
     let path = RepoPath::new("generated/099999.page".to_owned())
         .unwrap_or_else(|| panic!("benchmark lookup path"));

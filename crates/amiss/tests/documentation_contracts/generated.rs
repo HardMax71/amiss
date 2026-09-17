@@ -9,7 +9,7 @@ use std::fs;
 use amiss_git::GitLimits;
 use amiss_scan::ScanLimits;
 use amiss_scan::anchor::{DECLARATIONS, DeclarationRule};
-use amiss_scan::route::{BUNDLER_REQUESTS, ROUTERS, RouteRule};
+use amiss_scan::route::{BUNDLER_REQUESTS, ROUTERS, RouteRule, TEMPLATE_EXPRESSIONS};
 use amiss_wire::controls::{ORGANIZATION_POLICY_ENTRIES_LIMIT, ResourceName};
 use amiss_wire::model::ForgeDialect;
 use amiss_wire::report::{
@@ -201,6 +201,14 @@ fn bundler_requests_table() -> String {
     table
 }
 
+fn template_expressions_table() -> String {
+    let mut table = String::from("| Expression opens with | and closes with |\n| --- | --- |");
+    for (open, close) in TEMPLATE_EXPRESSIONS {
+        write!(table, "\n| `{open}` | `{close}` |").expect("writing to a String is infallible");
+    }
+    table
+}
+
 fn declared_identities_table(rules: &[DeclarationRule]) -> String {
     let mut table = String::from(
         "| Declaration | Spelling | Read in | Selected by |\n| --- | --- | --- | --- |",
@@ -275,6 +283,12 @@ fn documented_declared_routers_are_generated_from_the_route_table() {
         documented_contract(&document, "bundler-requests"),
         bundler_requests_table(),
         "{} drifted from amiss_scan::route::BUNDLER_REQUESTS",
+        path.display(),
+    );
+    assert_eq!(
+        documented_contract(&document, "template-expressions"),
+        template_expressions_table(),
+        "{} drifted from amiss_scan::route::TEMPLATE_EXPRESSIONS",
         path.display(),
     );
     for spelling in declared.iter().flat_map(|rule| rule.serves.iter()) {

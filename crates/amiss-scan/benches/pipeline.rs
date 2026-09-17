@@ -146,6 +146,7 @@ fn construct_reports(bencher: Bencher<'_, '_>, case: (ReportShape, usize)) {
                 opaque: Opaque::default(),
                 governed: Vec::new(),
                 declared_anchors: Vec::new(),
+                declared_name: None,
                 anchor_source: None,
             });
             (
@@ -221,6 +222,7 @@ fn resolve_repository_path(bencher: Bencher<'_, '_>, shape: ResolutionShape) {
     let snapshot = SnapshotDiscovery {
         documents: Vec::new(),
         labels: BTreeMap::new(),
+        published_routes: BTreeMap::new(),
         outside_document_set: 0,
         tree_entries: 1,
         path_defects: Vec::new(),
@@ -361,6 +363,7 @@ fn document_discovery(count: usize, status: &DocumentStatus) -> SnapshotDiscover
     SnapshotDiscovery {
         documents,
         labels: BTreeMap::new(),
+        published_routes: BTreeMap::new(),
         outside_document_set: 0,
         tree_entries: u64::try_from(count).unwrap_or(u64::MAX),
         path_defects: Vec::new(),

@@ -119,6 +119,7 @@ fn late_case_neighbor_latency_and_memory() {
         path_defects: Vec::new(),
         entries,
         labels: BTreeMap::new(),
+        published_routes: BTreeMap::new(),
     };
     let document =
         RepoPath::new("README.md".to_owned()).unwrap_or_else(|| panic!("fixture document"));

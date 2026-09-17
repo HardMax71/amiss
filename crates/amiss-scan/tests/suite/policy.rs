@@ -540,6 +540,7 @@ fn bound_adapter_answers_only_policy_included_rows() {
         path_defects: Vec::new(),
         entries: BTreeMap::new(),
         labels: BTreeMap::new(),
+        published_routes: BTreeMap::new(),
     };
     assert_eq!(
         snapshot.bound_adapter(&path("man/g.txt")),
