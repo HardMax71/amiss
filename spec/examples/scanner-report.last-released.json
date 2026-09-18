@@ -1,6 +1,6 @@
 {
   "payload": {
-    "compatibility": "2",
+    "compatibility": "3",
     "controls": {
       "base_repository_policy_digest": null,
       "candidate_repository_policy_digest": "sha256:bda3f4f2b06e62fc6f36c19d05805edc3fe785ae94401e226ab485da0a263e6d",
@@ -805,6 +805,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:bba7c5a63d9b96b4f89cf9ad31e690ba19211dffcfd185629386372be3f1b02f",
+  "payload_digest": "sha256:b9b3bccd18ee91a6693ce48d52869580ced85a4e09aa0afc5febbdc68337d03d",
   "schema": "amiss/scanner-report-envelope"
 }
