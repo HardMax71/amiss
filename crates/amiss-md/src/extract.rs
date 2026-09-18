@@ -289,6 +289,9 @@ impl Sweep<'_> {
             Kind::Paragraph => {
                 owners.paragraph = Some(span);
                 self.declared.extend(heading::paragraph_attribute(node));
+                self.declared.extend(heading::glossary_terms(node));
+                self.declared
+                    .extend(heading::directive_names(self.suffix.get(span.0..span.1)));
                 self.headings.extend(heading::definition_terms(node));
             }
             Kind::Link { url } => {
@@ -338,16 +341,20 @@ impl Sweep<'_> {
                         self.declared.extend(heading::myst_target(line));
                     }
                 }
-                if path.last().is_some_and(|index| *index > 0) {
-                    self.declared.extend(heading::inline_attribute(value));
-                }
+                let after_node = path.last().is_some_and(|index| *index > 0);
+                self.declared
+                    .extend(heading::inline_attribute(value, after_node));
             }
             Kind::InlineCode(_) => {
                 if let Some((construct, raw, semantic, role_span)) = role(self.suffix, span) {
                     self.push(construct, raw, semantic, role_span, path, *owners);
                 }
             }
-            Kind::Root | Kind::CodeBlock(_) | Kind::Other => {}
+            Kind::CodeBlock(_) => {
+                self.declared
+                    .extend(heading::directive_names(self.suffix.get(span.0..span.1)));
+            }
+            Kind::Root | Kind::Other => {}
         }
         Ok(true)
     }

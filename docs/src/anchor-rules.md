@@ -59,13 +59,15 @@ wherever their profile is.
 | --- | --- | --- | --- |
 | `html-id` | an `id` or `name` attribute on a raw HTML element | `markdown` | any tree |
 | `attr-list` | an attribute block alone on a block's first or last line, `{#id}` | `markdown` | any tree |
-| `attr-list-inline` | an attribute block directly after an inline construct, `**text**{#id}` | `markdown` | any tree |
+| `attr-list-inline` | an attribute block directly after an inline construct or a bracketed span, `**text**{#id}` or `[text]{#id}` | `markdown` | any tree |
 | `definition-term` | a term line above a `: ` definition line | `markdown` | any tree |
 | `mkdocs-snippet` | a `--8<--` line naming a quoted path, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `mkdocs-directive` | a `:::` line naming what a generator renders, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `mkdocs-shortcode` | an HTML comment naming a hook's shortcode, `<!-- md:name -->` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `mkdocs-content-tab` | a content tab opening a quoted title, `=== "Title"` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `myst-target` | a target alone on its line, `(name)=` | `markdown` | any tree |
+| `myst-directive-name` | a directive's `:name:` option, or a `figure-md` opener's argument | `markdown`, `rst` | any tree |
+| `myst-glossary` | a term of a definition list opening with `{.glossary}` | `markdown` | any tree |
 | `myst-role` | a cross-reference role, `` {doc}`name` `` | `markdown` | `conf.py` |
 | `myst-link` | a plain link naming a label, `[text](name)` or `[text](#name)` | `markdown` | `conf.py` |
 | `mdx-comment` | an MDX comment ending a heading, `{/* #id */}` | `mdx` | any tree |
@@ -93,14 +95,20 @@ names `with-pip`.
 The other end of the block is MyST's `attrs_block`, which writes the identity of what
 follows on the line above it rather than on the last line of the block itself.
 `{#paragraph-target}` alone above a paragraph names that paragraph, and the identity is
-the same one the trailing form declares, so both ends are read.
+the same one the trailing form declares, so both ends are read. A directive opener leaves
+no blank line under it, so the opener and the block it holds share one paragraph and the
+attribute block is its second line rather than its first. `{#mypara}` under `:::{note}`
+still names the paragraph beneath it.
 
 `attr-list-inline` is the extension's other half, the block that attaches to the inline
 construct it directly follows rather than to the block around it. That is how
 `*   **\`locale\`**{ #mkdocs-locale }: the locale used` names a list item's own term while
 the sentence carries on after it, and the identity is the same one the block form declares.
 The block opens the text that follows the construct, because anything between the two
-breaks the pairing.
+breaks the pairing. A bracketed span is the other carrier, `[text]{#id}`, which MyST's
+`attrs_inline` and Pandoc both write. A bracket pair naming no definition is plain text to
+the Markdown grammar, so no node is built for one and the `]` is the construct's own end: a
+block against one is read from the text it sits in wherever that text falls.
 
 `definition-term` is the one row derived from the document's text rather than written
 down by its author. Hugo publishes an identity for a definition-list term under
@@ -196,6 +204,26 @@ joins the label table a `{ref}` is answered from. The role is the reference,
 alone. The target is read wherever the spelling appears, because an identity can only widen
 the set an anchor may match, while a role is read only under a `conf.py`, so a brace before a
 code span in an ordinary Markdown file stays the prose it is.
+
+`myst-directive-name` is the name a directive carries. Every docutils directive takes a
+`:name:` option and MyST spells a directive as a brace-tagged fence, so `:name: build-note`
+under `:::{note}` publishes `build-note` the way `(build-note)=` above the block would. The
+option is read under a `{name}` tag and nowhere else, so the `:::note` fence Docusaurus
+writes and an ordinary code fence declare nothing. An `eval-rst` body is reStructuredText
+and its directives spell the same option, so a `.. figure::` carrying `:name: rst-fun-fish`
+inside a Markdown page publishes that name too, and a reStructuredText document publishes it
+directly. `figure-md` takes the name as its argument instead, `:::{figure-md} fig-target`,
+since it is MyST's own Markdown figure; every other directive writes a path, a title or a
+domain object there, so the argument is read under that one tag.
+
+`myst-glossary` is a definition list read the way Sphinx reads one. A list opening with a
+`{.glossary}` attribute block is a glossary, and what a glossary term publishes is the term
+itself, spaces and all, rather than a slug of it, which is how `[](<#my other term>)` finds
+it. One list can therefore publish two identities, the term as written here and the slug the
+`definition-term` row gives it, and a list with no `{.glossary}` above it publishes only the
+slug. Both of these rows are read wherever the spelling appears, since an identity can only
+widen the set an anchor may match, and both reach the label table a `{ref}` and a plain link
+are answered from only where a `conf.py` governs the page that writes them.
 
 `myst-link` reads those same names from the other side, so it is a reference rather than a
 declaration. Sphinx keeps every name a page declares as a global label, and a plain Markdown

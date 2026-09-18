@@ -239,6 +239,55 @@ fn a_plain_link_names_a_label_where_the_role_does() {
     }
 }
 
+/// The names a `MyST` document writes down beside its targets: a directive's
+/// `:name:` option, the argument `figure-md` takes instead, the same option
+/// inside an `eval-rst` body, a glossary term under its own attribute block, a
+/// bracketed span, and an attribute block that shares the opener's paragraph.
+/// Each joins the label table, so a link naming one resolves to the page that
+/// writes it. A fence with no brace tag opens no directive and a definition
+/// list that is no glossary publishes no term, so both stay missing, and a name
+/// declared where no `conf.py` governs it is never a label at all.
+#[test]
+fn a_name_a_directive_publishes_answers_a_link_that_spells_it() {
+    let rows = answers(&amiss_fixtures::sphinx_myst().expect("the fixture stages"));
+    for (line, spelling) in [
+        (25, "a directive's own option"),
+        (27, "a `figure-md` argument as a bare fragment"),
+        (29, "an option inside an embedded reStructuredText body"),
+        (31, "a glossary term"),
+        (33, "a bracketed span"),
+        (35, "a block sharing the opener's paragraph"),
+    ] {
+        assert_eq!(
+            blob(answer(&rows, "docs/index.md", line)),
+            Some("docs/widgets.md"),
+            "{spelling}: {:?}",
+            answer(&rows, "docs/index.md", line)
+        );
+    }
+    for (line, absence) in [
+        (37, "a fence with no brace tag"),
+        (41, "a name no conf.py governs"),
+    ] {
+        assert!(
+            matches!(
+                answer(&rows, "docs/index.md", line),
+                Resolution::Missing(Missing::PathNotFound { .. })
+            ),
+            "{absence}: {:?}",
+            answer(&rows, "docs/index.md", line)
+        );
+    }
+    assert!(
+        matches!(
+            answer(&rows, "docs/index.md", 39),
+            Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+        ),
+        "a definition list that is no glossary: {:?}",
+        answer(&rows, "docs/index.md", 39)
+    );
+}
+
 /// The `MyST` rows and the route rule that anchors a source-root docname are
 /// the same declaration, so the file each names must stay one file.
 #[test]
