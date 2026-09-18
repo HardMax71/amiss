@@ -351,10 +351,7 @@ impl Sweep<'_> {
                     self.push(construct, raw, semantic, role_span, path, *owners);
                 }
             }
-            Kind::CodeBlock(_) => {
-                self.declared
-                    .extend(heading::directive_names(self.suffix.get(span.0..span.1)));
-            }
+            Kind::CodeBlock(_) => self.declared.extend(fenced_identities(self.suffix, span)),
             Kind::Root | Kind::Other => {}
         }
         Ok(true)
@@ -667,6 +664,30 @@ fn plain_element(name: Option<&str>) -> bool {
     name.is_none_or(|name| {
         name.starts_with(|first: char| first.is_ascii_lowercase()) && !name.contains(['.', ':'])
     })
+}
+
+/// What a fence names: the directive option a `MyST` opener carries, and the
+/// `id` and `name` attributes of the markup an unwrapped fence holds.
+fn fenced_identities(suffix: &str, span: (usize, usize)) -> Vec<String> {
+    let block = suffix.get(span.0..span.1);
+    let mut out = heading::directive_names(block);
+    if block.is_some_and(spliced_markup) {
+        out.extend(html::collect_regions(suffix, &[span], html::anchors));
+    }
+    out
+}
+
+/// Whether the fence is one Docusaurus strips before the file is parsed, so
+/// that what stands between its lines is markup of the page rather than code.
+/// The loader unwraps the three- and four-backtick spellings and nothing else.
+fn spliced_markup(block: &str) -> bool {
+    let Some(opener) = block.lines().next().map(str::trim_start) else {
+        return false;
+    };
+    ["```", "````"]
+        .into_iter()
+        .filter_map(|fence| opener.strip_prefix(fence))
+        .any(|rest| !rest.starts_with('`') && rest.trim() == "mdx-code-block")
 }
 
 fn destination_token(bytes: &[u8], at: usize) -> Result<(usize, usize), Fault> {

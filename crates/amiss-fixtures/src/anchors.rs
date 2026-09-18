@@ -5,9 +5,11 @@ use crate::{CommitChain, Staged, staged_repository};
 /// expressions that declare none: one that never had a `#`, and one that has
 /// one but does not end the heading. Both leave the slug standing. `element.mdx`
 /// declares one from a plain JSX element and one nested inside another, beside
-/// a component that declares neither its own `id` nor the one under it.
-/// `parent.mdx` renders a partial that renders another, imports a component
-/// that is no document at all, and the two `cycle` documents render each other.
+/// a component that declares neither its own `id` nor the one under it, and
+/// then one inside a fence Docusaurus unwraps and one inside a fence that
+/// stays code. `parent.mdx` renders a partial that renders another, imports a
+/// component that is no document at all, and the two `cycle` documents render
+/// each other.
 const MDX_IDENTITIES: [(&str, Staged<'static>); 8] = [
     ("guide.mdx", Staged::File(b"# Guide\n")),
     (
@@ -21,7 +23,9 @@ const MDX_IDENTITIES: [(&str, Staged<'static>); 8] = [
         Staged::File(
             b"<details id=\"node-env\">\n\nInside.\n\n</details>\n\n\
               <div id=\"outer\"><span id=\"inner\" /></div>\n\n\
-              <APITable id=\"component\">\n\n<span id=\"under-component\" />\n\n</APITable>\n",
+              <APITable id=\"component\">\n\n<span id=\"under-component\" />\n\n</APITable>\n\n\
+              ```mdx-code-block\n<details id=\"spliced\">\n<summary>Open</summary>\n```\n\n\
+              ```html\n<div id=\"quoted\"></div>\n```\n",
         ),
     ),
     (
