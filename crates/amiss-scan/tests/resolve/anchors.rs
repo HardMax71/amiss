@@ -172,10 +172,13 @@ fn publishes(
 /// and an expression declaring none leaves the slug standing. `element.mdx` is
 /// the JSX `id`, read from a plain element and from one nested inside another,
 /// and never from a component or from under one, because what a component
-/// renders is unknown here. `parent.mdx` is the partial, whose headings and
-/// whose own partial's headings are the page's; the component it imports from a
-/// package is no document, so absence there is still provable. Two documents
-/// rendering each other leave absence undecided past the cycle.
+/// renders is unknown here. An `mdx-code-block` fence there is markup rather
+/// than code, since Docusaurus strips the fence lines before anything parses
+/// the file, while a fence naming any other language stays code and declares
+/// nothing. `parent.mdx` is the partial, whose headings and whose own
+/// partial's headings are the page's; the component it imports from a package
+/// is no document, so absence there is still provable. Two documents rendering
+/// each other leave absence undecided past the cycle.
 #[test]
 fn an_mdx_document_publishes_the_identities_it_writes_down() {
     let mut bed = bed_at(
@@ -195,6 +198,8 @@ fn an_mdx_document_publishes_the_identities_it_writes_down() {
         ("docs/element.mdx", "inner", Some(true)),
         ("docs/element.mdx", "component", Some(false)),
         ("docs/element.mdx", "under-component", Some(false)),
+        ("docs/element.mdx", "spliced", Some(true)),
+        ("docs/element.mdx", "quoted", Some(false)),
         ("docs/element.mdx", "absent", Some(false)),
         ("docs/parent.mdx", "parent-id", Some(true)),
         ("docs/parent.mdx", "tags-file", Some(true)),

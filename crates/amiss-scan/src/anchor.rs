@@ -515,8 +515,9 @@ pub(crate) const MYST_LINK: DeclarationRule = DeclarationRule {
 pub const DECLARATIONS: [DeclarationRule; 22] = [
     DeclarationRule {
         name: "html-id",
-        spelling: "an `id` or `name` attribute on a raw HTML element",
-        adapters: &[Adapter::Markdown],
+        spelling: "an `id` or `name` attribute on a raw HTML element, or on one written \
+                   inside an `mdx-code-block` fence",
+        adapters: &[Adapter::Markdown, Adapter::Mdx],
         declared_by: &[],
     },
     DeclarationRule {

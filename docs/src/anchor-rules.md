@@ -57,7 +57,7 @@ wherever their profile is.
 <!-- amiss-doc-contract:declared-identities:start -->
 | Declaration | Spelling | Read in | Selected by |
 | --- | --- | --- | --- |
-| `html-id` | an `id` or `name` attribute on a raw HTML element | `markdown` | any tree |
+| `html-id` | an `id` or `name` attribute on a raw HTML element, or on one written inside an `mdx-code-block` fence | `markdown`, `mdx` | any tree |
 | `attr-list` | an attribute block alone on a block's first or last line, `{#id}` | `markdown` | any tree |
 | `attr-list-inline` | an attribute block directly after an inline construct or a bracketed span, `**text**{#id}` or `[text]{#id}` | `markdown` | any tree |
 | `definition-term` | a term line above a `: ` definition line | `markdown` | any tree |
@@ -82,7 +82,16 @@ wherever their profile is.
 <!-- amiss-doc-contract:declared-identities:end -->
 
 `html-id` is every `id` and `name` a raw HTML region carries, wherever in the document it
-sits. `attr-list` is the extension's own block, in any of the spellings it accepts:
+sits. It reads an `mdx-code-block` fence too, because that fence is markup rather than
+code: Docusaurus strips the two fence lines out of the file before anything parses it, so
+the `<details id="node-env">` written between them opens an element of the built page and
+the `id` on it is an identity of that page. Its loader unwraps the three- and
+four-backtick spellings with nothing but the word on the opener, so those are the ones
+read here and every other fence stays code. On the Docusaurus tree that spelling is
+thirteen of the missing-target findings, one link written into thirteen versions of the
+same page.
+
+`attr-list` is the extension's own block, in any of the spellings it accepts:
 `{#id}`, `{ id="id" }`, `{ id=id }`, among classes, and with kramdown's leading colon. A
 block whose last line is nothing but an attribute block declares that identity for itself,
 which is how `[](){#anchor-point}` and a `{#section}` line under a paragraph work; an

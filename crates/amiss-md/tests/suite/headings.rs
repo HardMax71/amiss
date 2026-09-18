@@ -299,6 +299,27 @@ fn a_plain_jsx_element_publishes_its_id_and_a_component_publishes_none() {
     );
 }
 
+/// Docusaurus strips an `mdx-code-block` fence out of the file before anything
+/// parses it, so what stands between those lines is markup of the page and the
+/// identities it carries are the page's. Its loader unwraps three and four
+/// backticks and no more, and a fence naming a language is code in either
+/// grammar.
+#[test]
+fn an_unwrapped_fence_publishes_the_identities_its_markup_carries() {
+    let source = concat!(
+        "```mdx-code-block\n<details id=\"spliced\">\n<summary>Open</summary>\n```\n\n",
+        "````  mdx-code-block\n<div id=\"four-ticks\"></div>\n````\n\n",
+        "`````mdx-code-block\n<div id=\"five-ticks\"></div>\n`````\n\n",
+        "```html\n<div id=\"quoted\"></div>\n```\n",
+    );
+    let declared = vec!["spliced".to_owned(), "four-ticks".to_owned()];
+    assert_eq!(extraction(Adapter::Mdx, source).declared_anchors, declared);
+    assert_eq!(
+        extraction(Adapter::Markdown, source).declared_anchors,
+        declared
+    );
+}
+
 #[test]
 fn an_attribute_name_needs_its_own_word_boundary() {
     let source = "<div data-id=\"skipped\" hidden-name=\"skipped\" id=\"kept\"></div>\n";
