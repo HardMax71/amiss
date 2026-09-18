@@ -255,20 +255,25 @@ fn index_mode_scans_the_staged_snapshot() {
     );
 }
 
-/// The README promises that a document Amiss cannot decode fails the run instead of
-/// vanishing from it, and that promise is the whole product: a checker that quietly
-/// skips what it cannot read reports a success it never earned. Every piece of this
-/// was tested at its own layer and the pieces were never joined, so nothing drove a
-/// repository holding an undecodable document through the command and looked at what
-/// came back. What comes back is nothing: the document is named in a retained error,
-/// the run is incomplete, and the exit is 2.
+/// A checker that quietly skips what it cannot read reports a success it never
+/// earned, so an undecodable document has to stay visible. It does not have to
+/// take the other hundred documents with it, which is what refusing the whole
+/// run did: one file the parser rejects is a fact about that file. The document
+/// is unsupported, named with its reason, and the report still covers the rest.
 #[test]
-fn a_document_it_cannot_decode_fails_the_run_instead_of_vanishing_from_it() {
+fn a_document_it_cannot_decode_costs_that_document_and_not_the_report() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     git(root, &["init", "-q"]);
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::write(root.join("README.md"), "# R\n\n[g](docs/guide.md)\n").unwrap();
+    for index in 0..100 {
+        fs::write(
+            root.join(format!("docs/guide-{index}.md")),
+            "# Guide\n\n[up](../README.md)\n",
+        )
+        .unwrap();
+    }
     fs::write(root.join("docs/guide.md"), "# Guide\n").unwrap();
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "base"]);
@@ -300,21 +305,46 @@ fn a_document_it_cannot_decode_fails_the_run_instead_of_vanishing_from_it() {
         "json",
     ]);
 
-    assert_eq!(
-        code, 2,
-        "an unreadable document is not a passing observe run"
-    );
+    assert_eq!(code, 0, "one file the parser rejects is not the run");
     let payload = payload(&stdout);
-    assert_eq!(payload["result"]["complete"], false);
-    assert_eq!(payload["result"]["status"], "incomplete");
-    let errors = payload["errors"].as_array().unwrap();
-    let invalid = errors
-        .iter()
-        .find(|error| error["code"] == "DOCUMENT_INVALID")
-        .expect("the document it could not decode is disclosed");
+    assert_eq!(payload["result"]["complete"], true);
+    assert!(
+        payload["errors"].as_array().is_some_and(Vec::is_empty),
+        "a per-document boundary is not a run error: {}",
+        payload["errors"]
+    );
     assert_eq!(
-        invalid["path"], "docs/bad.md",
-        "the error names the document, not just the failure"
+        payload["summary"]["documents"]["scanned"].as_u64(),
+        Some(102),
+        "the hundred good documents and the two beside them are reported"
+    );
+    assert_eq!(
+        payload["summary"]["documents"]["unsupported"].as_u64(),
+        Some(1)
+    );
+    let bad = payload["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["path"] == "docs/bad.md")
+        .expect("the document it could not decode keeps its row");
+    assert_eq!(bad["candidate"]["status"], "unsupported");
+    assert_eq!(
+        bad["candidate"]["unsupported_reason"], "undecodable-document",
+        "the row says why the file was not scanned"
+    );
+    assert_eq!(bad["candidate"]["extracted_references"].as_u64(), Some(0));
+    let unsupported: Vec<&str> = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| finding["kind"] == "unsupported-document-format")
+        .filter_map(|finding| finding["location"]["path"].as_str())
+        .collect();
+    assert_eq!(
+        unsupported,
+        vec!["docs/bad.md"],
+        "the boundary is a finding, not a silent skip"
     );
 
     let (code, human, _stderr) = amiss(&[
@@ -330,19 +360,79 @@ fn a_document_it_cannot_decode_fails_the_run_instead_of_vanishing_from_it() {
         "--profile",
         "observe",
     ]);
-    assert_eq!(code, 2);
+    assert_eq!(code, 0);
     let human = String::from_utf8_lossy(&human);
     assert!(
-        human.starts_with("amiss: scan failed (errors "),
-        "an incomplete comparison is never presented as zero feedback: {human}"
+        human.contains("unsupported \"docs/bad.md\" undecodable-document"),
+        "the terminal names the file it did not read: {human}"
     );
-    assert!(!human.contains("fix 0, check 0"), "{human}");
-    assert!(
-        human.contains(&format!(
-            "note DOCUMENT_INVALID: {}",
-            amiss_wire::report::AnalysisErrorCode::DocumentInvalid.meaning()
-        )),
-        "an exit-2 log says how to unblock the run: {human}"
+}
+
+/// A destination past `raw-link-destination-bytes` is the same shape of fact: a
+/// ceiling measured against one file and crossed by one line of it. That document
+/// is unsupported, the rest of the repository is reported, and the snapshot totals
+/// on the same page still end a run they cannot finish.
+#[test]
+fn a_document_over_a_per_document_ceiling_is_unsupported_and_the_run_completes() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("README.md"), "# R\n\n[g](docs/guide.md)\n").unwrap();
+    fs::write(root.join("docs/guide.md"), "# Guide\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let encoded = "A".repeat(20_000);
+    fs::write(
+        root.join("docs/embedded.md"),
+        format!("# Embedded\n\n![logo](data:image/png;base64,{encoded})\n"),
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = amiss_fixtures::path_arg(root);
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+
+    assert_eq!(code, 0, "one oversized destination is not the run");
+    let payload = payload(&stdout);
+    assert_eq!(payload["result"]["complete"], true);
+    let embedded = payload["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["path"] == "docs/embedded.md")
+        .expect("the document over the ceiling keeps its row");
+    assert_eq!(embedded["candidate"]["status"], "unsupported");
+    assert_eq!(
+        embedded["candidate"]["unsupported_reason"],
+        "resource-ceiling-crossed"
+    );
+    assert_eq!(
+        embedded["candidate"]["content_availability"], "available",
+        "the bytes were read; the scan is what stopped"
+    );
+    assert_eq!(
+        payload["summary"]["documents"]["scanned"].as_u64(),
+        Some(2),
+        "the other documents are scanned and reported"
     );
 }
 

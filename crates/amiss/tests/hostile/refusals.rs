@@ -315,10 +315,11 @@ fn a_tracked_blob_the_store_does_not_hold_refuses_and_names_the_document() {
     }
 }
 
-/// A byte-named document whose bytes will not decode ends the run at exit 2,
-/// the human note teaches the code, and the wire carries the name as hex.
+/// A byte-named document whose bytes will not decode is counted, not dropped:
+/// the wire carries its name as hex on a document row whose reason says why it
+/// was never scanned, and the run finishes over the documents it could read.
 #[test]
-fn a_byte_named_invalid_document_refuses_with_its_name_in_hex() {
+fn a_byte_named_invalid_document_is_unsupported_with_its_name_in_hex() {
     let (dir, base) = byte_named_index(b"# \xff\n");
     let repo = amiss_fixtures::path_arg(dir.path());
     let (code, stdout) = amiss(&[
@@ -333,15 +334,15 @@ fn a_byte_named_invalid_document_refuses_with_its_name_in_hex() {
         "--profile",
         "observe",
     ]);
-    assert_eq!(code, 2);
+    assert_eq!(code, 0);
     let text = String::from_utf8(stdout).unwrap();
     assert!(
-        text.contains(r#"error parse DOCUMENT_INVALID "bad-\u00ff-doc.md""#),
-        "the error line speaks the name through the bytes atom: {text:?}"
+        text.contains(r#"unsupported "bad-\u00ff-doc.md" undecodable-document"#),
+        "the human line speaks the name through the bytes atom: {text:?}"
     );
     assert!(
-        text.contains("cannot be decoded"),
-        "the note teaches the meaning: {text:?}"
+        text.contains("discovered 2 scanned 1 unsupported 1"),
+        "the counts hold the file the run could not read: {text:?}"
     );
 
     let (json_code, wire) = amiss(&[
@@ -358,13 +359,18 @@ fn a_byte_named_invalid_document_refuses_with_its_name_in_hex() {
         "--format",
         "json",
     ]);
-    assert_eq!(json_code, 2);
-    let errors = payload(&wire)["errors"].clone();
-    let row = errors
+    assert_eq!(json_code, 0);
+    let documents = payload(&wire)["documents"].clone();
+    let row = documents
         .as_array()
         .unwrap()
         .iter()
         .find(|row| row["path"]["bytes_hex"] == BYTE_NAME_HEX)
-        .unwrap_or_else(|| panic!("no bytes row in {errors}"));
-    assert_eq!(row["code"], "DOCUMENT_INVALID");
+        .unwrap_or_else(|| panic!("no bytes row in {documents}"))
+        .clone();
+    assert_eq!(row["candidate"]["status"], "unsupported");
+    assert_eq!(
+        row["candidate"]["unsupported_reason"],
+        "undecodable-document"
+    );
 }

@@ -43,26 +43,48 @@ mod string_tags;
 mod trusted_time;
 
 #[test]
-fn document_classifications_match_the_report_schema() {
+fn document_row_enums_match_the_report_schema() {
     let schema: serde_json::Value = serde_json::from_slice(include_bytes!(
         "../../../../spec/scanner-report.schema.json"
     ))
     .unwrap();
-    let declared: BTreeSet<_> =
-        schema["$defs"]["DocumentResult"]["properties"]["classification"]["enum"]
+    let declared = |definition: &serde_json::Value| -> BTreeSet<String> {
+        definition["enum"]
             .as_array()
             .unwrap()
             .iter()
             .map(|value| value.as_str().unwrap().to_owned())
-            .collect();
-    let generated: BTreeSet<_> = report::model::DocumentClassification::iter()
+            .collect()
+    };
+    let classifications: BTreeSet<_> = report::model::DocumentClassification::iter()
         .map(|classification| {
             let value = serde_json::to_value(classification).unwrap();
             assert_eq!(value.as_str(), Some(classification.as_ref()));
             classification.as_ref().to_owned()
         })
         .collect();
-    assert_eq!(declared, generated);
+    assert_eq!(
+        declared(&schema["$defs"]["DocumentResult"]["properties"]["classification"]),
+        classifications
+    );
+    let described = schema["$defs"]["UnsupportedReason"]["description"]
+        .as_str()
+        .unwrap();
+    for reason in [
+        report::model::UnsupportedReason::SymlinkDocument,
+        report::model::UnsupportedReason::GitlinkDocument,
+        report::model::UnsupportedReason::LfsPointer,
+        report::model::UnsupportedReason::UnsupportedDocumentFormat,
+        report::model::UnsupportedReason::UndecodableDocument,
+        report::model::UnsupportedReason::ResourceCeilingCrossed,
+    ] {
+        let spelling = serde_json::to_value(&reason).unwrap();
+        let spelling = spelling.as_str().unwrap();
+        assert!(
+            described.contains(spelling),
+            "the schema names every reason this engine writes, and it does not name {spelling}"
+        );
+    }
 }
 
 #[test]

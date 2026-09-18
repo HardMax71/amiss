@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, TreeEntry, ValueCap, parse_tree};
+use amiss_md::Fault;
 use amiss_wire::controls::{GitMode, ResourceName, SourceConstruct};
 use amiss_wire::model::{Adapter, Oid, RepoPath};
 
@@ -20,6 +21,8 @@ pub enum UnsupportedKind {
     Gitlink,
     LfsPointer,
     Format,
+    Undecodable,
+    Ceiling,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -525,6 +528,28 @@ pub fn discover_index(
     Ok(discovery)
 }
 
+/// What one defect makes of the document it is scoped to. Bytes that will not
+/// decode and the per-document ceilings are facts about that one file: the
+/// document becomes a boundary the report counts with its reason, and the run
+/// keeps its other documents. A parser that broke its own contract, an object
+/// the store cannot produce, and every run-wide budget say nothing about the
+/// file, so they still fail.
+fn document_outcome(defect: Error) -> Result<DocumentStatus, Error> {
+    if !defect.is_document_scoped() {
+        return Err(defect);
+    }
+    match defect {
+        Error::Parse(Fault::DocumentInvalid) => {
+            Ok(DocumentStatus::Unsupported(UnsupportedKind::Undecodable))
+        }
+        Error::ResourceLimit { .. } => Ok(DocumentStatus::Unsupported(UnsupportedKind::Ceiling)),
+        Error::Parse(Fault::ParserError | Fault::ParserPanic | Fault::InvalidSourceSpan)
+        | Error::Git(_)
+        | Error::UnrepresentablePath
+        | Error::Internal => Ok(DocumentStatus::Failed(defect)),
+    }
+}
+
 /// One selected non-tree entry's outcome. Exclusion is decided before any
 /// read, a symlink or gitlink is never read, and a regular blob is admitted,
 /// read under the document cap, then recognized as pointer content or
@@ -583,11 +608,7 @@ fn side_status(
         let object = match repo.read_expected_capped(git, &entry.oid, ObjectKind::Blob, cap) {
             Ok(object) => object,
             Err(defect) => {
-                let defect = Error::from(defect);
-                if defect.is_document_scoped() {
-                    return Ok((DocumentStatus::Failed(defect), 0, None));
-                }
-                return Err(defect);
+                return document_outcome(Error::from(defect)).map(|status| (status, 0, None));
             }
         };
         let byte_count = u64::try_from(object.body.len()).unwrap_or(u64::MAX);
@@ -629,9 +650,6 @@ fn side_status(
     };
     match scanned {
         Ok(scanned) => Ok((DocumentStatus::Scanned(scanned), byte_count, Some(raw))),
-        Err(defect) if defect.is_document_scoped() => {
-            Ok((DocumentStatus::Failed(defect), byte_count, Some(raw)))
-        }
-        Err(defect) => Err(defect),
+        Err(defect) => document_outcome(defect).map(|status| (status, byte_count, Some(raw))),
     }
 }

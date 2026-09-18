@@ -149,6 +149,7 @@ pub(crate) fn report<P, R, M, S, D, F>(
         say!(&mut out, "note {}: {}", kind.as_ref(), kind.meaning());
     }
     notes(&mut out, payload);
+    unscanned(&mut out, payload, options.full, path_atom);
     totals(&mut out, payload);
 }
 
@@ -410,6 +411,38 @@ fn windowed<'report, P: 'report + PartialEq>(
     }
     if overflow > 0 {
         say!(out, "{label} overflow: {overflow} more in the full report");
+    }
+}
+
+/// Every candidate document the run did not scan, named with the reason it
+/// carries, so the unsupported total below is a list a reader can act on
+/// rather than a number.
+fn unscanned<P, R, M, E, A>(
+    out: &mut Channel,
+    payload: &ReportPayload<P, R, M, E>,
+    full: bool,
+    path_atom: A,
+) where
+    A: Fn(Option<&P>) -> String,
+{
+    let rows: Vec<_> = payload
+        .documents
+        .iter()
+        .filter_map(|row| {
+            let reason = row.candidate.as_ref()?.unsupported_reason.as_ref()?;
+            Some((&row.path, reason))
+        })
+        .collect();
+    let window = if full { usize::MAX } else { 10 };
+    for (path, reason) in rows.iter().take(window) {
+        say!(out, "unsupported {} {reason}", path_atom(Some(path)));
+    }
+    let hidden = rows.len().saturating_sub(window);
+    if hidden > 0 {
+        say!(
+            out,
+            "unsupported overflow: {hidden} more in the full report"
+        );
     }
 }
 

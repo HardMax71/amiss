@@ -75,7 +75,9 @@ pub enum DocumentStatus {
 pub enum UnsupportedReason {
     GitlinkDocument,
     LfsPointer,
+    ResourceCeilingCrossed,
     SymlinkDocument,
+    UndecodableDocument,
     UnsupportedDocumentFormat,
     #[strum(default, transparent)]
     Unrecognized(String),
