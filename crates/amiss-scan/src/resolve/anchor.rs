@@ -14,7 +14,7 @@ use crate::route::unrouted;
 
 use super::content::{Content, content_cache};
 use super::line::{line_fragment, line_resolution};
-use super::transclusion::{Source, expand};
+use super::transclusion::{Source, expand, templated};
 use super::{Intent, Resolution, Resolver, lookup};
 
 /// A target's heading identities, built once and then answered from memory.
@@ -207,7 +207,10 @@ fn expanded_anchors(
         expanded.html_anchors.as_ref(),
         expanded.declared_anchors.as_ref(),
     ));
-    if expanded.complete && !unrouted(snapshot, adapter, path) {
+    if expanded.complete
+        && !unrouted(snapshot, adapter, path)
+        && !templated(snapshot, adapter, path, source.transclusions)
+    {
         Anchors::Published(identities)
     } else {
         Anchors::Partial(identities)

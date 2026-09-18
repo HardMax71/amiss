@@ -128,6 +128,40 @@ const MKDOCS_GENERATED: [(&str, Staged<'static>); 9] = [
     ),
 ];
 
+/// A Hugo site under `site/` whose pages call shortcodes. `Store.md` opens
+/// a block call and links the anchor that call writes, beside a heading of its
+/// own; `Get.md` writes the same call in the flow of a sentence; `guide.md`
+/// calls nothing. `README.md` links each of those and the same `Store.md`
+/// copied to `outside/`, where no `hugo.toml` governs the spelling.
+const HUGO_SHORTCODES: [(&str, Staged<'static>); 6] = [
+    (
+        "README.md",
+        Staged::File(
+            b"[a](site/content/methods/Store.md#scope)\n\n\
+              [b](site/content/methods/Store.md#determinate-values)\n\n\
+              [c](site/content/guide.md#absent)\n\n[d](outside/Store.md#scope)\n\n\
+              [e](site/content/methods/Get.md#absent)\n",
+        ),
+    ),
+    (
+        "site/hugo.toml",
+        Staged::File(b"baseURL = 'https://example.org/'\n"),
+    ),
+    ("site/content/methods/Store.md", Staged::File(STORE)),
+    (
+        "site/content/methods/Get.md",
+        Staged::File(b"# Get\n\nThe {{% new-in 0.1.0 %}} method returns a value.\n"),
+    ),
+    ("site/content/guide.md", Staged::File(b"# Guide\n")),
+    ("outside/Store.md", Staged::File(STORE)),
+];
+
+/// One page written twice, once under the site and once outside it, so the
+/// only thing between the two readings is the declaration above the document.
+const STORE: &[u8] = b"# Store\n\nTo scope a value, see the [scope](#scope) section.\n\n\
+                       {{% include \"_common/store-scope.md\" %}}\n\n\
+                       ## Determinate values\n\nText.\n";
+
 /// A tree whose identities are written as definition-list terms, which one
 /// renderer publishes beside the headings. `README.md` links a term the page
 /// writes, a term it never wrote, and the same identity on a page that holds
@@ -225,6 +259,13 @@ pub fn mdx_identities() -> std::io::Result<CommitChain> {
 /// Any filesystem failure.
 pub fn mkdocs_generated() -> std::io::Result<CommitChain> {
     staged_repository(&MKDOCS_GENERATED)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn hugo_shortcodes() -> std::io::Result<CommitChain> {
+    staged_repository(&HUGO_SHORTCODES)
 }
 
 /// # Errors

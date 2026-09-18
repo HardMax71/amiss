@@ -13,7 +13,10 @@ use amiss_scan::pipeline::commit_pair;
 use amiss_scan::route::{ROUTERS, Spelling};
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model::occurrences;
-use amiss_wire::resolution::{Missing, Resolution, Target, UnsupportedSemantics};
+use amiss_wire::resolution::{
+    Missing, MissingTag, Resolution, ResolutionTag, Target, UnsupportedSemantics,
+    UnsupportedSemanticsTag,
+};
 
 use crate::surface::{bare_shell, engine};
 
@@ -57,6 +60,29 @@ fn answer<'a>(answers: &'a Answers, document: &str, line: u64) -> &'a Resolution
     answers
         .get(&(document.to_owned(), line))
         .unwrap_or_else(|| panic!("{document}:{line} is an extracted reference"))
+}
+
+type Verdict = (
+    ResolutionTag,
+    Option<MissingTag>,
+    Option<UnsupportedSemanticsTag>,
+);
+
+/// One answer as the tags the wire spells it with, which is deep enough to
+/// tell a declared boundary from an absent anchor and shallow enough to write
+/// a whole fixture's answers down.
+fn verdict(resolution: &Resolution<RepoPath>) -> Verdict {
+    let absence = if let Resolution::Missing(reason) = resolution {
+        Some(MissingTag::from(reason))
+    } else {
+        None
+    };
+    let semantics = if let Resolution::UnsupportedSemantics(reason) = resolution {
+        Some(UnsupportedSemanticsTag::from(reason))
+    } else {
+        None
+    };
+    (ResolutionTag::from(resolution), absence, semantics)
 }
 
 fn blob(resolution: &Resolution<RepoPath>) -> Option<&str> {
@@ -114,6 +140,45 @@ fn a_declared_plugin_leaves_the_identity_set_incomplete() {
             answer(&rows, "README.md", line)
         );
     }
+}
+
+/// A Hugo shortcode is answered by a layout rather than by a file, so a page
+/// that calls one as a block holds content this engine cannot read: an anchor
+/// naming what the call writes is declared rather than reported absent,
+/// wherever the link sits. The page keeps every heading it writes itself, a
+/// page under the same site that calls nothing still proves absence, a call in
+/// the flow of a sentence leaves the set enumerable, and the same page outside
+/// the site is read as the text it looks like.
+#[test]
+fn a_hugo_shortcode_leaves_the_identity_set_incomplete() {
+    let rows = answers(&amiss_fixtures::hugo_shortcodes().expect("the fixture stages"));
+    let store = "site/content/methods/Store.md";
+    let boundary: Verdict = (
+        ResolutionTag::UnsupportedSemantics,
+        None,
+        Some(UnsupportedSemanticsTag::Fragment),
+    );
+    let absent: Verdict = (
+        ResolutionTag::Missing,
+        Some(MissingTag::HeadingAnchorNotFound),
+        None,
+    );
+    let published: Verdict = (ResolutionTag::Resolved, None, None);
+    let want = BTreeMap::from([
+        (("README.md".to_owned(), 1), boundary),
+        (("README.md".to_owned(), 3), published),
+        (("README.md".to_owned(), 5), absent),
+        (("README.md".to_owned(), 7), absent),
+        (("README.md".to_owned(), 9), absent),
+        ((store.to_owned(), 3), boundary),
+        (("outside/Store.md".to_owned(), 3), absent),
+    ]);
+    let read: BTreeMap<(String, u64), Verdict> = rows
+        .iter()
+        .map(|(place, resolution)| (place.clone(), verdict(resolution)))
+        .collect();
+    assert_eq!(read, want);
+    assert_eq!(blob(answer(&rows, "README.md", 3)), Some(store));
 }
 
 /// A definition-list term publishes an identity under the renderer that reads
