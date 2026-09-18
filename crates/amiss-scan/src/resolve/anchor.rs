@@ -10,6 +10,7 @@ use crate::anchor::anchor_set;
 use crate::discovery::SnapshotDiscovery;
 use crate::document::{classify, native_adapter};
 use crate::resources::{Aggregate, ScanResources};
+use crate::route::unrouted;
 
 use super::content::{Content, content_cache};
 use super::line::{line_fragment, line_resolution};
@@ -190,6 +191,9 @@ fn anchor_resolution(
     }))
 }
 
+/// The identities a target publishes, and whether they are all of them. A
+/// document no router publishes is incomplete whatever it transcludes, since
+/// the page that renders it brings identities of its own.
 fn expanded_anchors(
     snapshot: &SnapshotDiscovery,
     scan: &mut ScanResources,
@@ -203,7 +207,7 @@ fn expanded_anchors(
         expanded.html_anchors.as_ref(),
         expanded.declared_anchors.as_ref(),
     ));
-    if expanded.complete {
+    if expanded.complete && !unrouted(snapshot, adapter, path) {
         Anchors::Published(identities)
     } else {
         Anchors::Partial(identities)

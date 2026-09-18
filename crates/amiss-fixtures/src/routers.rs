@@ -111,6 +111,48 @@ const DOCUSAURUS_SITE: [(&str, Staged<'static>); 13] = [
     ("@internal/notes.md", Staged::File(b"# Notes\n")),
 ];
 
+/// A Docusaurus partial under the site's content root, and the same file
+/// where no site declares it. `_tags.mdx` opens with the character Docusaurus
+/// excludes from routing, so it is served at no URL of its own: the page that
+/// imports it writes the heading its fragment-only link names, and the same
+/// link in the copy under `notes/` is answered by that copy alone. Each copy
+/// also writes its own heading identity, a path beside it and a path nothing
+/// holds. The importing page names an identity neither file publishes.
+const DOCUSAURUS_PARTIAL: [(&str, Staged<'static>); 6] = [
+    (
+        "website/docusaurus.config.ts",
+        Staged::File(b"export default {};\n"),
+    ),
+    (
+        "website/docs/api/plugins/_tags.mdx",
+        Staged::File(
+            b"## Tags file {#tags-file}\n\nUse the [tags option](#tags) to name one.\n\n\
+              See [this section](#tags-file), [the guide](./guide.mdx) \
+              and [the note](./absent.mdx).\n",
+        ),
+    ),
+    (
+        "website/docs/api/plugins/plugin-content-docs.mdx",
+        Staged::File(
+            b"import Tags from './_tags.mdx';\n\n## Tags\n\n<Tags />\n\n\
+              Read [the option](#tags) and [the rest](#absent).\n",
+        ),
+    ),
+    (
+        "website/docs/api/plugins/guide.mdx",
+        Staged::File(b"# Guide\n"),
+    ),
+    (
+        "notes/_tags.mdx",
+        Staged::File(
+            b"## Tags file {#tags-file}\n\nUse the [tags option](#tags) to name one.\n\n\
+              See [this section](#tags-file), [the guide](./guide.mdx) \
+              and [the note](./absent.mdx).\n",
+        ),
+    ),
+    ("notes/guide.mdx", Staged::File(b"# Guide\n")),
+];
+
 /// A mkdocs site under `site/`: an index page whose raw HTML writes a
 /// directory URL that the tree answers with a page source and one it answers
 /// with nothing, a markdown link the generator rewrites from the source
@@ -267,6 +309,13 @@ pub fn antora_component() -> std::io::Result<CommitChain> {
 /// Any filesystem failure.
 pub fn docusaurus_site() -> std::io::Result<CommitChain> {
     staged_repository(&DOCUSAURUS_SITE)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn docusaurus_partial() -> std::io::Result<CommitChain> {
+    staged_repository(&DOCUSAURUS_PARTIAL)
 }
 
 /// # Errors

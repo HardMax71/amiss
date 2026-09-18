@@ -9,7 +9,10 @@ use std::fs;
 use amiss_git::GitLimits;
 use amiss_scan::ScanLimits;
 use amiss_scan::anchor::{DECLARATIONS, DeclarationRule};
-use amiss_scan::route::{BUNDLER_REQUESTS, ROUTERS, RouteRule, TEMPLATE_EXPRESSIONS};
+use amiss_scan::route::{
+    BUNDLER_REQUESTS, DOCUSAURUS, DOCUSAURUS_CONTENT_ROOTS, ROUTERS, RouteRule,
+    TEMPLATE_EXPRESSIONS, UNROUTED_OPENING,
+};
 use amiss_wire::controls::{ORGANIZATION_POLICY_ENTRIES_LIMIT, ResourceName};
 use amiss_wire::model::ForgeDialect;
 use amiss_wire::report::{
@@ -201,6 +204,22 @@ fn bundler_requests_table() -> String {
     table
 }
 
+fn unrouted_documents_table() -> String {
+    let under: Vec<String> = DOCUSAURUS_CONTENT_ROOTS
+        .iter()
+        .map(|root| format!("`{}`", root.join("/")))
+        .collect();
+    let mut table = String::from("| Router | Publishes no page for | Under |\n| --- | --- | --- |");
+    write!(
+        table,
+        "\n| `{}` | a name opening with `{UNROUTED_OPENING}` | {} |",
+        DOCUSAURUS.name,
+        under.join(", "),
+    )
+    .expect("writing to a String is infallible");
+    table
+}
+
 fn template_expressions_table() -> String {
     let mut table = String::from("| Expression opens with | and closes with |\n| --- | --- |");
     for (open, close) in TEMPLATE_EXPRESSIONS {
@@ -277,6 +296,12 @@ fn documented_declared_routers_are_generated_from_the_route_table() {
         documented_contract(&document, "declared-routers"),
         declared_routers_table(&declared),
         "{} drifted from amiss_scan::route::ROUTERS",
+        path.display(),
+    );
+    assert_eq!(
+        documented_contract(&document, "unrouted-documents"),
+        unrouted_documents_table(),
+        "{} drifted from amiss_scan::route::UNROUTED_OPENING",
         path.display(),
     );
     assert_eq!(

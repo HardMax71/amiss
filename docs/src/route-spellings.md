@@ -137,6 +137,35 @@ frontmatter keys written on lines of their own; the region stays opaque to the g
 value that is not a plain scalar is declined rather than guessed at. A page that declares a
 site-absolute slug also moves its own URL, and a destination relative to that URL is not read.
 
+A document under one of those content paths is not always a page. Docusaurus excludes every
+name opening with `_` from routing, a directory as well as a file, so
+`docs/api/plugins/_partial-tags-file-api-ref-section.mdx` in its own repository is served at
+no URL at all and is rendered into the two pages that import it, `plugin-content-blog.mdx`
+and `plugin-content-docs.mdx`.
+
+<!-- amiss-doc-contract:unrouted-documents:start -->
+| Router | Publishes no page for | Under |
+| --- | --- | --- |
+| `docusaurus` | a name opening with `_` | `docs`, `blog`, `src/pages`, `versioned_docs/*` |
+<!-- amiss-doc-contract:unrouted-documents:end -->
+
+A fragment written inside such a document names an identity of the page that renders it, and
+one partial may be rendered into several, so the tree does not say which page that is. The
+identities the file writes itself still answer, and a fragment nothing in it publishes is
+undecided rather than absent, the same answer [Resolution](resolution.md) gives any target
+whose identity set is incomplete. That is the whole of it: a path in the same document is
+read from the file as written, since that is where Docusaurus reads one from wherever the
+page ends up, and a path the tree lacks is still missing. The three links in that one partial
+are 24 of the 70 missing targets a docusaurus clone reported, counted once per versioned
+copy, and none of them is broken: that site sets `onBrokenAnchors: 'throw'` for the default
+locale, so an anchor that really was absent would have failed its own build.
+
+The name decides this rather than the import. An import says one document renders another,
+which a page published at its own URL may also be, and the walk that finds one is bounded by
+`references-per-document` and `parser-nesting`, so an edge nobody walked is not evidence that
+a file is a page. The exclusion is Docusaurus's own, read from the name alone, and a tree that
+declares no site keeps every anchor claim it had.
+
 `directory-url` reads a raw HTML destination in a document under a `mkdocs.yml` the way the
 browser does. mkdocs rewrites the destination of a Markdown link and leaves an `<a href>` or
 an `<img src>` written by hand alone, so that one is resolved against the URL the page is
