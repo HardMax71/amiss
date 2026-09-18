@@ -153,9 +153,12 @@ const DEFINITION_TERMS: [(&str, Staged<'static>); 3] = [
 /// A Sphinx project whose documents are `MyST` Markdown. `docs/index.md` writes
 /// a docname that resolves, one that does not, a source-root docname, a label
 /// a page declares, a label nobody declares, a Python domain role, and a link
-/// into the identity the target declares. `outside/notes.md` writes the same
-/// role where no `conf.py` governs it.
-const SPHINX_MYST: [(&str, Staged<'static>); 4] = [
+/// into the identity the target declares. Then it writes the same two labels as
+/// plain links, once as the destination and once as a bare fragment, and a
+/// destination the tree holds under a name `docs/notes.md` also declares as a
+/// label. `outside/notes.md` writes a role and a label link where no `conf.py`
+/// governs either.
+const SPHINX_MYST: [(&str, Staged<'static>); 5] = [
     (
         "docs/conf.py",
         Staged::File(b"extensions = ['myst_parser']\n"),
@@ -165,7 +168,9 @@ const SPHINX_MYST: [(&str, Staged<'static>); 4] = [
         Staged::File(
             b"# Index\n\nSee {doc}`quickstart`.\n\nSee {doc}`gone`.\n\nSee {doc}`/quickstart`.\n\n\
               See {ref}`install-step`.\n\nSee {ref}`absent-step`.\n\n\
-              See {py:class}`widgets.Widget`.\n\nSee [the step](quickstart.md#install-step).\n",
+              See {py:class}`widgets.Widget`.\n\nSee [the step](quickstart.md#install-step).\n\n\
+              See [the label](install-step).\n\nSee [the anchor](#install-step).\n\n\
+              See [no label](absent-step).\n\nSee [the page](quickstart.md).\n",
         ),
     ),
     (
@@ -173,8 +178,12 @@ const SPHINX_MYST: [(&str, Staged<'static>); 4] = [
         Staged::File(b"# Quickstart\n\n(install-step)=\n\n## Install\n"),
     ),
     (
+        "docs/notes.md",
+        Staged::File(b"# Notes\n\n(quickstart.md)=\n\n## Aliased\n"),
+    ),
+    (
         "outside/notes.md",
-        Staged::File(b"# Notes\n\nSee {doc}`quickstart`.\n"),
+        Staged::File(b"# Notes\n\nSee {doc}`quickstart`.\n\nSee [the label](install-step).\n"),
     ),
 ];
 

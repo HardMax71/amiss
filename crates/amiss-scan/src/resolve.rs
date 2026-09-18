@@ -33,7 +33,7 @@ mod transclusion;
 
 pub(crate) use line::{LineRange, named_region_bytes, safe_line_number, selected_line_bytes};
 
-use anchor::fragment_resolution;
+use anchor::{fragment_resolution, linked_label};
 use content::{CachedContent, read_target};
 use syntax::{
     normalized_path_under, same_repo_suffix, split_components, unreadable, unsupported_intent,
@@ -303,12 +303,7 @@ fn resolve_destination(
             return Ok((
                 Intent {
                     kind: IntentKind::SiteRoute,
-                    commit_oid: None,
-                    repository_path: None,
-                    target_kind: None,
-                    external_scheme: None,
-                    query,
-                    fragment,
+                    ..unsupported_intent(query, fragment)
                 },
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute),
             ));
@@ -342,12 +337,20 @@ fn resolve_destination(
             fragment.as_deref(),
             forge,
         )?;
+        let named = matches!(
+            row,
+            Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+        )
+        .then(|| fragment.as_deref().and_then(decode_fragment))
+        .flatten();
+        let row = linked_label(resolver, adapter, document_path, named.as_deref(), row)?;
         return Ok((
             repository_intent(document_path.clone(), target_kind, query, fragment),
             row,
         ));
     }
-    native(
+    let bare = (!is_image && query.is_none() && fragment.is_none()).then_some(path_part);
+    let (intent, row) = native(
         resolver,
         is_image,
         document_path,
@@ -355,7 +358,14 @@ fn resolve_destination(
         query,
         fragment,
         forge,
-    )
+    )?;
+    let named = matches!(row, Resolution::Missing(Missing::PathNotFound { .. }))
+        .then_some(bare)
+        .flatten();
+    Ok((
+        intent,
+        linked_label(resolver, adapter, document_path, named, row)?,
+    ))
 }
 
 /// Native destinations: one terminal slash is an authored directory hint on a

@@ -198,9 +198,45 @@ fn a_myst_role_is_read_only_where_sphinx_is_declared() {
     assert!(
         !rows
             .keys()
-            .any(|(document, _)| document == "outside/notes.md"),
+            .any(|(document, line)| document == "outside/notes.md" && *line == 3),
         "a brace before a code span is prose where no conf.py governs it"
     );
+}
+
+/// A plain link under the same `conf.py` names a label the way the role does,
+/// in the destination or as a bare fragment. The tree answers first, so a
+/// destination it holds stays that file even where another page declares the
+/// same spelling as a label. A name nobody declares is still a missing target,
+/// and outside the Sphinx tree the reading is off, so the same link there is
+/// the path it looks like.
+#[test]
+fn a_plain_link_names_a_label_where_the_role_does() {
+    let rows = answers(&amiss_fixtures::sphinx_myst().expect("the fixture stages"));
+    for (line, spelling) in [
+        (17, "a label in the destination"),
+        (19, "a label as a bare fragment"),
+        (23, "a destination the tree holds"),
+    ] {
+        assert_eq!(
+            blob(answer(&rows, "docs/index.md", line)),
+            Some("docs/quickstart.md"),
+            "{spelling}: {:?}",
+            answer(&rows, "docs/index.md", line)
+        );
+    }
+    for (document, line, absence) in [
+        ("docs/index.md", 21, "a name nobody declares"),
+        ("outside/notes.md", 5, "a label link no conf.py governs"),
+    ] {
+        assert!(
+            matches!(
+                answer(&rows, document, line),
+                Resolution::Missing(Missing::PathNotFound { .. })
+            ),
+            "{absence}: {:?}",
+            answer(&rows, document, line)
+        );
+    }
 }
 
 /// The `MyST` rows and the route rule that anchors a source-root docname are

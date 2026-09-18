@@ -48,9 +48,9 @@ carried rather than one being chosen for the reader.
 An identity can also be written down rather than left to a heading's slug, and then it
 belongs to the author or to a construct no heading rule reads. Each of these spellings
 joins the union for every renderer, because accepting an identity a given renderer would
-not publish can only leave a finding unreported, never invent one. Four of the rows write
+not publish can only leave a finding unreported, never invent one. Five of the rows write
 down no identity: they are the spellings a declared generator, hook or extension owns,
-three saying the page's identities are built elsewhere and one naming a reference. Five
+three saying the page's identities are built elsewhere and two naming a reference. Six
 rows are gated on a file in the tree, the way the route rules are; the rest are read
 wherever their profile is.
 
@@ -67,6 +67,7 @@ wherever their profile is.
 | `mkdocs-content-tab` | a content tab opening a quoted title, `=== "Title"` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `myst-target` | a target alone on its line, `(name)=` | `markdown` | any tree |
 | `myst-role` | a cross-reference role, `` {doc}`name` `` | `markdown` | `conf.py` |
+| `myst-link` | a plain link naming a label, `[text](name)` or `[text](#name)` | `markdown` | `conf.py` |
 | `mdx-comment` | an MDX comment ending a heading, `{/* #id */}` | `mdx` | any tree |
 | `mdx-heading-id` | an MDX expression ending a heading, `{#id}` | `mdx` | any tree |
 | `jsx-id` | an `id` attribute on a lowercase JSX element | `mdx` | any tree |
@@ -195,6 +196,17 @@ joins the label table a `{ref}` is answered from. The role is the reference,
 alone. The target is read wherever the spelling appears, because an identity can only widen
 the set an anchor may match, while a role is read only under a `conf.py`, so a brace before a
 code span in an ordinary Markdown file stays the prose it is.
+
+`myst-link` reads those same names from the other side, so it is a reference rather than a
+declaration. Sphinx keeps every name a page declares as a global label, and a plain Markdown
+link can name one where a path goes: `[alert extension](syntax/alerts)` in myst-parser's own
+admonitions page reaches the `(syntax/alerts)=` target in a second file, and
+`[colon_fence](#syntax/colon_fence)` reaches one through a bare fragment. The tree answers
+first, so a destination naming a file still resolves as that file, and the label table is asked
+only once the tree has said no. A name no document declares keeps the missing target it had,
+since an undeclared cross reference is as broken as an absent path. The reading needs a
+`conf.py` above the document the way the role does, because a label is a global name and a path
+is not, so an ordinary Markdown repository is untouched.
 
 The last rows belong to the other two profiles. `asciidoc-anchor` is the anchor an
 AsciiDoc author writes on a line of its own, `[[id]]` or `[#id]`, in either case with the
