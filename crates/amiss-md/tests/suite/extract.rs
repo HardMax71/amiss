@@ -1,4 +1,4 @@
-use amiss_md::{Analysis, BlockKind, Extraction, analyze};
+use amiss_md::{Analysis, BlockKind, Extraction, TransclusionKind, TransclusionRefusal, analyze};
 use amiss_wire::controls::SourceConstruct;
 use amiss_wire::model::Adapter;
 
@@ -977,4 +977,30 @@ fn a_path_span_names_bytes_only_under_certainty() {
     let with_front = spans(fronted);
     let (start, end) = with_front[0].expect("the path survives frontmatter");
     assert_eq!(&fronted.as_bytes()[start..end], b"Guide.md");
+}
+
+/// A `MyST` include names the file Sphinx renders in place of the directive,
+/// in either fence. An option block under the opener can take a part of that
+/// file rather than the whole of it, so the edge is refused there, and a tag
+/// that is not an include names no file.
+#[test]
+fn a_myst_include_writes_the_edge_the_rst_spelling_writes() {
+    let source = concat!(
+        "```{include} ../CHANGELOG.md\n```\n\n",
+        ":::{include} notes.md\n:start-after: here\n:::\n\n",
+        "```{note} other.md\n```\n",
+    );
+    let got = extraction(Adapter::Markdown, source);
+    let edges: Vec<(String, Result<TransclusionKind, TransclusionRefusal>)> = got
+        .transclusions
+        .iter()
+        .map(|entry| (entry.target.clone(), entry.kind))
+        .collect();
+    assert_eq!(
+        edges,
+        vec![
+            ("../CHANGELOG.md".to_owned(), Ok(TransclusionKind::Parsed)),
+            ("notes.md".to_owned(), Err(TransclusionRefusal::Options)),
+        ]
+    );
 }

@@ -69,6 +69,7 @@ wherever their profile is.
 | `myst-target` | a target alone on its line, `(name)=` | `markdown` | any tree |
 | `myst-directive-name` | a directive's `:name:` option, or a `figure-md` opener's argument | `markdown`, `rst` | any tree |
 | `myst-glossary` | a term of a definition list opening with `{.glossary}` | `markdown` | any tree |
+| `myst-domain-object` | a `domain:type` directive's object name, `{py:class} widgets.Widget` | `markdown` | any tree |
 | `myst-role` | a cross-reference role, `` {doc}`name` `` | `markdown` | `conf.py` |
 | `myst-link` | a plain link naming a label, `[text](name)` or `[text](#name)` | `markdown` | `conf.py` |
 | `mdx-comment` | an MDX comment ending a heading, `{/* #id */}` | `mdx` | any tree |
@@ -241,8 +242,17 @@ writes and an ordinary code fence declare nothing. An `eval-rst` body is reStruc
 and its directives spell the same option, so a `.. figure::` carrying `:name: rst-fun-fish`
 inside a Markdown page publishes that name too, and a reStructuredText document publishes it
 directly. `figure-md` takes the name as its argument instead, `:::{figure-md} fig-target`,
-since it is MyST's own Markdown figure; every other directive writes a path, a title or a
-domain object there, so the argument is read under that one tag.
+since it is MyST's own Markdown figure; every other directive writes a path or a title
+there, so the argument is read under that one tag and the domain tags the next row names.
+
+`myst-domain-object` is the argument of the other kind of directive, the one that describes
+an object rather than formatting a block. Sphinx stores what `{py:class}`, `{js:function}`
+or any other `domain:type` opener names under that name as written, so `[](#widgets.Widget)`
+finds the class its own page describes. The colon in the tag is what marks one, which keeps
+`{note}` and `{figure}` out of the reading. What follows the name is the domain's own
+signature grammar and this engine parses none of it, so a parameter list comes off the end
+and anything still carrying a space declares nothing. `{py:function} open(name)` publishes
+`open`, and `{cpp:class} template<typename T> Holder` publishes nothing at all.
 
 `myst-glossary` is a definition list read the way Sphinx reads one. A list opening with a
 `{.glossary}` attribute block is a glossary, and what a glossary term publishes is the term

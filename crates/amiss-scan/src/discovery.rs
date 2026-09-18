@@ -56,6 +56,7 @@ pub struct DocumentRecord {
 /// between. A document no declaration governs keeps no role, so a brace before
 /// a code span there is the prose it looks like.
 fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> Result<(), Error> {
+    discovery.sphinx_included = sphinx_included(discovery);
     let governed: Vec<bool> = discovery
         .documents
         .iter()
@@ -95,6 +96,36 @@ fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> 
     Ok(())
 }
 
+/// Every document a page of a Sphinx tree renders in place of an include, and
+/// every document those reach in turn. Sphinx parses an included file as part
+/// of the page holding the directive, so that file writes `MyST` wherever in
+/// the tree it sits, which is how a changelog beside the repository root names
+/// labels a page under `conf.py` declares. The walk seeds on the pages a
+/// declaration governs by position, the only answer `sphinx_governed` has while
+/// the set this builds is still empty.
+fn sphinx_included(discovery: &SnapshotDiscovery) -> BTreeSet<RepoPath> {
+    let markdown = |record: &DocumentRecord| record.adapter == Some(Adapter::Markdown);
+    let mut frontier: Vec<RepoPath> = discovery
+        .documents
+        .iter()
+        .filter(|record| {
+            markdown(record) && crate::anchor::sphinx_governed(discovery, &record.path)
+        })
+        .map(|record| record.path.clone())
+        .collect();
+    let mut found = BTreeSet::new();
+    while let Some(document) = frontier.pop() {
+        for target in crate::resolve::included_documents(discovery, &document) {
+            if discovery.document(target.as_bytes()).is_some_and(markdown)
+                && found.insert(target.clone())
+            {
+                frontier.push(target);
+            }
+        }
+    }
+    found
+}
+
 fn role_occurrence(entry: &ScannedOccurrence) -> bool {
     matches!(
         entry.occurrence.construct,
@@ -125,6 +156,7 @@ pub struct SnapshotDiscovery {
     pub entries: BTreeMap<RepoPath, (GitMode, Oid)>,
     pub labels: BTreeMap<String, LabelState>,
     pub published_routes: BTreeMap<RepoPath, RepoPath>,
+    pub sphinx_included: BTreeSet<RepoPath>,
 }
 
 /// What the snapshot's documents say about one `.. _name:` label: the one
@@ -221,6 +253,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         path_defects: Vec::new(),
         entries: BTreeMap::new(),
         published_routes: BTreeMap::new(),
+        sphinx_included: BTreeSet::new(),
     }
 }
 

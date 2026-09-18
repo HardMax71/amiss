@@ -290,8 +290,7 @@ impl Sweep<'_> {
                 owners.paragraph = Some(span);
                 self.declared.extend(heading::paragraph_attribute(node));
                 self.declared.extend(heading::glossary_terms(node));
-                self.declared
-                    .extend(heading::directive_names(self.suffix.get(span.0..span.1)));
+                directive_declarations(self, span);
                 self.headings.extend(heading::definition_terms(node));
             }
             Kind::Link { url } => {
@@ -351,7 +350,7 @@ impl Sweep<'_> {
                     self.push(construct, raw, semantic, role_span, path, *owners);
                 }
             }
-            Kind::CodeBlock(_) => self.declared.extend(fenced_identities(self.suffix, span)),
+            Kind::CodeBlock(_) => directive_declarations(self, span),
             Kind::Root | Kind::Other => {}
         }
         Ok(true)
@@ -486,6 +485,43 @@ fn snippet(line: &str, span: (usize, usize)) -> Option<Transclusion> {
         target: target.to_owned(),
         span,
         kind,
+    })
+}
+
+/// What a directive opener declares, wherever the opener falls: a colon fence
+/// opens a paragraph and a backtick fence opens a code block, and the same
+/// directive is spelled in both. A fence Docusaurus unwraps also carries the
+/// identities of the markup between its lines.
+fn directive_declarations(sweep: &mut Sweep<'_>, span: (usize, usize)) {
+    let block = sweep.suffix.get(span.0..span.1);
+    sweep.declared.extend(fenced_identities(sweep.suffix, span));
+    sweep.snippets.extend(include_directive(block, span));
+}
+
+/// The document a `MyST` include renders in place of itself. Sphinx parses the
+/// named file as part of the page holding the directive, so the edge is the
+/// same one the reStructuredText `.. include::` writes, and it is refused on
+/// the same ground: an option block under the opener can take a part of the
+/// file rather than the whole of it.
+fn include_directive(block: Option<&str>, span: (usize, usize)) -> Option<Transclusion> {
+    let mut lines = block.unwrap_or_default().lines();
+    let (tag, argument) = lines.next().and_then(heading::directive_opener)?;
+    let target = argument.trim();
+    if tag != "include" || target.is_empty() || target.contains(char::is_whitespace) {
+        return None;
+    }
+    let optioned = lines.any(|line| {
+        let rest = line.trim();
+        !rest.is_empty() && !rest.chars().all(|item| matches!(item, ':' | '`' | '~'))
+    });
+    Some(Transclusion {
+        target: target.to_owned(),
+        span,
+        kind: if optioned {
+            Err(TransclusionRefusal::Options)
+        } else {
+            Ok(TransclusionKind::Parsed)
+        },
     })
 }
 

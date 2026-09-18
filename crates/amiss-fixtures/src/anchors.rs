@@ -196,11 +196,15 @@ const DEFINITION_TERMS: [(&str, Staged<'static>); 3] = [
 /// destination the tree holds under a name `docs/notes.md` also declares as a
 /// label. `docs/widgets.md` writes the names a directive publishes, a
 /// `figure-md` argument, a `:name:` inside an `eval-rst` body, a glossary term,
-/// a bracketed span, and an attribute block sharing an opener's paragraph, then
-/// two spellings that publish nothing: a fence with no brace tag and a
-/// definition list that is no glossary. `outside/notes.md` writes a role, a
-/// label link and a directive name where no `conf.py` governs any of them.
-const SPHINX_MYST: [(&str, Staged<'static>); 6] = [
+/// a bracketed span, an attribute block sharing an opener's paragraph, and two
+/// domain objects, one named plainly and one behind a parameter list, then
+/// three spellings that publish nothing: a fence with no brace tag, a
+/// definition list that is no glossary, and a domain object behind a template
+/// head. `CHANGELOG.md` sits outside the declared root and writes its labels
+/// anyway, since `docs/develop.md` renders it in place of an include, while
+/// `outside/notes.md` writes a role, a label link and a directive name that no
+/// `conf.py` governs and no page pulls in.
+const SPHINX_MYST: [(&str, Staged<'static>); 8] = [
     (
         "docs/conf.py",
         Staged::File(b"extensions = ['myst_parser']\n"),
@@ -217,7 +221,9 @@ const SPHINX_MYST: [(&str, Staged<'static>); 6] = [
               See [the embedded name](rst-widget).\n\nSee [the term](<#sprocket term>).\n\n\
               See [the span](span-name).\n\nSee [the block](nested-block).\n\n\
               See [the plain fence](fence-name).\n\nSee [the plain term](<#plain term>).\n\n\
-              See [the ungoverned name](outside-name).\n",
+              See [the ungoverned name](outside-name).\n\n\
+              See [the class](#widgets.Sprocket).\n\nSee [the function](#open).\n\n\
+              See [the template](#Holder).\n",
         ),
     ),
     (
@@ -239,8 +245,22 @@ const SPHINX_MYST: [(&str, Staged<'static>); 6] = [
               A [span of text]{#span-name}.\n\n\
               :::{admonition} Aside\n{#nested-block}\nText under the opener.\n:::\n\n\
               :::note\n:name: fence-name\n:::\n\n\
-              plain term\n: Not a glossary.\n",
+              plain term\n: Not a glossary.\n\n\
+              ```{py:class} widgets.Sprocket\n:nocontentsentry:\n\nA sprocket.\n```\n\n\
+              ```{py:function} open(name)\n\nOpens it.\n```\n\n\
+              ```{cpp:class} template<typename T> Holder\n\nHolds it.\n```\n",
         ),
+    ),
+    (
+        "CHANGELOG.md",
+        Staged::File(
+            b"# Changelog\n\nSee [the label](install-step).\n\n\
+              See [the anchor](#install-step).\n",
+        ),
+    ),
+    (
+        "docs/develop.md",
+        Staged::File(b"# Develop\n\n```{include} ../CHANGELOG.md\n:relative-docs: docs/\n```\n"),
     ),
     (
         "outside/notes.md",

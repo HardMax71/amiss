@@ -266,6 +266,25 @@ fn braces_that_are_not_an_identity_stay_in_the_text() {
     }
 }
 
+/// A Sphinx domain directive publishes the object it names, in either fence.
+/// A parameter list comes off the end, since the rest of a signature is the
+/// domain's own grammar, and an argument still carrying a space after that cut
+/// publishes nothing. A tag with no domain in it names no object.
+#[test]
+fn a_domain_directive_publishes_the_object_its_argument_names() {
+    let source = concat!(
+        "```{py:class} widgets.Widget\n:nocontentsentry:\n\nA widget.\n```\n\n",
+        ":::{js:function} render(node)\nRenders it.\n:::\n\n",
+        "```{cpp:class} template<typename T> Holder\nHolds it.\n```\n\n",
+        "```{note} Something titled\nText.\n```\n",
+    );
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(
+        got.declared_anchors,
+        vec!["widgets.Widget".to_owned(), "render".to_owned()]
+    );
+}
+
 #[test]
 fn raw_html_publishes_its_id_and_name_attributes() {
     let source = "<a name=\"first\"></a>\n\n<h2 id='second'>x</h2>\n\n<div id=third>y</div>\n";

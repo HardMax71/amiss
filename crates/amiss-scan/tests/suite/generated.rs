@@ -353,6 +353,55 @@ fn a_name_a_directive_publishes_answers_a_link_that_spells_it() {
     );
 }
 
+/// A Sphinx domain directive stores the object it names under that name, so a
+/// link spelling it reaches the page describing it. A parameter list is the
+/// domain's own grammar and comes off the end, while a signature carrying a
+/// space is left alone, and a directive with no domain in its tag names no
+/// object at all.
+#[test]
+fn a_domain_directive_publishes_the_object_it_names() {
+    let rows = answers(&amiss_fixtures::sphinx_myst().expect("the fixture stages"));
+    for (line, spelling) in [
+        (43, "a class written whole"),
+        (45, "a name before its list"),
+    ] {
+        assert_eq!(
+            blob(answer(&rows, "docs/index.md", line)),
+            Some("docs/widgets.md"),
+            "{spelling}: {:?}",
+            answer(&rows, "docs/index.md", line)
+        );
+    }
+    assert!(
+        matches!(
+            answer(&rows, "docs/index.md", 47),
+            Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+        ),
+        "a signature this engine does not parse: {:?}",
+        answer(&rows, "docs/index.md", 47)
+    );
+}
+
+/// A page under the `conf.py` renders another file in place of an include, so
+/// Sphinx parses that file too and the labels it writes are read wherever it
+/// sits. A file outside the root that no page includes keeps the reading it
+/// had, so the same link there is the path it looks like.
+#[test]
+fn a_file_a_sphinx_page_includes_reads_the_labels_it_writes() {
+    let rows = answers(&amiss_fixtures::sphinx_myst().expect("the fixture stages"));
+    for (line, spelling) in [
+        (3, "a label in the destination"),
+        (5, "a label as a bare fragment"),
+    ] {
+        assert_eq!(
+            blob(answer(&rows, "CHANGELOG.md", line)),
+            Some("docs/quickstart.md"),
+            "{spelling}: {:?}",
+            answer(&rows, "CHANGELOG.md", line)
+        );
+    }
+}
+
 /// The `MyST` rows and the route rule that anchors a source-root docname are
 /// the same declaration, so the file each names must stay one file.
 #[test]

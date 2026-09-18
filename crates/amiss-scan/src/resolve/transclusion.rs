@@ -200,6 +200,31 @@ pub(super) fn templated(
         && crate::route::declared_root(snapshot, document.as_bytes(), &crate::route::HUGO).is_some()
 }
 
+/// The documents one document renders in place of its own includes, which is
+/// the edge the Sphinx walk follows to decide what a tree parses. A call a
+/// template answers names no file at all, so it is no edge here either; an
+/// option block still renders part of the named file, so that one is.
+pub(crate) fn included_documents(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+) -> Vec<RepoPath> {
+    let Some(DocumentStatus::Scanned(scanned)) = snapshot
+        .document(document.as_bytes())
+        .map(|record| &record.status)
+    else {
+        return Vec::new();
+    };
+    let Some(source) = scanned.anchor_source.as_ref() else {
+        return Vec::new();
+    };
+    let root = snippet_root(snapshot, Adapter::Markdown, document);
+    followed(&source.transclusions)
+        .into_iter()
+        .filter(|entry| entry.kind != Ok(TransclusionKind::Literal))
+        .filter_map(|entry| local_target(root.as_deref(), document, &entry.target))
+        .collect()
+}
+
 fn local_target(root: Option<&[u8]>, document: &RepoPath, target: &str) -> Option<RepoPath> {
     if target.starts_with('/') || target.contains(['%', '?', '#']) || scheme(target).is_some() {
         return None;
