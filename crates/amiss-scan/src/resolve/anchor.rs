@@ -217,6 +217,45 @@ fn fold_typography(text: &str) -> String {
     text.to_lowercase().replace('_', "-")
 }
 
+/// What the snapshot's own label table answers for one name: the declaring
+/// document, or the ambiguity two declarations leave. A name nobody declares
+/// is not answered here, so each caller keeps the reading it already had.
+fn label_target(resolver: &mut Resolver<'_>, label: &str) -> Result<Option<Resolution>, Error> {
+    let normalized = amiss_rst::normalized_label(label);
+    let owner = match resolver.snapshot.labels.get(&normalized) {
+        None => return Ok(None),
+        Some(crate::discovery::LabelState::Duplicated) => {
+            return Ok(Some(Resolution::UnsupportedSemantics(
+                UnsupportedSemantics::DuplicateLabel,
+            )));
+        }
+        Some(crate::discovery::LabelState::Declared(owner)) => owner.clone(),
+    };
+    lookup(resolver, &owner, TargetKind::Blob, None, None, None).map(Some)
+}
+
+/// The label a plain Markdown link names under a declared Sphinx tree, where
+/// `myst-link` reads a destination the way a `:ref:` role reads its argument.
+/// A caller offers a name only for a shape the tree has already failed to
+/// answer, so a destination naming a file still resolves as that file, and a
+/// name no document declares keeps the answer it has, since an undeclared
+/// cross reference is as broken as an absent path.
+pub(super) fn linked_label(
+    resolver: &mut Resolver<'_>,
+    adapter: Adapter,
+    document: &RepoPath,
+    label: Option<&str>,
+    row: Resolution,
+) -> Result<Resolution, Error> {
+    let Some(label) = label else { return Ok(row) };
+    if !crate::anchor::MYST_LINK.adapters.contains(&adapter)
+        || !crate::anchor::sphinx_governed(resolver.snapshot, document)
+    {
+        return Ok(row);
+    }
+    Ok(label_target(resolver, label)?.unwrap_or(row))
+}
+
 impl Resolver<'_> {
     /// Answers a Sphinx `:ref:` against the labels the snapshot's documents
     /// declare, delegating a unique declaration to ordinary target lookup.
@@ -234,13 +273,13 @@ impl Resolver<'_> {
             query: None,
             fragment: Some(label.to_owned()),
         };
-        let normalized = amiss_rst::normalized_label(label);
         let mut external_destination = None;
-        let resolution = match self.snapshot.labels.get(&normalized) {
+        let resolution = match label_target(self, label)? {
+            Some(declared) => declared,
             None if label.contains(':') => {
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
             }
-            None => match semantic.labels.get(&normalized) {
+            None => match semantic.labels.get(&amiss_rst::normalized_label(label)) {
                 Some(crate::semantic::InventoryLabel::Unique(destination)) => {
                     external_destination = Some(destination.clone());
                     Resolution::External {
@@ -252,13 +291,6 @@ impl Resolver<'_> {
                 }
                 None => Resolution::Missing(Missing::LabelNotDeclared),
             },
-            Some(crate::discovery::LabelState::Duplicated) => {
-                Resolution::UnsupportedSemantics(UnsupportedSemantics::DuplicateLabel)
-            }
-            Some(crate::discovery::LabelState::Declared(owner)) => {
-                let owner = owner.clone();
-                lookup(self, &owner, TargetKind::Blob, None, None, None)?
-            }
         };
         Ok((intent, resolution, external_destination))
     }

@@ -254,15 +254,19 @@ declared rather than read into.
 A Sphinx project that writes its pages in Markdown spells the same two roles in MyST, and they
 are answered the same way. `` {doc}`quickstart` `` is the docname `:doc:` names, taking `.md`
 rather than `.rst`, and `` {ref}`install-step` `` is the label `:ref:` names, looked up in the
-same table, which a MyST document fills through `(name)=` and its attribute blocks. A
-source-root docname such as `` {doc}`/api` `` stays a declared site route in a Markdown
-document, because the root lookup that answers one is read for reStructuredText alone. Every
-other role is counted and left alone: `` {py:class}`Widget` ``, `` {func}`echo` `` and
-`` {issue}`4211` `` name a domain inventory Sphinx builds while it runs or a link template
-`conf.py` holds, so each is recorded as unsupported semantics rather than resolved, guessed,
-or reported missing. Nothing here is read without a `conf.py` above the document: a role is a
-role only in a tree that declares Sphinx, and the count says how many references the run saw
-rather than how many it answered.
+same table, which a MyST document fills through `(name)=` and its attribute blocks. The
+`myst-link` rule in [What twelve renderers call a heading](anchor-rules.md) points a plain link
+at that same table: `[text](name)` where the tree holds no such file, and `[text](#name)` where
+the document itself publishes no such identity, are looked up as labels before either is
+reported missing, so the tree keeps whatever answer it had and a name nobody declares stays
+the missing target it was. A source-root docname such as `` {doc}`/api` `` stays a declared
+site route in a Markdown document, because the root lookup that answers one is read for
+reStructuredText alone. Every other role is counted and left alone: `` {py:class}`Widget` ``,
+`` {func}`echo` `` and `` {issue}`4211` `` name a domain inventory Sphinx builds while it runs
+or a link template `conf.py` holds, so each is recorded as unsupported semantics rather than
+resolved, guessed, or reported missing. Nothing here is read without a `conf.py` above the
+document: a role is a role only in a tree that declares Sphinx, and the count says how many
+references the run saw rather than how many it answered.
 
 Heading evaluation expands the closed local include subset in source order. An AsciiDoc
 `include::path[]` or option-free, document-level reStructuredText `include` participates when its

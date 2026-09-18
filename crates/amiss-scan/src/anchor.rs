@@ -487,11 +487,21 @@ const MKDOCS_CONTENT_TAB: DeclarationRule = DeclarationRule {
 
 const SPHINX_DECLARED_BY: &[&str] = crate::route::SPHINX.declared_by;
 
+/// The label a plain link names. Sphinx keeps every name a page declares as a
+/// global label, so a `MyST` link writes one where a path goes or as a bare
+/// fragment, and neither spelling is a path in any other tree.
+pub(crate) const MYST_LINK: DeclarationRule = DeclarationRule {
+    name: "myst-link",
+    spelling: "a plain link naming a label, `[text](name)` or `[text](#name)`",
+    adapters: &[Adapter::Markdown],
+    declared_by: SPHINX_DECLARED_BY,
+};
+
 /// Every way a document names its own identities rather than leaving them to a
 /// renderer's slug, plus the spellings a declared generator owns, grouped
 /// by the profile that reads each one. An identity rule joins the union beside
 /// the renderer rules, so it can only grow the set an anchor may match.
-pub const DECLARATIONS: [DeclarationRule; 18] = [
+pub const DECLARATIONS: [DeclarationRule; 19] = [
     DeclarationRule {
         name: "html-id",
         spelling: "an `id` or `name` attribute on a raw HTML element",
@@ -532,6 +542,7 @@ pub const DECLARATIONS: [DeclarationRule; 18] = [
         adapters: &[Adapter::Markdown],
         declared_by: SPHINX_DECLARED_BY,
     },
+    MYST_LINK,
     DeclarationRule {
         name: "mdx-comment",
         spelling: "an MDX comment ending a heading, `{/* #id */}`",
