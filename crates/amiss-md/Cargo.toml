@@ -8,7 +8,7 @@ repository.workspace = true
 exclude.workspace = true
 
 [dependencies]
-amiss-wire = { path = "../amiss-wire", version = "0.29.1" }
+amiss-wire = { path = "../amiss-wire", version = "0.30.0" }
 linkify = "0.11"
 markdown = "1"
 pulldown-cmark = { version = "0.13.4", default-features = false }

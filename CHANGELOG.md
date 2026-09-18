@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.0](https://github.com/HardMax71/amiss/compare/v0.29.1...v0.30.0) - 2026-09-18
+
+### Changes
+
+- keep the document reason open now that a reason may grow
+- pin the window over the documents a run did not scan
+- count a document the engine cannot read instead of ending the run
+- [**breaking**] mint wire compatibility 3 and let a reason grow inside it
+- stop claiming a path the site's build decides
+- read a definition term, and bound what a plugin publishes
+- read the file that declares Sphinx from the rule that owns it
+- answer generated anchors and read MyST roles
+- resolve a destination that names a document's declared route
+- spell a digest through one write instead of thirty-two
+
 ## [0.29.1](https://github.com/HardMax71/amiss/compare/v0.29.0...v0.29.1) - 2026-09-17
 
 ### Changes
