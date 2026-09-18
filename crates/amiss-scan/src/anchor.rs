@@ -512,7 +512,7 @@ pub(crate) const MYST_LINK: DeclarationRule = DeclarationRule {
 /// renderer's slug, plus the spellings a declared generator owns, grouped
 /// by the profile that reads each one. An identity rule joins the union beside
 /// the renderer rules, so it can only grow the set an anchor may match.
-pub const DECLARATIONS: [DeclarationRule; 22] = [
+pub const DECLARATIONS: [DeclarationRule; 23] = [
     DeclarationRule {
         name: "html-id",
         spelling: "an `id` or `name` attribute on a raw HTML element, or on one written \
@@ -559,6 +559,12 @@ pub const DECLARATIONS: [DeclarationRule; 22] = [
     DeclarationRule {
         name: "myst-glossary",
         spelling: "a term of a definition list opening with `{.glossary}`",
+        adapters: &[Adapter::Markdown],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "myst-domain-object",
+        spelling: "a `domain:type` directive's object name, `{py:class} widgets.Widget`",
         adapters: &[Adapter::Markdown],
         declared_by: &[],
     },
@@ -619,13 +625,15 @@ pub const DECLARATIONS: [DeclarationRule; 22] = [
     },
 ];
 
-/// Whether a Sphinx declaration sits above this document, which is what turns
-/// the `MyST` spellings on. The route table reads the same file to anchor a
-/// source-root docname, so the answer is taken from there rather than spelled
-/// twice.
+/// Whether Sphinx parses this document, which is what turns the `MyST`
+/// spellings on. A declaration above the file is one way, and the route table
+/// reads the same file to anchor a source-root docname, so the answer is taken
+/// from there rather than spelled twice. A page of the tree including the file
+/// is the other way, and that one reaches outside the declared root.
 pub(crate) fn sphinx_governed(snapshot: &SnapshotDiscovery, document: &RepoPath) -> bool {
     ROUTERS
         .iter()
         .filter(|rule| rule.serves(Spelling::SourceRoot))
         .any(|rule| declared_root(snapshot, document.as_bytes(), rule).is_some())
+        || snapshot.sphinx_included.contains(document)
 }

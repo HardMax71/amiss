@@ -52,7 +52,7 @@ fn opening_attribute(text: &str) -> Option<&str> {
 
 /// The brace-wrapped tag a `MyST` directive opens with, on a fence of at least
 /// three colons, backticks or tildes, and whatever the opener writes after it.
-fn directive_opener(line: &str) -> Option<(&str, &str)> {
+pub(super) fn directive_opener(line: &str) -> Option<(&str, &str)> {
     let trimmed = line.trim_start();
     let fence = trimmed
         .chars()
@@ -69,8 +69,8 @@ fn directive_opener(line: &str) -> Option<(&str, &str)> {
 /// block under the opener, and the reStructuredText inside an `eval-rst` body
 /// names its own directives the same way, so every option line under one
 /// opener is read. `figure-md` takes the name as its argument instead, which
-/// no other directive does: the rest write a path, a title or a domain object
-/// there.
+/// no other directive does: the rest write a path or a title there, or the
+/// domain object `domain_object` reads.
 pub(super) fn directive_names(block: Option<&str>) -> Vec<String> {
     let mut lines = block.unwrap_or_default().lines();
     let Some((tag, argument)) = lines.next().and_then(directive_opener) else {
@@ -82,8 +82,24 @@ pub(super) fn directive_names(block: Option<&str>) -> Vec<String> {
             .then(|| argument.to_owned());
     figure
         .into_iter()
+        .chain(domain_object(tag, argument))
         .chain(lines.filter_map(amiss_wire::extraction::directive_name_option))
         .collect()
+}
+
+/// The object a Sphinx domain directive describes, which the domain stores
+/// under the name written here rather than under a slug of it. A `domain:type`
+/// tag is what marks one, so `{py:class} widgets.Widget` publishes that name
+/// and `{note}` publishes nothing. What follows the name is the domain's own
+/// signature grammar, so a name is read only where the argument holds one
+/// token, with a parameter list taken off it.
+fn domain_object(tag: &str, argument: &str) -> Option<String> {
+    let (domain, kind) = tag.split_once(':')?;
+    if domain.is_empty() || kind.is_empty() || tag.contains(char::is_whitespace) {
+        return None;
+    }
+    let name = argument.split('(').next()?.trim_end();
+    (!name.is_empty() && !name.contains(char::is_whitespace)).then(|| name.to_owned())
 }
 
 /// The terms a glossary declares, which Sphinx keeps under the term itself

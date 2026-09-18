@@ -255,8 +255,9 @@ A Sphinx project that writes its pages in Markdown spells the same two roles in 
 are answered the same way. `` {doc}`quickstart` `` is the docname `:doc:` names, taking `.md`
 rather than `.rst`, and `` {ref}`install-step` `` is the label `:ref:` names, looked up in the
 same table, which a MyST document fills through `(name)=`, its attribute blocks, the
-`:name:` a directive carries and the terms of a `{.glossary}` list. The
-`myst-link` rule in [What twelve renderers call a heading](anchor-rules.md) points a plain link
+`:name:` a directive carries, the terms of a `{.glossary}` list and the object a
+`domain:type` directive describes. The `myst-link` rule in
+[What twelve renderers call a heading](anchor-rules.md) points a plain link
 at that same table: `[text](name)` where the tree holds no such file, and `[text](#name)` where
 the document itself publishes no such identity, are looked up as labels before either is
 reported missing, so the tree keeps whatever answer it had and a name nobody declares stays
@@ -266,12 +267,20 @@ reStructuredText alone. Every other role is counted and left alone: `` {py:class
 `` {func}`echo` `` and `` {issue}`4211` `` name a domain inventory Sphinx builds while it runs
 or a link template `conf.py` holds, so each is recorded as unsupported semantics rather than
 resolved, guessed, or reported missing. A plain link can name the same object,
-`[Explicit text](#mypackage.MyClass)`, and that one stays a missing target. The role names
-the domain that answers it; the link names nothing, so reading a dotted fragment as an
-inventory name would swallow every real anchor break whose slug carries a dot. Nothing here
-is read without a `conf.py` above the document: a role is a role only in a tree that
-declares Sphinx, and the count says how many references the run saw rather than how many it
-answered.
+`[Explicit text](#mypackage.MyClass)`. Where a `{py:class}` directive in the tree describes
+that class the name is already in the table and the link reaches the page holding it, and
+where nothing in the tree describes it the link stays a missing target, since reading any
+dotted fragment as an inventory name would swallow every real anchor break whose slug
+carries a dot.
+
+Nothing here is read without a Sphinx declaration over the document, and two things count as
+one. A `conf.py` above the file is the first. The second is a page under one that renders
+the file in place of an `{include}`, since Sphinx parses an included file as part of the
+page holding the directive. That is how a changelog at the repository root writes the labels
+its site resolves, while the same file in a tree nothing includes stays the prose it looks like.
+The second reading says which files Sphinx parses and nothing about what each publishes: the
+including page's own identity set is unchanged, so a fragment into it is answered exactly as
+before. The count says how many references the run saw rather than how many it answered.
 
 Heading evaluation expands the closed local include subset in source order. An AsciiDoc
 `include::path[]` or option-free, document-level reStructuredText `include` participates when its

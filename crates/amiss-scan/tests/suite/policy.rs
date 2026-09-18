@@ -541,6 +541,7 @@ fn bound_adapter_answers_only_policy_included_rows() {
         entries: BTreeMap::new(),
         labels: BTreeMap::new(),
         published_routes: BTreeMap::new(),
+        sphinx_included: BTreeSet::new(),
     };
     assert_eq!(
         snapshot.bound_adapter(&path("man/g.txt")),

@@ -181,6 +181,7 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
     SnapshotDiscovery {
         labels: BTreeMap::new(),
         published_routes: BTreeMap::new(),
+        sphinx_included: BTreeSet::new(),
         documents: vec![DocumentRecord {
             path,
             classification: Classification::StructuredMarkdown,
