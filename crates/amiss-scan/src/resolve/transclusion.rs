@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use amiss_wire::controls::{GitMode, TargetKind};
-use amiss_wire::extraction::{Heading, Transclusion, TransclusionKind};
+use amiss_wire::extraction::{Heading, Transclusion, TransclusionKind, TransclusionRefusal};
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::uri::scheme;
 
@@ -81,7 +81,7 @@ impl Expansion<'_, '_> {
             .extend(source.declared_anchors.iter().cloned());
 
         let mut heading = 0;
-        for transclusion in source.transclusions {
+        for transclusion in followed(source.transclusions) {
             while source
                 .headings
                 .get(heading)
@@ -170,6 +170,34 @@ impl Expansion<'_, '_> {
         }
         self.stack.remove(&target);
     }
+}
+
+/// The includes an expansion walks. A call a template answers is no edge at
+/// all, since nothing in the tree stands in for what it writes, so `templated`
+/// answers it instead and the walk passes it by.
+fn followed(transclusions: &[Transclusion]) -> Vec<&Transclusion> {
+    transclusions
+        .iter()
+        .filter(|entry| entry.kind != Err(TransclusionRefusal::Template))
+        .collect()
+}
+
+/// Whether a template writes part of this document. A Hugo shortcode is
+/// answered by a layout rather than by a file, so a page that calls one holds
+/// headings and terms this engine cannot see, and its identity set is as far
+/// from enumerable as a generator directive leaves one. Outside a tree that
+/// declares Hugo the same line is the text it looks like.
+pub(super) fn templated(
+    snapshot: &SnapshotDiscovery,
+    adapter: Adapter,
+    document: &RepoPath,
+    transclusions: &[Transclusion],
+) -> bool {
+    crate::anchor::HUGO_SHORTCODE.adapters.contains(&adapter)
+        && transclusions
+            .iter()
+            .any(|entry| entry.kind == Err(TransclusionRefusal::Template))
+        && crate::route::declared_root(snapshot, document.as_bytes(), &crate::route::HUGO).is_some()
 }
 
 fn local_target(root: Option<&[u8]>, document: &RepoPath, target: &str) -> Option<RepoPath> {

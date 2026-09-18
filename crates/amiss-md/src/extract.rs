@@ -338,6 +338,7 @@ impl Sweep<'_> {
                         self.snippets.extend(snippet(line, span));
                         self.snippets.extend(directive(line, span));
                         self.snippets.extend(content_tab(line, span));
+                        self.snippets.extend(shortcode_call(line, span));
                         self.declared.extend(heading::myst_target(line));
                     }
                 }
@@ -500,6 +501,7 @@ fn directive(line: &str, span: (usize, usize)) -> Option<Transclusion> {
     generated(
         line.trim().strip_prefix(":::")?.strip_prefix([' ', '\t']),
         span,
+        TransclusionRefusal::DynamicTarget,
     )
 }
 
@@ -510,7 +512,11 @@ fn directive(line: &str, span: (usize, usize)) -> Option<Transclusion> {
 fn content_tab(line: &str, span: (usize, usize)) -> Option<Transclusion> {
     let opened = line.trim().strip_prefix("===")?;
     let title = opened.strip_prefix(['!', '+']).unwrap_or(opened);
-    generated(quoted(title.strip_prefix([' ', '\t'])?.trim()), span)
+    generated(
+        quoted(title.strip_prefix([' ', '\t'])?.trim()),
+        span,
+        TransclusionRefusal::DynamicTarget,
+    )
 }
 
 /// The shortcode a declared hook expands before anything is rendered,
@@ -519,17 +525,43 @@ fn content_tab(line: &str, span: (usize, usize)) -> Option<Transclusion> {
 /// refused rather than followed.
 fn shortcode(region: Option<&str>, span: (usize, usize)) -> Option<Transclusion> {
     let comment = region?.split_once("<!--")?.1.split_once("-->")?.0;
-    generated(comment.trim().strip_prefix("md:"), span)
+    generated(
+        comment.trim().strip_prefix("md:"),
+        span,
+        TransclusionRefusal::DynamicTarget,
+    )
+}
+
+/// The pair of markers a Hugo shortcode call opens and closes with: the raw
+/// form, and the form whose output is rendered as Markdown.
+const SHORTCODE_MARKERS: [(&str, &str); 2] = [("{{%", "%}}"), ("{{<", ">}}")];
+
+/// A shortcode call standing alone as a block, which here is a line holding
+/// one call and nothing else. A template answers it, and what that template
+/// writes carries headings and definition-list terms of its own, so the call
+/// names the shortcode and is refused rather than followed. A call in the flow
+/// of a sentence renders inside that sentence and writes neither.
+fn shortcode_call(line: &str, span: (usize, usize)) -> Option<Transclusion> {
+    let called = SHORTCODE_MARKERS.iter().find_map(|(open, close)| {
+        let body = line.trim().strip_prefix(open)?.strip_suffix(close)?;
+        (!body.contains(close)).then_some(body)
+    });
+    generated(called, span, TransclusionRefusal::Template)
 }
 
 /// The edge a spelling a program answers writes: it names what would arrive
-/// rather than a path the tree holds, so it is refused instead of followed.
-fn generated(target: Option<&str>, span: (usize, usize)) -> Option<Transclusion> {
+/// rather than a path the tree holds, so it is refused instead of followed,
+/// under the refusal that says which program answers it.
+fn generated(
+    target: Option<&str>,
+    span: (usize, usize),
+    refusal: TransclusionRefusal,
+) -> Option<Transclusion> {
     let named = target.map(str::trim).filter(|name| !name.is_empty())?;
     Some(Transclusion {
         target: named.to_owned(),
         span,
-        kind: Err(TransclusionRefusal::DynamicTarget),
+        kind: Err(refusal),
     })
 }
 

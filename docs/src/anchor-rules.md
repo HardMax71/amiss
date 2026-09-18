@@ -48,10 +48,10 @@ carried rather than one being chosen for the reader.
 An identity can also be written down rather than left to a heading's slug, and then it
 belongs to the author or to a construct no heading rule reads. Each of these spellings
 joins the union for every renderer, because accepting an identity a given renderer would
-not publish can only leave a finding unreported, never invent one. Five of the rows write
-down no identity: they are the spellings a declared generator, hook or extension owns,
-three saying the page's identities are built elsewhere and two naming a reference. Six
-rows are gated on a file in the tree, the way the route rules are; the rest are read
+not publish can only leave a finding unreported, never invent one. Six of the rows write
+down no identity: they are the spellings a declared generator, hook, extension or layout
+owns, four saying the page's identities are built elsewhere and two naming a reference.
+Seven rows are gated on a file in the tree, the way the route rules are; the rest are read
 wherever their profile is.
 
 <!-- amiss-doc-contract:declared-identities:start -->
@@ -65,6 +65,7 @@ wherever their profile is.
 | `mkdocs-directive` | a `:::` line naming what a generator renders, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `mkdocs-shortcode` | an HTML comment naming a hook's shortcode, `<!-- md:name -->` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `mkdocs-content-tab` | a content tab opening a quoted title, `=== "Title"` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
+| `hugo-shortcode` | a shortcode call alone on its line, `{{% name %}}` or `{{< name >}}` | `markdown` | `hugo.toml`, `hugo.yaml` |
 | `myst-target` | a target alone on its line, `(name)=` | `markdown` | any tree |
 | `myst-directive-name` | a directive's `:name:` option, or a `figure-md` opener's argument | `markdown`, `rst` | any tree |
 | `myst-glossary` | a term of a definition list opening with `{.glossary}` | `markdown` | any tree |
@@ -194,6 +195,24 @@ function the site configures, combined with the heading above it where
 is all this engine reads, so a page carrying a tab leaves its identity set incomplete
 rather than guessing which of the two spellings the build wrote. Three equals signs with
 nothing quoted after them are prose.
+
+`hugo-shortcode` is the same answer for Hugo, where the call names a template rather than a
+file. `{{% include "_common/store-methods.md" %}}` reads like an include, but `include` there
+is a shortcode the site defines under `layouts/`, and it works by fetching a page and
+rendering it, so what arrives is a template's output. The headings in that output are
+headings of the built page, and under `autoDefinitionTermID` so are the terms
+`definition-term` reads, which is why an anchor into either was reported absent before. A
+page that calls one now keeps every identity it writes itself and leaves the rest undecided.
+On the Hugo documentation tree that is all twenty-three of its missing-target findings, and
+no repository outside a Hugo tree moves by one.
+
+Only a call standing alone as a block is read, since one written in the flow of a sentence
+renders inside that sentence and can open neither a heading nor a term. Both markers count,
+the `{{% %}}` form whose output is rendered as Markdown and the `{{< >}}` form whose output
+is raw HTML, because a heading can arrive through either. That tree does not separate the
+two readings: none of the eighteen pages whose only call is inline is anchored into at all,
+so the narrow rule is the smaller claim rather than the measured one. Without `hugo.toml` or
+`hugo.yaml` above the document a pair of braces is a pair of braces.
 
 `myst-target` and `myst-role` are the two MyST spellings, which is how a Sphinx project
 writes its pages in Markdown. `(name)=` alone on its line is the target: the renderer writes

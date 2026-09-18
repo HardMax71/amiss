@@ -485,6 +485,17 @@ const MKDOCS_CONTENT_TAB: DeclarationRule = DeclarationRule {
     declared_by: crate::route::MKDOCS.declared_by,
 };
 
+/// The call a Hugo template answers before the page is rendered. The template
+/// lives outside the tree, so what arrives in the call's place cannot be
+/// enumerated here, and the spelling is read only under the file that declares
+/// Hugo.
+pub(crate) const HUGO_SHORTCODE: DeclarationRule = DeclarationRule {
+    name: "hugo-shortcode",
+    spelling: "a shortcode call alone on its line, `{{% name %}}` or `{{< name >}}`",
+    adapters: &[Adapter::Markdown],
+    declared_by: crate::route::HUGO.declared_by,
+};
+
 const SPHINX_DECLARED_BY: &[&str] = crate::route::SPHINX.declared_by;
 
 /// The label a plain link names. Sphinx keeps every name a page declares as a
@@ -501,7 +512,7 @@ pub(crate) const MYST_LINK: DeclarationRule = DeclarationRule {
 /// renderer's slug, plus the spellings a declared generator owns, grouped
 /// by the profile that reads each one. An identity rule joins the union beside
 /// the renderer rules, so it can only grow the set an anchor may match.
-pub const DECLARATIONS: [DeclarationRule; 21] = [
+pub const DECLARATIONS: [DeclarationRule; 22] = [
     DeclarationRule {
         name: "html-id",
         spelling: "an `id` or `name` attribute on a raw HTML element",
@@ -531,6 +542,7 @@ pub const DECLARATIONS: [DeclarationRule; 21] = [
     MKDOCS_DIRECTIVE,
     MKDOCS_SHORTCODE,
     MKDOCS_CONTENT_TAB,
+    HUGO_SHORTCODE,
     DeclarationRule {
         name: "myst-target",
         spelling: "a target alone on its line, `(name)=`",

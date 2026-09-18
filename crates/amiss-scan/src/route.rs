@@ -117,7 +117,7 @@ const ELEVENTY: RouteRule = RouteRule {
     serves: &[Spelling::BuiltRoute],
 };
 
-const HUGO: RouteRule = RouteRule {
+pub(crate) const HUGO: RouteRule = RouteRule {
     name: "hugo",
     declared_by: &["hugo.toml", "hugo.yaml"],
     serves: &[Spelling::BuiltRoute],
