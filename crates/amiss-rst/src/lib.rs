@@ -238,6 +238,11 @@ fn read_block(
         if let Some(label) = target_definition(line) {
             extraction.anchors.push(label);
         }
+        if block.kind == Kind::Directive
+            && let Some(name) = amiss_wire::extraction::directive_name_option(line)
+        {
+            extraction.anchors.push(name);
+        }
         for mut reference in references(line, at) {
             reference.block = index;
             reference.block_span = block.span;

@@ -247,6 +247,16 @@ pub fn governed_carrier_line(line: &str) -> Option<(String, String, String)> {
     Some((format!("amiss:{name}"), dest.to_owned(), title.to_owned()))
 }
 
+/// The identity a directive's `:name:` option declares, alone on its line.
+/// docutils gives the option to every directive and `MyST` spells a directive
+/// the same way, so one reading serves both profiles; a value carrying a
+/// backtick is a role rather than a name.
+#[must_use]
+pub fn directive_name_option(line: &str) -> Option<String> {
+    let value = line.trim().strip_prefix(":name:")?.trim();
+    (!value.is_empty() && !value.contains('`')).then(|| value.to_owned())
+}
+
 /// The document byte range of a destination's fragment: present only when
 /// the raw destination appears verbatim exactly once inside the reference
 /// span, carries a single `#`, and holds nothing a decoder could alter on

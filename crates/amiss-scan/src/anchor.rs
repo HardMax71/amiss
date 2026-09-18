@@ -501,7 +501,7 @@ pub(crate) const MYST_LINK: DeclarationRule = DeclarationRule {
 /// renderer's slug, plus the spellings a declared generator owns, grouped
 /// by the profile that reads each one. An identity rule joins the union beside
 /// the renderer rules, so it can only grow the set an anchor may match.
-pub const DECLARATIONS: [DeclarationRule; 19] = [
+pub const DECLARATIONS: [DeclarationRule; 21] = [
     DeclarationRule {
         name: "html-id",
         spelling: "an `id` or `name` attribute on a raw HTML element",
@@ -516,7 +516,8 @@ pub const DECLARATIONS: [DeclarationRule; 19] = [
     },
     DeclarationRule {
         name: "attr-list-inline",
-        spelling: "an attribute block directly after an inline construct, `**text**{#id}`",
+        spelling: "an attribute block directly after an inline construct or a bracketed span, \
+                   `**text**{#id}` or `[text]{#id}`",
         adapters: &[Adapter::Markdown],
         declared_by: &[],
     },
@@ -533,6 +534,18 @@ pub const DECLARATIONS: [DeclarationRule; 19] = [
     DeclarationRule {
         name: "myst-target",
         spelling: "a target alone on its line, `(name)=`",
+        adapters: &[Adapter::Markdown],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "myst-directive-name",
+        spelling: "a directive's `:name:` option, or a `figure-md` opener's argument",
+        adapters: &[Adapter::Markdown, Adapter::Rst],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "myst-glossary",
+        spelling: "a term of a definition list opening with `{.glossary}`",
         adapters: &[Adapter::Markdown],
         declared_by: &[],
     },

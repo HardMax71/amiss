@@ -156,9 +156,13 @@ const DEFINITION_TERMS: [(&str, Staged<'static>); 3] = [
 /// into the identity the target declares. Then it writes the same two labels as
 /// plain links, once as the destination and once as a bare fragment, and a
 /// destination the tree holds under a name `docs/notes.md` also declares as a
-/// label. `outside/notes.md` writes a role and a label link where no `conf.py`
-/// governs either.
-const SPHINX_MYST: [(&str, Staged<'static>); 5] = [
+/// label. `docs/widgets.md` writes the names a directive publishes, a
+/// `figure-md` argument, a `:name:` inside an `eval-rst` body, a glossary term,
+/// a bracketed span, and an attribute block sharing an opener's paragraph, then
+/// two spellings that publish nothing: a fence with no brace tag and a
+/// definition list that is no glossary. `outside/notes.md` writes a role, a
+/// label link and a directive name where no `conf.py` governs any of them.
+const SPHINX_MYST: [(&str, Staged<'static>); 6] = [
     (
         "docs/conf.py",
         Staged::File(b"extensions = ['myst_parser']\n"),
@@ -170,7 +174,12 @@ const SPHINX_MYST: [(&str, Staged<'static>); 5] = [
               See {ref}`install-step`.\n\nSee {ref}`absent-step`.\n\n\
               See {py:class}`widgets.Widget`.\n\nSee [the step](quickstart.md#install-step).\n\n\
               See [the label](install-step).\n\nSee [the anchor](#install-step).\n\n\
-              See [no label](absent-step).\n\nSee [the page](quickstart.md).\n",
+              See [no label](absent-step).\n\nSee [the page](quickstart.md).\n\n\
+              See [the note](build-note).\n\nSee [the figure](#widget-figure).\n\n\
+              See [the embedded name](rst-widget).\n\nSee [the term](<#sprocket term>).\n\n\
+              See [the span](span-name).\n\nSee [the block](nested-block).\n\n\
+              See [the plain fence](fence-name).\n\nSee [the plain term](<#plain term>).\n\n\
+              See [the ungoverned name](outside-name).\n",
         ),
     ),
     (
@@ -182,8 +191,25 @@ const SPHINX_MYST: [(&str, Staged<'static>); 5] = [
         Staged::File(b"# Notes\n\n(quickstart.md)=\n\n## Aliased\n"),
     ),
     (
+        "docs/widgets.md",
+        Staged::File(
+            b"# Widgets\n\n\
+              :::{note}\n:name: build-note\n\nBuild it.\n:::\n\n\
+              :::{figure-md} widget-figure\nCaption only.\n:::\n\n\
+              ```{eval-rst}\n.. note::\n  :name: rst-widget\n\n  Again.\n```\n\n\
+              {.glossary}\nsprocket term\n: A toothed wheel.\n\n\
+              A [span of text]{#span-name}.\n\n\
+              :::{admonition} Aside\n{#nested-block}\nText under the opener.\n:::\n\n\
+              :::note\n:name: fence-name\n:::\n\n\
+              plain term\n: Not a glossary.\n",
+        ),
+    ),
+    (
         "outside/notes.md",
-        Staged::File(b"# Notes\n\nSee {doc}`quickstart`.\n\nSee [the label](install-step).\n"),
+        Staged::File(
+            b"# Notes\n\nSee {doc}`quickstart`.\n\nSee [the label](install-step).\n\n\
+              :::{note}\n:name: outside-name\n\nUngoverned.\n:::\n",
+        ),
     ),
 ];
 

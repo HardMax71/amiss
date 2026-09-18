@@ -27,11 +27,75 @@ pub(super) fn markdown_heading(node: &Node) -> Heading {
 /// attribute block is its own last line, so it is read once.
 pub(super) fn paragraph_attribute(node: &Node) -> Vec<String> {
     let above = leading_text(node)
-        .filter(|text| text.lines().nth(1).is_some())
-        .and_then(|text| attribute_line(text.lines().next()));
+        .and_then(opening_attribute)
+        .and_then(attribute_id);
     let below =
         trailing_text(node).and_then(|text| attribute_line(text.trim_end().lines().next_back()));
     above.into_iter().chain(below).collect()
+}
+
+/// The attribute block a run of lines opens with, with something under it for
+/// the block to name. A directive opener leaves no blank line above the block
+/// it holds, so the two share a paragraph and the block `attrs_block` writes
+/// is the opener's own next line.
+fn opening_attribute(text: &str) -> Option<&str> {
+    let mut lines = text.lines();
+    let first = lines.next()?;
+    let line = if directive_opener(first).is_some() {
+        lines.next()?
+    } else {
+        first
+    };
+    let inner = line.trim().strip_prefix('{')?.strip_suffix('}')?;
+    lines.next().is_some().then_some(inner)
+}
+
+/// The brace-wrapped tag a `MyST` directive opens with, on a fence of at least
+/// three colons, backticks or tildes, and whatever the opener writes after it.
+fn directive_opener(line: &str) -> Option<(&str, &str)> {
+    let trimmed = line.trim_start();
+    let fence = trimmed
+        .chars()
+        .next()
+        .filter(|character| matches!(character, ':' | '`' | '~'))?;
+    let rest = trimmed.trim_start_matches(fence);
+    if trimmed.len().saturating_sub(rest.len()) < 3 {
+        return None;
+    }
+    rest.strip_prefix('{')?.split_once('}')
+}
+
+/// The identities a directive declares. `MyST` writes the `:name:` option
+/// block under the opener, and the reStructuredText inside an `eval-rst` body
+/// names its own directives the same way, so every option line under one
+/// opener is read. `figure-md` takes the name as its argument instead, which
+/// no other directive does: the rest write a path, a title or a domain object
+/// there.
+pub(super) fn directive_names(block: Option<&str>) -> Vec<String> {
+    let mut lines = block.unwrap_or_default().lines();
+    let Some((tag, argument)) = lines.next().and_then(directive_opener) else {
+        return Vec::new();
+    };
+    let argument = argument.trim();
+    let figure =
+        (tag == "figure-md" && !argument.is_empty() && !argument.contains(char::is_whitespace))
+            .then(|| argument.to_owned());
+    figure
+        .into_iter()
+        .chain(lines.filter_map(amiss_wire::extraction::directive_name_option))
+        .collect()
+}
+
+/// The terms a glossary declares, which Sphinx keeps under the term itself
+/// rather than under a slug of it. `MyST` marks one by opening the definition
+/// list with a `{.glossary}` attribute block, and that block sits on the
+/// directive opener's line when a directive holds the list.
+pub(super) fn glossary_terms(node: &Node) -> Vec<String> {
+    let content = text_content(node);
+    if !opening_attribute(&content).is_some_and(|inner| has_class(inner, "glossary")) {
+        return Vec::new();
+    }
+    terms(&content).into_iter().map(str::to_owned).collect()
 }
 
 /// The terms a definition list writes, which Hugo publishes an identity for
@@ -76,17 +140,28 @@ pub(super) fn myst_target(line: &str) -> Option<String> {
     (!inner.is_empty() && !inner.contains([')', '('])).then(|| inner.to_owned())
 }
 
-/// The identity an attribute block declares for the inline construct it
-/// directly follows, which is the other half of what `attr_list` reads. The
-/// block opens the text, because anything between it and the construct breaks
-/// the pairing, and something follows it, because a block that ends its own
-/// block is the one the block rule already names.
-pub(super) fn inline_attribute(text: &str) -> Option<String> {
-    let (inner, rest) = text.strip_prefix('{')?.split_once('}')?;
-    if rest.trim().is_empty() {
-        return None;
+/// The identities attribute blocks declare for the inline constructs they
+/// directly follow, which is the other half of what `attr_list` reads. A block
+/// after a construct the parser built opens the text, because anything between
+/// the two breaks the pairing, and something follows it, because a block that
+/// ends its own block is the one the block rule already names. A bracketed
+/// span carries its own `]`, so a block against one is read from the text it
+/// sits in wherever that text falls.
+pub(super) fn inline_attribute(text: &str, after_node: bool) -> Vec<String> {
+    let mut found = Vec::new();
+    if after_node
+        && let Some((inner, rest)) = text.strip_prefix('{').and_then(|body| body.split_once('}'))
+        && !rest.trim().is_empty()
+    {
+        found.extend(attribute_id(inner));
     }
-    attribute_id(inner)
+    for tail in text.split("]{").skip(1) {
+        found.extend(
+            tail.split_once('}')
+                .and_then(|(inner, _)| attribute_id(inner)),
+        );
+    }
+    found
 }
 
 /// The text a renderer slugs a heading by: text with code and math verbatim,
@@ -227,6 +302,19 @@ fn attribute_id(inner: &str) -> Option<String> {
         found = Some(value.to_owned());
     }
     found
+}
+
+/// Whether an attribute block names one class, in the `.name` spelling the
+/// extension accepts beside an identity.
+fn has_class(inner: &str, class: &str) -> bool {
+    let mut rest = inner.strip_prefix(':').unwrap_or(inner).trim();
+    while let Some((item, tail)) = attribute_item(rest) {
+        rest = tail;
+        if item.strip_prefix('.') == Some(class) {
+            return true;
+        }
+    }
+    false
 }
 
 /// One attribute and whatever follows it. A quoted value is one attribute
