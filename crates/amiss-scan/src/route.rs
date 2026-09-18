@@ -52,7 +52,7 @@ const ANTORA: RouteRule = RouteRule {
     serves: &[Spelling::AntoraResource],
 };
 
-const DOCUSAURUS: RouteRule = RouteRule {
+pub const DOCUSAURUS: RouteRule = RouteRule {
     name: "docusaurus",
     declared_by: &[
         "docusaurus.config.ts",
@@ -176,12 +176,18 @@ const ANTORA_FAMILIES: [(&str, &[u8]); 5] = [
 
 /// The plugin content paths Docusaurus reads by default, relative to the site
 /// directory, with `*` standing for one segment.
-const DOCUSAURUS_CONTENT_ROOTS: [&[&str]; 4] = [
+pub const DOCUSAURUS_CONTENT_ROOTS: [&[&str]; 4] = [
     &["docs"],
     &["blog"],
     &["src", "pages"],
     &["versioned_docs", "*"],
 ];
+
+/// The opening Docusaurus's own default exclusion covers under every content
+/// path it reads, for a file and for a directory alike. A document named that
+/// way is served at no URL of its own, so it is rendered into whichever pages
+/// import it rather than published as one.
+pub const UNROUTED_OPENING: &str = "_";
 
 /// The opening Docusaurus expands to its own site directory, which is the
 /// `site-alias` spelling written out.
@@ -340,6 +346,29 @@ pub fn unplaced(snapshot: &SnapshotDiscovery, document: &RepoPath, missing: &Rep
         (rule.serves(Spelling::BuiltRoute) || (page && rule.serves(Spelling::BuiltPage)))
             && declared_root(snapshot, document.as_bytes(), rule).is_some()
     })
+}
+
+/// Whether no router publishes this document as a page of its own. A
+/// Docusaurus content path excludes every name opening with `_`, a directory
+/// as well as a file, so such a document is rendered into the pages that
+/// import it and a fragment written in it names an identity of whichever page
+/// that is. One of them may be rendered into several, so the tree fixes
+/// neither the page nor the identities it publishes.
+#[must_use]
+pub fn unrouted(snapshot: &SnapshotDiscovery, adapter: Adapter, document: &RepoPath) -> bool {
+    if !matches!(adapter, Adapter::Markdown | Adapter::Mdx) {
+        return false;
+    }
+    let raw = document.as_bytes();
+    let Some(root) =
+        declared_root(snapshot, raw, &DOCUSAURUS).and_then(|site| content_root(&site, raw))
+    else {
+        return false;
+    };
+    raw.get(root.len()..)
+        .unwrap_or_default()
+        .split(|byte| *byte == b'/')
+        .any(|segment| segment.starts_with(UNROUTED_OPENING.as_bytes()))
 }
 
 /// The directory a document sits in, without its trailing separator; empty

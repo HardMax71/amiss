@@ -278,7 +278,11 @@ Heading evaluation expands the closed local include subset in source order. An A
 literal relative target was already scanned under the same adapter; each nested path is relative to
 the file that includes it. An MDX partial joins the same subset: a default import of a relative
 Markdown document rendered as an element, which is how Docusaurus composes one page out of
-several files, and the identities flow to the page rather than back to the partial. So does a
+several files, and the identities flow to the page rather than back to the partial. So a fragment
+written inside a document Docusaurus publishes no page for is undecided rather than absent: the
+identity it names belongs to whichever page renders the file, and one partial may be rendered
+into several. [What a documentation router serves](route-spellings.md) holds the names a content
+path excludes and what stays a path there. So does a
 MkDocs snippet line, `--8<-- "path"`, under a tree that declares MkDocs, resolved from the
 directory holding that declaration rather than from beside the document. A generator
 instruction under the same declaration, `::: pydantic.config`, is an edge this engine reads
@@ -335,10 +339,10 @@ setting that clears a finding.
 against, and how far apart they are.
 
 What the check will not do is judge on a parse that did not happen. A target that is not a
-parsing document class, an LFS pointer, a document the parser rejects, or one the anchor
-budget cannot afford keeps `unsupported-reference-semantics`, which now means exactly
-"not evaluated". The projection stays the whole file: an anchor says where to look, not
-which bytes the reference depends on.
+parsing document class, an LFS pointer, a document the parser rejects, one the anchor
+budget cannot afford, or one no router publishes as a page keeps
+`unsupported-reference-semantics`, which now means exactly "not evaluated". The projection
+stays the whole file: an anchor says where to look, not which bytes the reference depends on.
 
 Version scope is equally narrow. The candidate is read, and a full immutable ID is read only from
 objects already present under the declared Git roots; unavailable objects are delegated for

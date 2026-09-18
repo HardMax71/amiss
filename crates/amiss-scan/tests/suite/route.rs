@@ -446,6 +446,62 @@ fn a_docusaurus_site_answers_bare_paths_from_its_content_root_and_the_site_alias
     assert_eq!(outcomes(&chain), want);
 }
 
+/// A document Docusaurus publishes no page for is rendered into whichever
+/// pages import it, so a fragment-only link written in it names an identity
+/// of a page the tree does not fix. The identity the file writes itself still
+/// resolves and the one it does not is undecided rather than absent. Only the
+/// fragment moves: the paths beside it are read from the file as written,
+/// wherever it is rendered. The page that imports it keeps proving absence,
+/// and the copy under `notes/`, with no `docusaurus.config.*` above it,
+/// answers every fragment from its own text.
+#[test]
+fn a_docusaurus_partial_leaves_the_page_that_renders_it_undecided() {
+    let chain = amiss_fixtures::docusaurus_partial().expect("the fixture stages");
+    let partial = "website/docs/api/plugins/_tags.mdx";
+    let page = "website/docs/api/plugins/plugin-content-docs.mdx";
+    let guide = "website/docs/api/plugins/guide.mdx";
+    let absent = "website/docs/api/plugins/absent.mdx";
+    let outside = "notes/_tags.mdx";
+    let want = expected(vec![
+        row(
+            partial,
+            Some(partial),
+            ResolutionTag::UnsupportedSemantics,
+            None,
+        ),
+        row(
+            partial,
+            Some(partial),
+            ResolutionTag::Resolved,
+            Some(partial),
+        ),
+        row(partial, Some(guide), ResolutionTag::Resolved, Some(guide)),
+        row(partial, Some(absent), ResolutionTag::Missing, Some(absent)),
+        row(page, Some(page), ResolutionTag::Resolved, Some(page)),
+        row(page, Some(page), ResolutionTag::Missing, None),
+        row(outside, Some(outside), ResolutionTag::Missing, None),
+        row(
+            outside,
+            Some(outside),
+            ResolutionTag::Resolved,
+            Some(outside),
+        ),
+        row(
+            outside,
+            Some("notes/guide.mdx"),
+            ResolutionTag::Resolved,
+            Some("notes/guide.mdx"),
+        ),
+        row(
+            outside,
+            Some("notes/absent.mdx"),
+            ResolutionTag::Missing,
+            Some("notes/absent.mdx"),
+        ),
+    ]);
+    assert_eq!(outcomes(&chain), want);
+}
+
 /// Under `mkdocs.yml`, a destination written as raw HTML is relative to the
 /// directory the page is published at rather than to the source file, and the
 /// trailing slash it carries names a page: the index page's own directory
