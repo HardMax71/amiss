@@ -19,7 +19,7 @@ use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::{Classification, classify};
 use crate::resources::{Aggregate, ScanResources};
 use crate::route::{
-    anchors, candidates, directory, generator_alias, template_expression, unplaced,
+    anchors, candidates, directory, generator_alias, redirected, template_expression, unplaced,
 };
 
 mod anchor;
@@ -28,7 +28,7 @@ mod forge;
 mod history;
 mod line;
 mod site;
-mod syntax;
+pub(crate) mod syntax;
 mod transclusion;
 
 pub(crate) use line::{LineRange, named_region_bytes, safe_line_number, selected_line_bytes};
@@ -396,11 +396,14 @@ fn native(
         Ok(target) => target,
         Err(resolution) => return Ok((unsupported_intent(query, fragment), resolution)),
     };
-    let served = anchors.iter().find_map(|(parent, relative)| {
-        let (candidate, kind) = normalized_path_under(parent, is_image, relative).ok()?;
-        let route = routed(resolver.snapshot, &candidate, kind);
-        resolver.snapshot.locate(&route).is_some().then_some(route)
-    });
+    let served = anchors
+        .iter()
+        .find_map(|(parent, relative)| {
+            let (candidate, kind) = normalized_path_under(parent, is_image, relative).ok()?;
+            let route = routed(resolver.snapshot, &candidate, kind);
+            resolver.snapshot.locate(&route).is_some().then_some(route)
+        })
+        .or_else(|| redirected(resolver.snapshot, document, anchors, is_image));
     let row = lookup(
         resolver,
         served.as_ref().unwrap_or(&path),

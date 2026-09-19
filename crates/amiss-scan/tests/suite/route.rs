@@ -875,6 +875,65 @@ fn a_declaration_reaches_no_spelling_that_withholds_an_answer() {
     assert_eq!(unreachable, ["astro", "eleventy", "hugo", "jekyll"]);
 }
 
+/// A page that moved leaves the URL it was served at in its own frontmatter,
+/// and under a declared `hugo-pages` the destination a reader writes for that
+/// URL reaches the file holding the content now. The block reaches a file the
+/// tree holds and nothing else: a URL two pages claim is decided between
+/// neither, a URL no page claims is missing where it always was, and a flow
+/// sequence is a shape this reader declines rather than guesses at. The
+/// bundle reader's own URL is the directory holding it, so its climb is a URL
+/// the block answers, while the leaf reader beside it writes the same
+/// destination and the reading beside its source is no URL, so it stays
+/// missing. Under `plain/`, where nothing declares a router, the same block
+/// and the same destination leave the same missing path they always left.
+#[test]
+fn a_page_that_moved_answers_the_url_it_declares_it_moved_from() {
+    let chain = amiss_fixtures::page_redirects().expect("the fixture stages");
+    let notes = "site/notes/index.md";
+    let want: Vec<Outcome> = [
+        (
+            notes,
+            "site/old/guide",
+            ResolutionTag::Resolved,
+            Some("site/guide/index.md"),
+        ),
+        (
+            notes,
+            "site/shared/page",
+            ResolutionTag::Missing,
+            Some("site/shared/page"),
+        ),
+        (
+            notes,
+            "site/nothing",
+            ResolutionTag::Missing,
+            Some("site/nothing"),
+        ),
+        (
+            notes,
+            "site/flowed",
+            ResolutionTag::Missing,
+            Some("site/flowed"),
+        ),
+        (
+            "site/notes/reader.md",
+            "site/old/guide",
+            ResolutionTag::Missing,
+            Some("site/old/guide"),
+        ),
+        (
+            "plain/index.md",
+            "plain/old/guide",
+            ResolutionTag::Missing,
+            Some("plain/old/guide"),
+        ),
+    ]
+    .into_iter()
+    .map(|(document, intent, tag, answered)| row(document, Some(intent), tag, answered))
+    .collect();
+    assert_eq!(outcomes(&chain), expected(want));
+}
+
 /// A repository that declares its own router gets that router's resolving
 /// spellings where no configuration file names the generator. Under
 /// `hugo-pages` a page is published at a directory of its own name, so a

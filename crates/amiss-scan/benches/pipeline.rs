@@ -147,6 +147,7 @@ fn construct_reports(bencher: Bencher<'_, '_>, case: (ReportShape, usize)) {
                 governed: Vec::new(),
                 declared_anchors: Vec::new(),
                 declared_name: None,
+                declared_redirects: Vec::new(),
                 anchor_source: None,
             });
             (
@@ -223,6 +224,7 @@ fn resolve_repository_path(bencher: Bencher<'_, '_>, shape: ResolutionShape) {
         documents: Vec::new(),
         labels: BTreeMap::new(),
         published_routes: BTreeMap::new(),
+        redirect_routes: BTreeMap::new(),
         sole_sites: BTreeMap::new(),
         sphinx_included: std::collections::BTreeSet::new(),
         antora_components: BTreeMap::new(),
@@ -368,6 +370,7 @@ fn document_discovery(count: usize, status: &DocumentStatus) -> SnapshotDiscover
         documents,
         labels: BTreeMap::new(),
         published_routes: BTreeMap::new(),
+        redirect_routes: BTreeMap::new(),
         sole_sites: BTreeMap::new(),
         sphinx_included: std::collections::BTreeSet::new(),
         antora_components: BTreeMap::new(),

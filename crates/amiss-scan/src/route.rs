@@ -6,6 +6,7 @@ use amiss_wire::uri::scheme;
 
 use crate::discovery::{DocumentStatus, Located, SnapshotDiscovery};
 use crate::document::excluded_by_built_in;
+use crate::resolve::syntax::normalized_path_under;
 
 /// A spelling a router serves for a page whose source file is named
 /// otherwise. The first three were harvested from the router itself and hold
@@ -182,6 +183,10 @@ pub const ROUTERS: [RouteRule; 14] = [
 /// spellings under the directory holding the file.
 pub const ROUTER_DECLARATION: &str = ".amiss/router.yml";
 const DECLARED_ROUTER: &[u8] = b"router:";
+
+/// The frontmatter key a page lists the URLs it moved away from under, which
+/// a router serving page URLs answers with the page that carries the block.
+const PAGE_REDIRECTS: &[u8] = b"aliases:";
 
 /// Every spelling a declaration turns on, which is every spelling that
 /// resolves a destination against the tree and nothing else. A rule serving
@@ -730,20 +735,21 @@ fn zola_content(snapshot: &SnapshotDiscovery, document: &RepoPath) -> Option<Vec
     .then(|| content.as_bytes().to_vec())
 }
 
-/// Every route the snapshot's documents publish, and the document publishing
-/// each. A route two documents claim is left out rather than decided between
-/// them.
+/// Every route the snapshot's documents claim and the document claiming each,
+/// as the routes pages are published at and, apart from them, the page URLs
+/// pages declare they moved away from. The two stay apart because a published
+/// route answers a path as well as a URL while a redirect answers only a URL.
 #[must_use]
-pub(crate) fn published_routes(snapshot: &SnapshotDiscovery) -> BTreeMap<RepoPath, RepoPath> {
-    let mut routes: BTreeMap<RepoPath, RepoPath> = BTreeMap::new();
-    let declared = snapshot
-        .declared_routers
-        .values()
-        .any(|router| *router == DOCUSAURUS.name);
-    if declaring_directories(snapshot, &DOCUSAURUS).is_empty() && !declared {
-        return routes;
+pub(crate) fn published_routes(
+    snapshot: &SnapshotDiscovery,
+) -> (BTreeMap<RepoPath, RepoPath>, BTreeMap<RepoPath, RepoPath>) {
+    let names = published_by(snapshot, &DOCUSAURUS);
+    let redirects = published_by(snapshot, &HUGO_PAGES);
+    let mut published: Vec<(RepoPath, RepoPath)> = Vec::new();
+    let mut moved: Vec<(RepoPath, RepoPath)> = Vec::new();
+    if !names && !redirects {
+        return (sole_claims(published), sole_claims(moved));
     }
-    let mut claimed_twice: BTreeSet<RepoPath> = BTreeSet::new();
     for record in &snapshot.documents {
         let DocumentStatus::Scanned(scanned) = &record.status else {
             continue;
@@ -751,11 +757,58 @@ pub(crate) fn published_routes(snapshot: &SnapshotDiscovery) -> BTreeMap<RepoPat
         if !matches!(record.adapter, Some(Adapter::Markdown | Adapter::Mdx)) {
             continue;
         }
-        let Some(route) = published_route(snapshot, &record.path, scanned.declared_name.as_deref())
-        else {
-            continue;
-        };
-        if routes.insert(route.clone(), record.path.clone()).is_some() {
+        if names
+            && let Some(route) =
+                published_route(snapshot, &record.path, scanned.declared_name.as_deref())
+        {
+            published.push((route, record.path.clone()));
+        }
+        if redirects {
+            moved.extend(
+                moved_from(snapshot, &record.path, &scanned.declared_redirects)
+                    .into_iter()
+                    .map(|route| (route, record.path.clone())),
+            );
+        }
+    }
+    (sole_claims(published), sole_claims(moved))
+}
+
+/// The page a destination reaches through a URL its target moved away from.
+/// The destination is read against the page's own URL and answered by the
+/// page declaring that URL, and no other reading is asked: a redirect answers
+/// a URL, never a path beside a source file, and for a page bundle the two
+/// are the same directory anyway.
+#[must_use]
+pub(crate) fn redirected(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    anchors: &[(Vec<u8>, String)],
+    is_image: bool,
+) -> Option<RepoPath> {
+    if snapshot.redirect_routes.is_empty() {
+        return None;
+    }
+    let published = page_route(document.as_bytes(), true);
+    anchors
+        .iter()
+        .filter(|(parent, _)| *parent == published)
+        .find_map(|(parent, relative)| {
+            let (candidate, _kind) = normalized_path_under(parent, is_image, relative).ok()?;
+            snapshot.redirect_routes.get(&candidate).cloned()
+        })
+}
+
+/// The document each route names, from the claims the documents made. A route
+/// two of them claim is left out rather than decided between them.
+fn sole_claims(claims: Vec<(RepoPath, RepoPath)>) -> BTreeMap<RepoPath, RepoPath> {
+    let mut routes: BTreeMap<RepoPath, RepoPath> = BTreeMap::new();
+    let mut claimed_twice: BTreeSet<RepoPath> = BTreeSet::new();
+    for (route, document) in claims {
+        if routes
+            .insert(route.clone(), document.clone())
+            .is_some_and(|held| held != document)
+        {
             claimed_twice.insert(route);
         }
     }
@@ -763,6 +816,30 @@ pub(crate) fn published_routes(snapshot: &SnapshotDiscovery) -> BTreeMap<RepoPat
         routes.remove(&route);
     }
     routes
+}
+
+/// Every page URL one document declares it moved away from. The block holds
+/// what a browser would ask for, so each entry is read against the directory
+/// the page's own URL sits in, which is one level above the route the page is
+/// published at. An entry opening with a slash names a site route, and stays
+/// where every site route stays. A router that serves no page URL above this
+/// document leaves the block meaning nothing.
+fn moved_from(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    declared: &[String],
+) -> Vec<RepoPath> {
+    if declared.is_empty() || site_root(snapshot, document.as_bytes(), &HUGO_PAGES).is_none() {
+        return Vec::new();
+    }
+    let published = page_route(document.as_bytes(), true);
+    let parent = directory(&published).to_vec();
+    declared
+        .iter()
+        .filter(|entry| !entry.starts_with('/'))
+        .filter_map(|entry| normalized_path_under(&parent, false, entry).ok())
+        .map(|(route, _kind)| route)
+        .collect()
 }
 
 /// Where one document is published: the name it declares in place of its own
@@ -799,6 +876,17 @@ fn declaring_directories(snapshot: &SnapshotDiscovery, rule: &RouteRule) -> BTre
         })
         .map(|(path, _)| directory(path.as_bytes()).to_vec())
         .collect()
+}
+
+/// Whether the routes one rule serves are read for this tree at all: a
+/// configuration file selecting the rule somewhere in the tree, or a
+/// declaration naming it.
+fn published_by(snapshot: &SnapshotDiscovery, rule: &RouteRule) -> bool {
+    !declaring_directories(snapshot, rule).is_empty()
+        || snapshot
+            .declared_routers
+            .values()
+            .any(|declared| declared == rule.name)
 }
 
 /// The directory each generator this tree declares exactly once is configured
@@ -867,27 +955,63 @@ pub(crate) fn declares(rule: &RouteRule, path: &RepoPath) -> bool {
         .any(|name| path.as_bytes().rsplit(|byte| *byte == b'/').next() == Some(name.as_bytes()))
 }
 
-/// The name a document declares for its own page in frontmatter, which is
-/// `slug` before `id`, each a plain scalar on a line of its own. Nothing else
-/// in the region is read, and the region stays opaque to the grammar.
+/// What a document declares about its own publication in frontmatter: the
+/// name it publishes under, which is `slug` before `id`, and the page URLs it
+/// is also served at. A name is a plain scalar on a line of its own and the
+/// URLs are the block under `aliases`. Nothing else in the region is read, and
+/// the region stays opaque to the grammar.
 #[must_use]
-pub(crate) fn declared_name(adapter: Adapter, source: &[u8]) -> Option<String> {
+pub(crate) fn declared_publication(
+    adapter: Adapter,
+    source: &[u8],
+) -> (Option<String>, Vec<String>) {
     if !matches!(adapter, Adapter::Markdown | Adapter::Mdx) {
-        return None;
+        return (None, Vec::new());
     }
-    let region = amiss_md::frontmatter::recognize(source)?;
-    let body = source.get(region.bom_bytes..region.suffix_offset)?;
+    let Some(body) = amiss_md::frontmatter::recognize(source)
+        .and_then(|region| source.get(region.bom_bytes..region.suffix_offset))
+    else {
+        return (None, Vec::new());
+    };
     let mut id = None;
     let mut slug = None;
+    let mut redirects: Vec<String> = Vec::new();
+    let mut listing = false;
     for line in amiss_md::lines::scan(body) {
         let content = line.content(body);
+        if listing && let Some(entry) = sequence_entry(content) {
+            redirects.push(entry.to_owned());
+            continue;
+        }
+        listing = opens_sequence(content, PAGE_REDIRECTS);
         if let Some(value) = scalar(content, b"slug:") {
             slug = slug.or(Some(value));
         } else if let Some(value) = scalar(content, b"id:") {
             id = id.or(Some(value));
         }
     }
-    slug.or(id).map(str::to_owned)
+    (slug.or(id).map(str::to_owned), redirects)
+}
+
+/// Whether a key opens a block sequence: it opens the line and carries no
+/// value of its own, so what follows is the block rather than a scalar.
+fn opens_sequence(line: &[u8], key: &[u8]) -> bool {
+    line.strip_prefix(key)
+        .is_some_and(|rest| rest.iter().all(|byte| matches!(*byte, b' ' | b'\t')))
+}
+
+/// One entry of the block a key opened: a dash at whatever depth, a space,
+/// and the value a scalar is read as. A line shaped any other way is not an
+/// entry and closes the block, so nothing outside it is read.
+fn sequence_entry(line: &[u8]) -> Option<&str> {
+    let opened = line
+        .iter()
+        .position(|byte| !matches!(*byte, b' ' | b'\t'))?;
+    let entry = line.get(opened..)?;
+    entry
+        .starts_with(b"- ")
+        .then(|| scalar(entry, b"-"))
+        .flatten()
 }
 
 /// One key's value where the key opens the line: a scalar closed by the quote
