@@ -56,7 +56,8 @@ for a person to read and never a verdict. Pre-existing is the backlog, the probl
 already there before this change. The same Fix counts under both profiles; the exit code
 carries the verdict. 0 means the run completed and nothing blocks, 1 means a finding blocks,
 and 2 means the run itself could not be trusted, so there is no verdict to act on.
-[Profiles and findings](profiles.md) lists every finding kind with its disposition.
+[Profiles and findings](profiles.md) lists every finding kind with its disposition, and
+[Analysis errors](errors.md) every code behind that 2.
 
 There is no ignore file, no exclude list, and no way to silence one finding. The nine skipped
 directory names are fixed (`node_modules`, `vendor`, `third_party`, `dist`, `build`, `.next`,
