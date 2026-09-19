@@ -667,6 +667,7 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
     SnapshotDiscovery {
         labels: std::collections::BTreeMap::new(),
         published_routes: std::collections::BTreeMap::new(),
+        sole_sites: std::collections::BTreeMap::new(),
         sphinx_included: std::collections::BTreeSet::new(),
         antora_components: std::collections::BTreeMap::new(),
         documents: paths

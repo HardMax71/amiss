@@ -167,8 +167,10 @@ Docusaurus tree it is eight of the findings.
 
 `mkdocs-snippet` does the same composition in Markdown, and it is the one row this table
 gates on a file. The syntax belongs to the `pymdownx.snippets` extension, so the line is
-read only when `mkdocs.yml` or `mkdocs.yaml` sits on the document's ancestor chain, the same
-test [Route spellings](route-spellings.md) applies to a generator's own routes. Without one
+read only when `mkdocs.yml` or `mkdocs.yaml` sits on the document's ancestor chain, and on
+that chain alone: the rule moves the directory an include is read from, which the one site a
+tree declares cannot stand in for the way it does for the routes in
+[Route spellings](route-spellings.md). Without one
 the line is ordinary text and includes nothing, which is what it is. The path is resolved
 from the directory holding that file rather than from beside the document, because that is
 where MkDocs runs, so a page whose whole body is `--8<-- "CONTRIBUTING.md"` publishes what

@@ -203,6 +203,33 @@ const DOCUSAURUS_PARTIAL: [(&str, Staged<'static>); 6] = [
     ("notes/guide.mdx", Staged::File(b"# Guide\n")),
 ];
 
+/// A Docusaurus site under `website/` whose pages are the sibling `docs/`
+/// tree its configuration reads as `../docs`, the layout the largest sites in
+/// the harvest write. The nested page names a file at that content root, the
+/// `@site/` alias, and a path nothing holds. A Jekyll site under `site/`
+/// declares a generator whose pages this engine does not place, and
+/// `notes/readme.md` is under neither declaration.
+const DOCUSAURUS_SIBLING_DOCS: [(&str, Staged<'static>); 6] = [
+    (
+        "website/docusaurus.config.js",
+        Staged::File(b"export default {};\n"),
+    ),
+    ("website/static/img/logo.png", Staged::File(b"png\n")),
+    (
+        "docs/guides/setup.md",
+        Staged::File(
+            b"# Setup\n\n[reference](reference.md) [absent](absent.md) \
+              [logo](@site/static/img/logo.png)\n",
+        ),
+    ),
+    ("docs/reference.md", Staged::File(b"# Reference\n")),
+    ("site/_config.yml", Staged::File(b"title: Notes\n")),
+    (
+        "notes/readme.md",
+        Staged::File(b"# Notes\n\n[gone](absent.md)\n"),
+    ),
+];
+
 /// A mkdocs site under `site/`: an index page whose raw HTML writes a
 /// directory URL that the tree answers with a page source and one it answers
 /// with nothing, a markdown link the generator rewrites from the source
@@ -247,7 +274,7 @@ const MKDOCS_SITE: [(&str, Staged<'static>); 8] = [
 /// A Sphinx source tree under `docs/`: `conf.py` beside the index, a nested
 /// page writing the same source-root-absolute `:doc:` targets, one target
 /// that exists and one that does not, and `notes/readme.rst` outside any
-/// `conf.py` so its absolute target stays a site route.
+/// `conf.py`, where the absolute target names the one source tree there is.
 const SPHINX_SOURCE: [(&str, Staged<'static>); 5] = [
     ("docs/conf.py", Staged::File(b"project = 'widgets'\n")),
     (
@@ -373,6 +400,13 @@ pub fn docusaurus_site() -> std::io::Result<CommitChain> {
 /// Any filesystem failure.
 pub fn docusaurus_partial() -> std::io::Result<CommitChain> {
     staged_repository(&DOCUSAURUS_PARTIAL)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn docusaurus_sibling_docs() -> std::io::Result<CommitChain> {
+    staged_repository(&DOCUSAURUS_SIBLING_DOCS)
 }
 
 /// # Errors
