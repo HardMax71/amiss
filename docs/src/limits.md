@@ -63,7 +63,7 @@ memory and are represented by their exact omitted count.
 | `projection-records-compared-per-snapshot` | 200,000 |
 | `aggregate-projection-projected-bytes-per-snapshot` | 67,108,864 |
 | `aggregate-projection-preview-bytes-per-snapshot` | 16,777,216 |
-| `aggregate-document-bytes-per-snapshot` | 33,554,432 |
+| `aggregate-document-bytes-per-snapshot` | 83,886,080 |
 | `raw-link-destination-bytes` | 16,384 |
 | `parser-nesting` | 256 |
 | `parser-nodes-per-document` | 250,000 |
@@ -80,7 +80,7 @@ memory and are represented by their exact omitted count.
 | `evaluator-managed-memory-bytes` | 1,073,741,824 |
 <!-- amiss-doc-contract:limits:end -->
 
-Two of these ceilings have been measured against real repositories rather than reasoned
+Three of these ceilings have been measured against real repositories rather than reasoned
 about. `references-per-document` was 4,096 until fastapi's release notes came in at 7,075
 references in one auto-generated changelog; the next largest documents measured anywhere are
 just's and helix's changelogs, at about 2,900 and still growing. `machine-json-bytes` moved
@@ -98,6 +98,18 @@ which would have fitted the old reservation. What the reservation buys now is he
 than admission. `complete-findings` allows 100,000 findings, and at the leanest finding this
 engine builds a hundred thousand of them fit under the reservation, so that counter is what
 stops a findings flood and the reservation backstops anything heavier.
+
+`aggregate-document-bytes-per-snapshot` is the third, and it was held at 33,554,432 by an
+ordering bug rather than by a measurement. The report used to be spelled into memory before
+its size was checked, so a document set whose report would overrun `machine-json-bytes` died
+in the allocator instead of naming the ceiling it crossed, and the document total was the
+only counter that fired early enough to prevent that. The size check now counts the report
+as it is written to a sink, so an overrun ends the run at exit 2 with `OUTPUT_LIMIT_EXCEEDED`
+and the document budget is free to answer its own question. At 83,886,080 the Kubernetes
+website scans: 8,232 documents and 70,743,496 bytes of them, 68,408 references, a 232 MB
+report, and an 829 MB peak against the 1 GiB address space. MDN's content repository sits on
+the other side of the report ceiling at 333,847,393 bytes, and now says so at a 614 MB peak
+rather than aborting at 946 MB.
 
 The last two rows are sandbox-descriptor values rather than ordinary scanner counters.
 The CLI applies the managed-memory value as an address-space limit on Unix; the current
