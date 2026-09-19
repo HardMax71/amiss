@@ -152,6 +152,7 @@ fn late_policy_bound_adapter(bencher: Bencher<'_, '_>) {
         entries: BTreeMap::new(),
         labels: BTreeMap::new(),
         published_routes: BTreeMap::new(),
+        sole_sites: BTreeMap::new(),
         sphinx_included: std::collections::BTreeSet::new(),
         antora_components: BTreeMap::new(),
     };

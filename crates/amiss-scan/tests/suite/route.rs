@@ -389,7 +389,7 @@ fn an_antora_component_reaches_every_root_that_names_it() {
 /// nothing publishes stays missing. The
 /// intent keeps the spelling the author wrote while the resolution names the
 /// file that answered, and a document outside the site keeps the bare path it
-/// wrote while the alias becomes a destination this run cannot answer. A
+/// wrote while the alias names the one site this tree declares. A
 /// webpack inline request is a path under no site at all, while a name that
 /// carries a bang past its opening, or a directory opening with an at sign,
 /// is a path like any other.
@@ -474,7 +474,12 @@ fn a_docusaurus_site_answers_bare_paths_from_its_content_root_and_the_site_alias
             ResolutionTag::Missing,
             Some("static-assets.mdx"),
         ),
-        row("README.md", None, ResolutionTag::UnsupportedSemantics, None),
+        row(
+            "README.md",
+            Some("website/static/img/logo.png"),
+            ResolutionTag::Resolved,
+            Some("website/static/img/logo.png"),
+        ),
         row("README.md", None, ResolutionTag::Invalid, None),
         row(
             "README.md",
@@ -487,6 +492,46 @@ fn a_docusaurus_site_answers_bare_paths_from_its_content_root_and_the_site_alias
             Some("@internal/notes.md"),
             ResolutionTag::Resolved,
             Some("@internal/notes.md"),
+        ),
+    ]);
+    assert_eq!(outcomes(&chain), want);
+}
+
+/// A site under `website/` reads the sibling `docs/` its configuration names,
+/// and that tree carries one site, so the page there is bound to it: the bare
+/// Markdown path reaches the content root, the alias reaches the site
+/// directory, and a path nothing holds is missing under the name its author
+/// wrote. A rule that answers for a build rather than for the tree does not
+/// bind the same way. `notes/readme.md` sits under no Jekyll declaration, so
+/// the file it names stays missing rather than becoming that site's to serve.
+#[test]
+fn a_docusaurus_site_answers_the_sibling_docs_tree_its_configuration_reads() {
+    let chain = amiss_fixtures::docusaurus_sibling_docs().expect("the fixture stages");
+    let page = "docs/guides/setup.md";
+    let want = expected(vec![
+        row(
+            page,
+            Some("docs/guides/reference.md"),
+            ResolutionTag::Resolved,
+            Some("docs/reference.md"),
+        ),
+        row(
+            page,
+            Some("docs/guides/absent.md"),
+            ResolutionTag::Missing,
+            Some("docs/guides/absent.md"),
+        ),
+        row(
+            page,
+            Some("website/static/img/logo.png"),
+            ResolutionTag::Resolved,
+            Some("website/static/img/logo.png"),
+        ),
+        row(
+            "notes/readme.md",
+            Some("notes/absent.md"),
+            ResolutionTag::Missing,
+            Some("notes/absent.md"),
         ),
     ]);
     assert_eq!(outcomes(&chain), want);
@@ -649,8 +694,9 @@ fn an_asciidoc_document_publishes_the_identities_a_cross_reference_names() {
 
 /// Under `conf.py`, a source-root-absolute `:doc:` target is the docname
 /// under that directory with the source suffix, from any depth, while a
-/// relative target keeps resolving beside its document and a document with no
-/// `conf.py` above it keeps the declared site route.
+/// relative target keeps resolving beside its document. A document with no
+/// `conf.py` above it is answered by the one source directory the tree
+/// declares, which is the docname the author wrote it for.
 #[test]
 fn a_sphinx_source_directory_anchors_absolute_doc_roles_at_its_conf() {
     let chain = amiss_fixtures::sphinx_source().expect("the fixture stages");
@@ -687,9 +733,9 @@ fn a_sphinx_source_directory_anchors_absolute_doc_roles_at_its_conf() {
         ),
         row(
             "notes/readme.rst",
-            None,
-            ResolutionTag::UnsupportedSemantics,
-            None,
+            Some("docs/testing.rst"),
+            ResolutionTag::Resolved,
+            Some("docs/testing.rst"),
         ),
     ]);
     assert_eq!(outcomes(&chain), want);

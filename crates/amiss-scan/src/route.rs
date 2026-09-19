@@ -5,6 +5,7 @@ use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::uri::scheme;
 
 use crate::discovery::{DocumentStatus, Located, SnapshotDiscovery};
+use crate::document::excluded_by_built_in;
 
 /// A spelling a router serves for a page whose source file is named
 /// otherwise. The first three were harvested from the router itself and hold
@@ -350,7 +351,7 @@ pub fn unplaced(snapshot: &SnapshotDiscovery, document: &RepoPath, missing: &Rep
     let page = output_extension(missing.as_bytes()).is_some();
     ROUTERS.iter().any(|rule| {
         (rule.serves(Spelling::BuiltRoute) || (page && rule.serves(Spelling::BuiltPage)))
-            && declared_root(snapshot, document.as_bytes(), rule).is_some()
+            && site_root(snapshot, document.as_bytes(), rule).is_some()
     }) || assembled(snapshot, missing)
 }
 
@@ -359,7 +360,10 @@ pub fn unplaced(snapshot: &SnapshotDiscovery, document: &RepoPath, missing: &Rep
 /// as well as a file, so such a document is rendered into the pages that
 /// import it and a fragment written in it names an identity of whichever page
 /// that is. One of them may be rendered into several, so the tree fixes
-/// neither the page nor the identities it publishes.
+/// neither the page nor the identities it publishes. The site is the one
+/// declared above the document alone: calling a file a partial withholds an
+/// answer, so it is read from the declaration that covers the file rather
+/// than from the tree around it.
 #[must_use]
 pub fn unrouted(snapshot: &SnapshotDiscovery, adapter: Adapter, document: &RepoPath) -> bool {
     if !matches!(adapter, Adapter::Markdown | Adapter::Mdx) {
@@ -571,7 +575,7 @@ fn docusaurus_anchors(
     if scheme(path_part).is_some() {
         return Vec::new();
     }
-    let Some(site) = declared_root(snapshot, document.as_bytes(), &DOCUSAURUS) else {
+    let Some(site) = site_root(snapshot, document.as_bytes(), &DOCUSAURUS) else {
         return Vec::new();
     };
     if let Some(relative) = path_part.strip_prefix(SITE_ALIAS) {
@@ -623,7 +627,7 @@ fn mdbook_anchors(
         return Vec::new();
     }
     let raw = document.as_bytes();
-    let Some(root) = declared_root(snapshot, raw, &MDBOOK_PAGES) else {
+    let Some(root) = site_root(snapshot, raw, &MDBOOK_PAGES) else {
         return Vec::new();
     };
     let Some(page) = raw
@@ -643,7 +647,7 @@ fn mdbook_anchors(
         }
         ancestor = directory(ancestor);
     }
-    let Some(owner) = declared_root(
+    let Some(owner) = site_root(
         snapshot,
         &join(ancestor, relative.as_bytes()),
         &MDBOOK_PAGES,
@@ -672,7 +676,7 @@ fn mdbook_anchors(
 /// that declares the site, which is also what tells that file apart from the
 /// Hugo configuration spelled the same way.
 fn zola_content(snapshot: &SnapshotDiscovery, document: &RepoPath) -> Option<Vec<u8>> {
-    let root = declared_root(snapshot, document.as_bytes(), &ZOLA)?;
+    let root = site_root(snapshot, document.as_bytes(), &ZOLA)?;
     let content = RepoPath::from_bytes(join(&root, b"content"))?;
     matches!(
         snapshot.locate(&content),
@@ -687,7 +691,7 @@ fn zola_content(snapshot: &SnapshotDiscovery, document: &RepoPath) -> Option<Vec
 #[must_use]
 pub(crate) fn published_routes(snapshot: &SnapshotDiscovery) -> BTreeMap<RepoPath, RepoPath> {
     let mut routes: BTreeMap<RepoPath, RepoPath> = BTreeMap::new();
-    if !declares_docusaurus(snapshot) {
+    if declaring_directories(snapshot, &DOCUSAURUS).is_empty() {
         return routes;
     }
     let mut claimed_twice: BTreeSet<RepoPath> = BTreeSet::new();
@@ -732,16 +736,49 @@ fn published_route(
     RepoPath::from_bytes(join(&root, absolute.as_bytes()))
 }
 
-/// Whether this snapshot is published by Docusaurus at all. The site
-/// directory names the directories it reads in a configuration this engine
-/// does not read, and a site under `website/` commonly reads `../docs`, so
-/// the declaration is read from the whole tree rather than from the
-/// document's own ancestor chain.
-fn declares_docusaurus(snapshot: &SnapshotDiscovery) -> bool {
-    snapshot.entries.iter().any(|(path, (mode, _))| {
-        matches!(mode, GitMode::RegularFile | GitMode::ExecutableFile)
-            && declares(&DOCUSAURUS, path)
-    })
+/// Every directory this tree declares one rule's generator in. A declaration
+/// under a tree the scan excludes belongs to a fixture or a dependency rather
+/// than to a site the repository publishes, so it names no directory here.
+fn declaring_directories(snapshot: &SnapshotDiscovery, rule: &RouteRule) -> BTreeSet<Vec<u8>> {
+    snapshot
+        .entries
+        .iter()
+        .filter(|(path, (mode, _))| {
+            matches!(mode, GitMode::RegularFile | GitMode::ExecutableFile)
+                && !excluded_by_built_in(path.as_bytes())
+                && declares(rule, path)
+        })
+        .map(|(path, _)| directory(path.as_bytes()).to_vec())
+        .collect()
+}
+
+/// The directory each generator this tree declares exactly once is configured
+/// in. Which sites a tree declares is a question about the whole tree, since
+/// a site under `website/` commonly reads `../docs` and the configuration
+/// naming that directory is one this engine does not read. A generator
+/// declared in several places fixes no owner for a document outside them all.
+#[must_use]
+pub(crate) fn sole_sites(snapshot: &SnapshotDiscovery) -> BTreeMap<&'static str, Vec<u8>> {
+    ROUTERS
+        .iter()
+        .filter_map(|rule| {
+            let mut declaring = declaring_directories(snapshot, rule).into_iter();
+            let root = declaring.next()?;
+            declaring.next().is_none().then_some((rule.name, root))
+        })
+        .collect()
+}
+
+/// Which site owns a document: the nearest declaration above it, and failing
+/// that the single site the tree declares. A rule serving a built page or a
+/// built route answers for the build rather than for the tree, so widening
+/// one would withhold an answer for a document no site publishes, and those
+/// keep the ancestor walk. The rest can only reach a file the tree already
+/// holds.
+fn site_root(snapshot: &SnapshotDiscovery, document: &[u8], rule: &RouteRule) -> Option<Vec<u8>> {
+    let widens = !rule.serves(Spelling::BuiltRoute) && !rule.serves(Spelling::BuiltPage);
+    let tree = snapshot.sole_sites.get(rule.name).filter(|_| widens);
+    declared_root(snapshot, document, rule).or_else(|| tree.cloned())
 }
 
 /// Whether a path's own name is one of the files declaring this rule's
@@ -824,7 +861,7 @@ fn mkdocs_anchors(
     ) || path_part.is_empty()
         || path_part.starts_with('/')
         || scheme(path_part).is_some()
-        || declared_root(snapshot, document.as_bytes(), &MKDOCS).is_none()
+        || site_root(snapshot, document.as_bytes(), &MKDOCS).is_none()
     {
         return Vec::new();
     }
@@ -856,8 +893,14 @@ fn page_route(document: &[u8]) -> Vec<u8> {
 }
 
 /// The plugin content path a document sits under, when it sits under one of
-/// the paths Docusaurus reads by default.
+/// the paths Docusaurus reads by default. A document outside the site
+/// directory is read from the directory holding that site, which is where a
+/// site under `website/` finds the `../docs` it reads.
 fn content_root(site: &[u8], document: &[u8]) -> Option<Vec<u8>> {
+    plugin_path(site, document).or_else(|| plugin_path(directory(site), document))
+}
+
+fn plugin_path(site: &[u8], document: &[u8]) -> Option<Vec<u8>> {
     let relative = document.strip_prefix(site)?;
     let relative = if site.is_empty() {
         relative
@@ -891,7 +934,7 @@ fn sphinx_anchor(
     if relative.is_empty() || relative.starts_with('/') {
         return None;
     }
-    let root = declared_root(snapshot, document.as_bytes(), &SPHINX)?;
+    let root = site_root(snapshot, document.as_bytes(), &SPHINX)?;
     let named = relative
         .rsplit('/')
         .next()

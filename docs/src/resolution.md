@@ -144,9 +144,12 @@ root or the site directory, a Sphinx `:doc:` target with a leading slash at the 
 holding `conf.py`, a raw HTML destination under a `mkdocs.yml` at the directory the page is
 published at, a Zola `@/` destination at the `content` directory beside `config.toml`, and an
 mdBook destination climbing past its book's root under the `src` of the book that holds the
-page it names. The file's presence selects the rule and nothing inside it is read. An alias
-with no such file above the document is `unsupported-reference-semantics` rather than a
-directory of that name, since the value arrives when the site is built.
+page it names. The file's presence selects the rule and nothing inside it is read. The
+nearest such file above the document selects it, and where none is above it and the tree
+holds exactly one, that one does, since a site in `website/` reads pages that sit outside it.
+An alias in a tree holding several sites and none above the document is
+`unsupported-reference-semantics` rather than a directory of that name, since the value
+arrives when the site is built and this run cannot say which site would arrive.
 
 Other generators decide a page's URL in a configuration this engine never opens, and a
 relative destination is resolved against that URL rather than against the file. Under a

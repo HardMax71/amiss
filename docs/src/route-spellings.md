@@ -64,6 +64,17 @@ directory and would be a guess anywhere else. A rule turns on when one of its fi
 on the document's ancestor chain, nearest directory first. Only the file's presence is read,
 never its contents.
 
+Which sites a tree declares is a question about the whole tree, and which site owns a document
+is a question about that document. Where nothing on the chain declares a generator and the
+tree declares it in exactly one directory, that directory owns the document, because a site in
+`website/` reading `../docs` leaves every page it publishes off its own chain. A tree that
+declares the same generator in two places fixes no owner, so a document outside both keeps the
+chain's answer. Five rules stay on the chain whatever the tree holds: `astro`, `eleventy`,
+`hugo`, `jekyll` and `mdbook-pages` answer for a page the build serves rather than for a file,
+so turning one on withholds an answer instead of finding one, and so does the partial rule
+further down. A configuration under a tree the scan already excludes declares nothing, which
+is how sphinx's own repository carries 176 `conf.py` and declares one site.
+
 <!-- amiss-doc-contract:declared-routers:start -->
 | Router | Selected by | Serves |
 | --- | --- | --- |
@@ -116,22 +127,28 @@ with the unmodelled-route reason rather than a missing file. Where no descriptor
 block, as in Asciidoctor's own documentation, every claim stands.
 
 `site-alias` and `content-root` are the order Docusaurus's `resolveMarkdownLink` tries
-directories in, read from `packages/docusaurus-utils/src/markdownLinks.ts`, for a document
-under the directory holding `docusaurus.config.ts` or its `.mts`, `.cts`, `.js`, `.mjs` and
-`.cjs` spellings, the list the site loader tries. `@site/blog/img/output.png` is
+directories in, read from `packages/docusaurus-utils/src/markdownLinks.ts`, for a document the
+site owns: one under the directory holding `docusaurus.config.ts` or its `.mts`, `.cts`,
+`.js`, `.mjs` and `.cjs` spellings, the list the site loader tries, and every document in a
+tree holding one such file and no other. `@site/blog/img/output.png` is
 `blog/img/output.png` under that directory, for a link and for an image. A bare `.md` or
 `.mdx` destination, one starting with neither `./`, `../` nor `/`, is tried beside the
 document first, then under the plugin content path the document sits in, then under the
 site directory. `[static folder](static-assets.mdx)` in `docs/api/themes/configuration.mdx`
 reaches `docs/static-assets.mdx` that way. The content paths read are the plugin defaults,
-`docs`, `blog`, `src/pages` and `versioned_docs/<version>`. A plugin configured to read
+`docs`, `blog`, `src/pages` and `versioned_docs/<version>`, under the site directory and,
+for a document outside it, under the directory holding the site, which is where a site in
+`website/` finds the `../docs` its configuration names. So `[View](view.md)` in react-native's
+`docs/legacy/direct-manipulation.md` reaches `docs/view.md`, the file the archived copy of
+that same page under `website/versioned_docs/` has always reached. A plugin configured to read
 another directory gets the site-directory step alone, and a localized tree under `i18n/` is
 not read. A `./` or `../` destination is beside the document and nowhere else, which is
 Docusaurus's rule too.
 
-Where no `docusaurus.config.*` sits above the document, `@site/` is a destination this run
-cannot answer rather than a missing directory called `@site`: the alias is expanded when the
-site is built, and nothing here says which directory it names. That is
+Where no `docusaurus.config.*` sits above the document and the tree holds several elsewhere,
+`@site/` is a destination this run cannot answer rather than a missing directory called
+`@site`: the alias is expanded when the site is built, and with more than one site in the tree
+nothing here says which directory it names. That is
 `unsupported-reference-semantics`, the answer an AsciiDoc `{attribute}` already gets for the
 same reason. Only the opening is read, so a tree with a real `@internal/` directory resolves
 that path as written.
@@ -147,7 +164,7 @@ destination the tree does not answer is looked up in that collection after the t
 spellings, so a real file always wins. A route two documents claim is left out rather than
 decided between them.
 
-This is the one rule the document's own ancestor chain does not select. A site names its
+This rule asks the document's own ancestor chain nothing at all. A site names its
 content directories in the configuration file, which this engine never opens, and jest's site
 sits in `website/` while the documents it publishes sit in `../docs`, so selecting on the
 chain would miss every one of them. Any `docusaurus.config.*` in the tree turns the collection
@@ -201,8 +218,9 @@ one, so a raw destination that already reached a file beside the source still re
 directory holding `conf.py`. `` :doc:`/testing` `` in `docs/tutorial/deploy.rst` is
 `docs/testing.rst`: the docname under the source directory, with the `.rst` suffix an
 extensionless name takes, the same suffix the relative form already took. A plain hyperlink
-with a leading slash is still a site route, since Sphinx emits it as written, and a `:doc:`
-target in a tree with no `conf.py` above the document stays the declared site route it was.
+with a leading slash is still a site route, since Sphinx emits it as written. A `:doc:` target
+in a document with no `conf.py` above it is answered by the one source directory the tree
+declares, and stays the declared site route it was where the tree declares several.
 
 Each of the spellings above widens what resolves and nothing else, like the three: an anchored
 destination is looked up in the tree and is missing when the tree does not hold it, so
