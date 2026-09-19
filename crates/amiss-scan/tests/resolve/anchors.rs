@@ -194,6 +194,7 @@ fn an_mdx_document_publishes_the_identities_it_writes_down() {
         ("docs/page.mdx", "late", Some(false)),
         ("docs/page.mdx", "missing-id", Some(false)),
         ("docs/element.mdx", "node-env", Some(true)),
+        ("docs/element.mdx", "named", Some(true)),
         ("docs/element.mdx", "outer", Some(true)),
         ("docs/element.mdx", "inner", Some(true)),
         ("docs/element.mdx", "component", Some(false)),
