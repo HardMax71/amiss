@@ -461,6 +461,15 @@ it, `router/declaration-removed` where the candidate declares nothing there and
 `router/declaration-replaced` where it names another router. That is the one thing the
 declaration reports about itself, and it reports it in every profile.
 
+Nothing in the output suggests writing one, and nothing honestly could. A tree says whether a
+generator is configured inside it; it never says whether its documents are published at all. So
+one structural fact covers both a repository built elsewhere and a repository with no site,
+whose missing targets are simply broken. A note keyed to that fact would have reached the
+Kubernetes community repository's 254 missing targets, bat's 21 and vuejs-docs' one, none of
+which a declaration should touch. Declaring a router those trees do not use would not move them
+either: `router: hugo-pages` at the root of bat, helix, fastapi and the Kubernetes community
+repository left every one of their missing targets missing.
+
 ## What this costs
 
 A repository with no site at all now resolves `./guide` when `guide.md` exists, and on

@@ -162,8 +162,13 @@ a page of the built site. Only the path side moves: a fragment on a document the
 is still read against the identities that document publishes, and a tree declaring none of
 these files reports every missing path it reported before.
 
+A tree whose site is built somewhere else keeps no such configuration, so it names its own
+router in `.amiss/router.yml` instead. That turns on the spellings that reach files the tree
+already holds, and no others.
+
 [What a documentation router serves](route-spellings.md) holds the spellings, the routers
-they were harvested from, the generator rules and what selects each, and what the union costs.
+they were harvested from, the generator rules and what selects each, the names a repository
+may declare, and what the union costs.
 
 A destination holding `{{ ... }}` or `{% ... %}` never reaches the tree at all. The build
 fills it in, so it takes the same `unsupported-reference-semantics` an AsciiDoc `{attribute}`

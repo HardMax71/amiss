@@ -34,7 +34,8 @@ Exit 0 passes. Exit 1 blocks: the blocking rows are `errors[]` and the findings 
 `effective_disposition` is `fail`; each row's `description` says what it means and how
 to fix it, and `key_input.scope.normalized_target_intent.path` names the target. Exit 2
 means the run itself could not be trusted, and the error rows say why. Fix what the row
-points at; never weaken `.amiss/scanner-policy.json` to silence a finding.
+points at; never weaken `.amiss/scanner-policy.json` to silence a finding, and leave
+`.amiss/router.yml` to a maintainer, since it states which router publishes the tree.
 ```
 
 The block assumes the binary is installed, by `cargo install --locked amiss` or a release

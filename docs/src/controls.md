@@ -15,7 +15,8 @@ from growing into a plugin system one field at a time.
 The other tree-read input is weaker still. `.amiss/router.yml` names the router that publishes
 the directory it sits in, for a tree whose generator is configured somewhere else, and it turns
 on route spellings that resolve a destination against files the tree already holds. It reaches
-no rule that withholds an answer, so it can widen what resolves and can never clear a claim.
+no rule that withholds an answer, so it can move a destination onto a file the tree already
+holds and can never clear one the tree lacks.
 [What a documentation router serves](route-spellings.md) holds the rules it selects.
 
 Both sides of a comparison are read under the declarations the candidate holds, since the file
@@ -118,11 +119,11 @@ the visible value noncanonical rather than a second spelling of the same count.
 A `document` include names one exact path. A `tree` include names that path and descendants
 separated by `/`; `specs` therefore covers `specs/api.md` but not `specs-old/api.md`. Matching
 is bytewise, including for paths JSON cannot represent as text. A tree may carry one `suffix`:
-2–64 UTF-8 bytes beginning with `.`, with no slash, backslash, or NUL. It selects only non-tree
+2 to 64 UTF-8 bytes beginning with `.`, with no slash, backslash, or NUL. It selects only non-tree
 entries at or below that root whose raw path ends in those exact bytes. There are no globs,
 wildcards, regexes, excludes, normalization, or case folding, and built-in classifications still
-win. The stable selector identity remains `(path, kind)`, so changing or removing the suffix—or
-replacing it with a broader tree—reports policy weakening instead of disguising the old selector
+win. The stable selector identity remains `(path, kind)`, so changing the suffix, removing it, or
+replacing it with a broader tree reports policy weakening instead of disguising the old selector
 as a new one.
 
 [`amiss policy-include`](invocation.md) prints a validated canonical row for the suffixed-tree form
