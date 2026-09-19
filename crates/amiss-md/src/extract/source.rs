@@ -50,16 +50,19 @@ pub(super) fn link_destination(
 }
 
 /// Walks past `](`, any separating whitespace, and returns the destination
+/// token. A label that wraps ends its children before the whitespace the
+/// closing bracket sits behind, so that run is walked too. Its
 /// token: the inside of an angle form without its delimiters, or the bare run
 /// under `CommonMark` escape and balanced-parenthesis rules.
 pub(super) fn inline_destination(
     bytes: &[u8],
     children_end: usize,
 ) -> Result<(usize, usize), Fault> {
-    if bytes.get(children_end) != Some(&b']') {
+    let close = skip_whitespace(bytes, children_end);
+    if bytes.get(close) != Some(&b']') {
         return Err(Fault::InvalidSourceSpan);
     }
-    let after = children_end.saturating_add(1);
+    let after = close.saturating_add(1);
     if bytes.get(after) != Some(&b'(') {
         return Err(Fault::InvalidSourceSpan);
     }

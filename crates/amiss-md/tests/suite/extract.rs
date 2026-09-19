@@ -115,6 +115,38 @@ fn autolink_forms_share_a_construct_and_differ_in_tokens() {
     assert_eq!(got, expected);
 }
 
+/// A label may wrap, and the bracket that closes it may sit behind the
+/// indent of the next line. The children end before that run, so the reader
+/// walks it; text held away from its parentheses is still not a link.
+#[test]
+fn a_wrapped_label_reaches_the_destination_behind_its_indent() {
+    let wrapped = "[a\n  ](x.md) and [b\n\t](y.md) and [c\n](z.md)\n";
+    assert_eq!(
+        triples(&extraction(Adapter::Markdown, wrapped)),
+        vec![
+            (
+                SourceConstruct::InlineLink,
+                "x.md".to_owned(),
+                "x.md".to_owned()
+            ),
+            (
+                SourceConstruct::InlineLink,
+                "y.md".to_owned(),
+                "y.md".to_owned()
+            ),
+            (
+                SourceConstruct::InlineLink,
+                "z.md".to_owned(),
+                "z.md".to_owned()
+            ),
+        ]
+    );
+    assert_eq!(
+        triples(&extraction(Adapter::Markdown, "[a] (x.md)\n")),
+        vec![]
+    );
+}
+
 /// The two destination representations answer different questions: the raw
 /// token preserves the spelling, the semantic destination decodes it. An
 /// empty destination is empty in both.
