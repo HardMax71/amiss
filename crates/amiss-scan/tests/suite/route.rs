@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use amiss_fixtures::CommitChain;
 use amiss_git::Repository;
 use amiss_scan::pipeline::commit_pair;
-use amiss_scan::route::{ROUTERS, RouteRule, Spelling, candidates, spellings};
+use amiss_scan::route::{DECLARABLE, ROUTERS, RouteRule, Spelling, candidates, spellings};
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model::{Occurrence, occurrences};
 use amiss_wire::resolution::{Missing, Resolution, ResolutionTag, Target};
@@ -849,4 +849,85 @@ fn a_zola_site_anchors_the_content_root_prefix_at_its_content_directory() {
         ),
     ]);
     assert_eq!(outcomes(&chain), want);
+}
+
+/// The two spellings that answer with a boundary instead of a file are out of
+/// a declaration's reach, so the routers that serve nothing else are rules no
+/// file a repository writes can turn on.
+#[test]
+fn a_declaration_reaches_no_spelling_that_withholds_an_answer() {
+    let withholding = [Spelling::BuiltPage, Spelling::BuiltRoute];
+    for spelling in withholding {
+        assert!(
+            !DECLARABLE.contains(&spelling),
+            "{spelling:?} withholds an answer"
+        );
+    }
+    let unreachable: Vec<&str> = ROUTERS
+        .iter()
+        .filter(|rule| {
+            rule.serves
+                .iter()
+                .all(|spelling| withholding.contains(spelling))
+        })
+        .map(|rule| rule.name)
+        .collect();
+    assert_eq!(unreachable, ["astro", "eleventy", "hugo", "jekyll"]);
+}
+
+/// A repository that declares its own router gets that router's resolving
+/// spellings where no configuration file names the generator. Under
+/// `hugo-pages` a page is published at a directory of its own name, so a
+/// relative destination is read from that URL as well as from the source
+/// directory: the climb out of `setup/live/` reaches the branch bundle and
+/// the leaf bundle, while the destination beside the source still answers and
+/// the one nothing holds is still missing under the path the author wrote. An
+/// anchor the reached page does not publish is still a missing anchor, so the
+/// declaration adds an answer and withholds none. The branch bundle's own
+/// page is its directory, so its climb passes `setup` rather than reaching
+/// the page beside it, and a declaration naming a router that only withholds
+/// leaves its own tree exactly as it was.
+#[test]
+fn a_declared_router_reads_a_destination_from_the_page_it_publishes() {
+    let chain = amiss_fixtures::declared_router().expect("the fixture stages");
+    let live = "site/setup/live.md";
+    let config = "site/setup/config/_index.md";
+    let sibling = "site/setup/sibling.md";
+    let want: Vec<Outcome> = [
+        (live, "site/config", ResolutionTag::Resolved, Some(config)),
+        (live, "site/config", ResolutionTag::Missing, None),
+        (
+            live,
+            "site/nothing",
+            ResolutionTag::Missing,
+            Some("site/nothing"),
+        ),
+        (live, sibling, ResolutionTag::Resolved, Some(sibling)),
+        (
+            live,
+            "site/guide",
+            ResolutionTag::Resolved,
+            Some("site/setup/guide/index.md"),
+        ),
+        (
+            config,
+            "site/setup/trap",
+            ResolutionTag::Missing,
+            Some("site/setup/trap"),
+        ),
+        (
+            "other/page.md",
+            "other/absent",
+            ResolutionTag::Missing,
+            Some("other/absent"),
+        ),
+    ]
+    .into_iter()
+    .map(|(document, intent, tag, answered)| row(document, Some(intent), tag, answered))
+    .collect();
+    let served = outcomes(&chain);
+    for wanted in &want {
+        assert!(served.contains(wanted), "{wanted:?} is one of {served:?}");
+    }
+    assert_eq!(served.len(), want.len(), "{served:?}");
 }

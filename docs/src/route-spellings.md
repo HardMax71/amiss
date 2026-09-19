@@ -328,6 +328,75 @@ missing targets. Reading the template means opening the configuration file, and 
 opens one, so the boundary answers the whole `docs/` tree instead and those 20 go with it. All
 three real breaks sit in `.github/`, outside the tree that file declares, and they stay.
 
+## What a repository declares about its own build
+
+Every rule so far is selected by a file in the tree, so a repository that keeps no
+configuration gets no rule at all. That is the common case for documents whose site is built
+somewhere else. Of the 54 repositories behind this page, 16 hold no generator configuration at
+all, 4,133 scanned documents between them. Some are plain trees that a forge renders, and they
+want nothing here. The rest are content a generator reads from another place: Grafana's Hugo
+configuration is in a Docker image and a sibling repository, and Babel's site is built from
+`babel/website`.
+
+So the repository says it, since nothing in such a tree can. `.amiss/router.yml` names one
+router on a line of its own, `router: hugo-pages`, and the directory holding that file is the
+root the rule anchors at, where the configuration file would have been. The nearest declaration
+above the document answers and nothing else in the file is read, the way a component descriptor
+is read for its `name`.
+
+<!-- amiss-doc-contract:declarable-routers:start -->
+| Declared router | Turns on |
+| --- | --- |
+| `docusaurus` | `site-alias`, `content-root`, `document-id` |
+| `mkdocs` | `directory-url` |
+| `sphinx` | `source-root` |
+| `zola` | `content-root` |
+| `hugo-pages` | `page-url` |
+<!-- amiss-doc-contract:declarable-routers:end -->
+
+A declaration turns on the spellings that resolve a destination and no others. `built-route`
+and `built-page` are not in that table and cannot be reached from a file a repository writes,
+because those two withhold an answer rather than serve a file: a repository that could reach
+them could clear its own findings with one line. What a declaration does reach is bounded the
+way every spelling is. It can move a destination onto a file the tree already holds, and it
+cannot clear a destination the tree lacks, so declaring `hugo` or `jekyll` or `astro` turns on
+nothing at all. There is still no ignore file and no way to silence a finding.
+
+`page-url` is the row a declaration exists for. Hugo publishes a page at a directory of its own
+name and rewrites no destination, so a relative destination resolves against the page URL,
+one level deeper than the source file's directory, and a Markdown link is read that way as well
+as an `<a href>`. A page bundle is published at the directory holding it, so `_index.md` and
+`index.md` are the sources a destination naming that directory reaches. The reading from the
+document's own directory comes first, so a destination that already reached a file beside the
+source still reaches that file and still fixes the intent a finding names. The page URL is a
+candidate added, never one replacing another.
+
+This is the one row a configuration file does not select, and Hugo's own documentation is why.
+`hugo.toml` says Hugo builds the tree and nothing about the URLs it serves: `uglyURLs` moves
+every page, a permalink template moves it again, and a `render-link.html` render hook rewrites
+the destination before any of that, which is what hugoDocs does to its own `[glob pattern](g)`.
+None of that is in the tree, so a tree carrying `hugo.toml` keeps the `built-route` boundary it
+had. The declaration is the repository's own word that its pages are published at a directory
+of their own name with nothing rewritten, which is Hugo's default and a claim only a person can
+make.
+
+Grafana is the case it was built against. `docs/sources/setup-grafana/set-up-grafana-live.md`
+writes `[ha_engine_address](../configure-grafana/#ha_engine_address)`, and the page it reaches
+is `docs/sources/setup-grafana/configure-grafana/_index.md`, one directory deeper than the
+source-relative reading, which is why 544 missing targets were reported for a tree whose
+maintainers had not broken 544 links. With `router: hugo-pages` under `docs/sources` that count
+is 278. The 266 claims that went are one shape. A separate reading of the page URL was run over
+the references that resolve where they stood: 270 of 271 match it, and the one left over reached
+a file beside its own source once the trailing slash stopped naming a tree. Nothing moved into
+the undecided class, which stayed at 1,153 rows, and every one of the 52 anchor claims still
+reports. Another thirty-one joined them, since a path that resolves has its fragment read:
+`../../datasources/tempo/#span-filters` reaches the Tempo page, which publishes no such heading
+now that span filters are a page of their own.
+
+What is left is mostly one further mechanism this does not read. Of the 195 paths still missing,
+137 name a URL some page claims in the `aliases` block of its own front matter, which Hugo
+serves as a redirect and which is a list rather than the scalar this reader spells out.
+
 ## What this costs
 
 A repository with no site at all now resolves `./guide` when `guide.md` exists, and on

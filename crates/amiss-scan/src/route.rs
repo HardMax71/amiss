@@ -25,6 +25,7 @@ pub enum Spelling {
     DocumentId,
     SourceRoot,
     DirectoryUrl,
+    PageUrl,
     BookRoute,
     BuiltPage,
     BuiltRoute,
@@ -130,10 +131,19 @@ const JEKYLL: RouteRule = RouteRule {
     serves: &[Spelling::BuiltRoute],
 };
 
+/// Hugo's default publication, which no file in the tree shows. A tree
+/// carrying `hugo.toml` says Hugo builds it and nothing about the URLs that
+/// build serves, so this rule is selected by the declaration alone.
+pub(crate) const HUGO_PAGES: RouteRule = RouteRule {
+    name: "hugo-pages",
+    declared_by: &[],
+    serves: &[Spelling::PageUrl],
+};
+
 /// Every router rule the resolver knows. A spelling reaches a source file only
 /// when that file is in the tree, so a rule can widen what resolves and can
 /// never invent a target.
-pub const ROUTERS: [RouteRule; 13] = [
+pub const ROUTERS: [RouteRule; 14] = [
     RouteRule {
         name: "mdbook",
         declared_by: &[],
@@ -162,7 +172,30 @@ pub const ROUTERS: [RouteRule; 13] = [
     ASTRO,
     ELEVENTY,
     HUGO,
+    HUGO_PAGES,
     JEKYLL,
+];
+
+/// The file a repository names its own router in, for a tree whose generator
+/// is configured somewhere else, and the key it opens a line with. The value
+/// is a router name, and a declaration turns on that router's resolving
+/// spellings under the directory holding the file.
+pub const ROUTER_DECLARATION: &str = ".amiss/router.yml";
+const DECLARED_ROUTER: &[u8] = b"router:";
+
+/// Every spelling a declaration turns on, which is every spelling that
+/// resolves a destination against the tree and nothing else. A rule serving
+/// one this list omits is a rule no declaration can name: `built-route` and
+/// `built-page` withhold an answer rather than serve a file, so a repository
+/// cannot clear a finding by declaring anything, and the three a router serves
+/// in every tree need no declaring.
+pub const DECLARABLE: [Spelling; 6] = [
+    Spelling::SiteAlias,
+    Spelling::ContentRoot,
+    Spelling::DocumentId,
+    Spelling::SourceRoot,
+    Spelling::DirectoryUrl,
+    Spelling::PageUrl,
 ];
 
 /// The two keys an Antora component descriptor opens a line with that this
@@ -324,7 +357,7 @@ fn markdown_anchors(
     is_image: bool,
     path_part: &str,
 ) -> Vec<(Vec<u8>, String)> {
-    let published = mkdocs_anchors(snapshot, document, construct, path_part);
+    let published = published_anchors(snapshot, document, construct, path_part);
     if !published.is_empty() {
         return published;
     }
@@ -370,8 +403,8 @@ pub fn unrouted(snapshot: &SnapshotDiscovery, adapter: Adapter, document: &RepoP
         return false;
     }
     let raw = document.as_bytes();
-    let Some(root) =
-        declared_root(snapshot, raw, &DOCUSAURUS).and_then(|site| content_root(&site, raw))
+    let Some(root) = declared_root(snapshot, raw, DOCUSAURUS.declared_by)
+        .and_then(|site| content_root(&site, raw))
     else {
         return false;
     };
@@ -508,13 +541,25 @@ pub(crate) fn antora_descriptor(source: &[u8]) -> Option<(String, bool)> {
     name.map(|name| (name, extended))
 }
 
+/// The router one `.amiss/router.yml` names for the directory it sits in, a
+/// plain scalar on a line of its own, read the way a component descriptor is.
+/// A name no rule in the table carries is declined here, so a declaration
+/// reaches exactly the rules this engine already models.
+#[must_use]
+pub(crate) fn declared_router(source: &[u8]) -> Option<String> {
+    amiss_md::lines::scan(source)
+        .filter_map(|line| scalar(line.content(source), DECLARED_ROUTER))
+        .find(|value| ROUTERS.iter().any(|rule| rule.name == *value))
+        .map(str::to_owned)
+}
+
 /// Whether the component a path belongs to is assembled by an extension rather
 /// than by the tree. Antora's `ext` block is where a component descriptor
 /// names the extensions that add resources to it while the site is built, and
 /// this engine runs none of them, so the resources such a component serves are
 /// not the ones a tree walk can count.
 fn assembled(snapshot: &SnapshotDiscovery, path: &RepoPath) -> bool {
-    let Some(root) = declared_root(snapshot, path.as_bytes(), &ANTORA) else {
+    let Some(root) = declared_root(snapshot, path.as_bytes(), ANTORA.declared_by) else {
         return false;
     };
     component_roots(snapshot, &root)
@@ -691,7 +736,11 @@ fn zola_content(snapshot: &SnapshotDiscovery, document: &RepoPath) -> Option<Vec
 #[must_use]
 pub(crate) fn published_routes(snapshot: &SnapshotDiscovery) -> BTreeMap<RepoPath, RepoPath> {
     let mut routes: BTreeMap<RepoPath, RepoPath> = BTreeMap::new();
-    if declaring_directories(snapshot, &DOCUSAURUS).is_empty() {
+    let declared = snapshot
+        .declared_routers
+        .values()
+        .any(|router| *router == DOCUSAURUS.name);
+    if declaring_directories(snapshot, &DOCUSAURUS).is_empty() && !declared {
         return routes;
     }
     let mut claimed_twice: BTreeSet<RepoPath> = BTreeSet::new();
@@ -726,12 +775,12 @@ fn published_route(
 ) -> Option<RepoPath> {
     let raw = document.as_bytes();
     let Some(name) = declared else {
-        return RepoPath::from_bytes(page_route(raw));
+        return RepoPath::from_bytes(page_route(raw, false));
     };
     let Some(absolute) = name.strip_prefix('/') else {
         return RepoPath::from_bytes(join(directory(raw), name.as_bytes()));
     };
-    let site = declared_root(snapshot, raw, &DOCUSAURUS)?;
+    let site = declared_root(snapshot, raw, DOCUSAURUS.declared_by)?;
     let root = content_root(&site, raw).unwrap_or(site);
     RepoPath::from_bytes(join(&root, absolute.as_bytes()))
 }
@@ -769,16 +818,45 @@ pub(crate) fn sole_sites(snapshot: &SnapshotDiscovery) -> BTreeMap<&'static str,
         .collect()
 }
 
-/// Which site owns a document: the nearest declaration above it, and failing
-/// that the single site the tree declares. A rule serving a built page or a
-/// built route answers for the build rather than for the tree, so widening
-/// one would withhold an answer for a document no site publishes, and those
-/// keep the ancestor walk. The rest can only reach a file the tree already
-/// holds.
+/// Which site owns a document: the nearest configuration above it, the router
+/// the repository declares for the directory, and failing both the single
+/// site the tree declares. A rule serving a built page or a built route
+/// answers for the build rather than for the tree, so widening one would
+/// withhold an answer for a document no site publishes, and those keep the
+/// ancestor walk. The rest can only reach a file the tree already holds.
 fn site_root(snapshot: &SnapshotDiscovery, document: &[u8], rule: &RouteRule) -> Option<Vec<u8>> {
     let widens = !rule.serves(Spelling::BuiltRoute) && !rule.serves(Spelling::BuiltPage);
     let tree = snapshot.sole_sites.get(rule.name).filter(|_| widens);
-    declared_root(snapshot, document, rule).or_else(|| tree.cloned())
+    declared_root(snapshot, document, rule.declared_by)
+        .or_else(|| declared_site(snapshot, document, rule))
+        .or_else(|| tree.cloned())
+}
+
+/// The nearest directory above the document whose own declaration names this
+/// rule's router. A repository may only name a rule whose every spelling
+/// resolves a destination against the tree, so what it declares widens what
+/// resolves and withholds no answer.
+fn declared_site(
+    snapshot: &SnapshotDiscovery,
+    document: &[u8],
+    rule: &RouteRule,
+) -> Option<Vec<u8>> {
+    if !declarable(rule) {
+        return None;
+    }
+    let root = declared_root(snapshot, document, &[ROUTER_DECLARATION])?;
+    RepoPath::from_bytes(join(&root, ROUTER_DECLARATION.as_bytes()))
+        .and_then(|path| snapshot.declared_routers.get(&path))
+        .is_some_and(|declared| declared == rule.name)
+        .then_some(root)
+}
+
+/// Whether a repository's own declaration may name this rule.
+#[must_use]
+pub fn declarable(rule: &RouteRule) -> bool {
+    rule.serves
+        .iter()
+        .all(|spelling| DECLARABLE.contains(spelling))
 }
 
 /// Whether a path's own name is one of the files declaring this rule's
@@ -843,50 +921,67 @@ fn spelled(value: &str) -> Option<&str> {
     (!declined).then_some(value)
 }
 
-/// A destination the browser resolves rather than the generator: mkdocs
-/// publishes every page at a directory of its own name and rewrites no
-/// destination written as raw HTML, so such a destination is relative to the
-/// page's directory and its trailing slash names that page rather than a tree.
-/// The document's own directory follows, so a destination that reached a file
-/// beside the source still reaches it.
-fn mkdocs_anchors(
+/// A destination the browser resolves rather than the generator, under a
+/// router that publishes every page at a directory of its own name: it is
+/// relative to the page's own URL and its trailing slash names that page
+/// rather than a tree. mkdocs rewrites a Markdown link and leaves raw HTML
+/// alone, so only raw HTML is read this way there, while a declared
+/// `hugo-pages` rewrites nothing and every destination is read this way. The
+/// document's own directory is tried first, so a destination that reached a
+/// file beside the source still reaches that file, and the page URL is the
+/// candidate added.
+fn published_anchors(
     snapshot: &SnapshotDiscovery,
     document: &RepoPath,
     construct: Option<SourceConstruct>,
     path_part: &str,
 ) -> Vec<(Vec<u8>, String)> {
-    if !matches!(
+    let raw = document.as_bytes();
+    let beside = directory(raw).to_vec();
+    let relative = path_part.strip_suffix('/').unwrap_or(path_part).to_owned();
+    let mut out: Vec<(Vec<u8>, String)> = Vec::new();
+    if path_part.is_empty() || path_part.starts_with('/') || scheme(path_part).is_some() {
+        return out;
+    }
+    if site_root(snapshot, raw, &HUGO_PAGES).is_some() {
+        let published = page_route(raw, true);
+        out.push((beside.clone(), relative.clone()));
+        out.extend(BUNDLE_INDEX.map(|index| (published.clone(), format!("{relative}/{index}"))));
+        if published != beside {
+            out.push((published, relative));
+        }
+    } else if matches!(
         construct,
         Some(SourceConstruct::HtmlAnchor | SourceConstruct::HtmlImage)
-    ) || path_part.is_empty()
-        || path_part.starts_with('/')
-        || scheme(path_part).is_some()
-        || site_root(snapshot, document.as_bytes(), &MKDOCS).is_none()
+    ) && site_root(snapshot, raw, &MKDOCS).is_some()
     {
-        return Vec::new();
-    }
-    let relative = path_part.strip_suffix('/').unwrap_or(path_part);
-    let beside = directory(document.as_bytes());
-    let published = page_route(document.as_bytes());
-    let mut out = vec![(published, relative.to_owned())];
-    if !out.iter().any(|(held, _)| held == beside) {
-        out.push((beside.to_vec(), relative.to_owned()));
+        let published = page_route(raw, false);
+        out.push((published.clone(), relative.clone()));
+        if published != beside {
+            out.push((beside, relative));
+        }
     }
     out
 }
 
-/// The route a page is published at, which mkdocs serves from a directory of
-/// that name: the source name without its extension, or the document's own
-/// directory when the source is that directory's index, the pair of names
-/// both mkdocs and Docusaurus publish at the directory itself.
-fn page_route(document: &[u8]) -> Vec<u8> {
+/// The names a page bundle's own source takes under the directory the page is
+/// published at, which is how a destination naming that directory reaches the
+/// file that writes the page rather than the directory itself.
+const BUNDLE_INDEX: [&str; 2] = ["_index.md", "index.md"];
+
+/// The route a page is published at, which such a router serves from a
+/// directory of that name: the source name without its extension, or the
+/// document's own directory when the source is that directory's index. A tree
+/// published in page bundles adds Hugo's `_index` to that pair, where the
+/// branch's own page is the directory holding it.
+fn page_route(document: &[u8], bundles: bool) -> Vec<u8> {
     let parent = directory(document);
     let name = document.rsplit(|byte| *byte == b'/').next().unwrap_or(b"");
     let stem = match name.iter().rposition(|byte| *byte == b'.') {
         Some(dot) if dot > 0 => name.get(..dot).unwrap_or_default(),
         Some(_) | None => name,
     };
-    if stem == b"index" || stem == b"README" {
+    if stem == b"index" || stem == b"README" || (bundles && stem == b"_index") {
         return parent.to_vec();
     }
     join(parent, stem)
@@ -948,18 +1043,18 @@ fn sphinx_anchor(
 }
 
 /// The nearest directory on the document's ancestor chain holding one of the
-/// files that declare this rule's generator.
+/// named files, which is where a generator's own configuration selects its
+/// rule and where a repository's own declaration sits.
 pub(crate) fn declared_root(
     snapshot: &SnapshotDiscovery,
     document: &[u8],
-    rule: &RouteRule,
+    declared_by: &[&str],
 ) -> Option<Vec<u8>> {
     let mut end = document.len();
     loop {
         let cut = document.get(..end)?.iter().rposition(|byte| *byte == b'/');
         let directory = cut.and_then(|cut| document.get(..cut)).unwrap_or_default();
-        if rule
-            .declared_by
+        if declared_by
             .iter()
             .any(|name| regular_file(snapshot, join(directory, name.as_bytes())))
         {

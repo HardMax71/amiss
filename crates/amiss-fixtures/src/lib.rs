@@ -19,8 +19,9 @@ pub use identities::asciidoc_identities;
 pub use locale::{LocaleAuditFixture, locale_audit};
 pub use publication::{PublicationAuditFixture, publication_audit};
 pub use routers::{
-    antora_component, antora_component_roots, docusaurus_partial, docusaurus_sibling_docs,
-    docusaurus_site, hugo_site, mdbook_site, mkdocs_site, sphinx_source, zola_site,
+    antora_component, antora_component_roots, declared_router, docusaurus_partial,
+    docusaurus_sibling_docs, docusaurus_site, hugo_site, mdbook_site, mkdocs_site, sphinx_source,
+    zola_site,
 };
 pub use semantic::{SiteObservation, feedback_report, semantic_report, site_observation};
 
