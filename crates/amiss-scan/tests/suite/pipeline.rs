@@ -2473,3 +2473,166 @@ fn rst_and_adoc_claims_attest_and_break_like_markdown() {
         "each fix respells its own carrier whole, marker included: {respelled:?}"
     );
 }
+
+/// One tree read two ways: the router the repository declares for its own
+/// directory answers on both sides, or the commit that writes that one line is
+/// charged with the links it makes readable. Under the declaration `../config/`
+/// reaches the page bundle and the fragment it never published is read, which
+/// is a claim about a tree neither commit touched, so it is pre-existing and
+/// the adoption introduces nothing.
+#[test]
+fn adopting_a_router_declaration_introduces_nothing() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs/setup/config")).unwrap();
+    fs::write(
+        root.join("docs/setup/live.md"),
+        "# Live\n\n[present](../config/#absent)\n\n[gone](../nothing/)\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/setup/config/_index.md"),
+        "# Config\n\n## Present\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    fs::create_dir_all(root.join("docs/.amiss")).unwrap();
+    fs::write(root.join("docs/.amiss/router.yml"), "router: hugo-pages\n").unwrap();
+    git(root, &["add", "-A"]);
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let staged = payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap());
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let committed = payload(
+        &commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        )
+        .unwrap(),
+    );
+
+    for report in [&staged, &committed] {
+        let mut rows: Vec<(&str, &str, &str)> = report["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|row| {
+                Some((
+                    row["kind"].as_str()?,
+                    row["attribution"].as_str()?,
+                    row["candidate_fact"]["evidence"]["resolution"]["reason"]
+                        .as_str()
+                        .unwrap_or_default(),
+                ))
+            })
+            .collect();
+        rows.sort_unstable();
+        assert_eq!(
+            rows,
+            [
+                (
+                    "explicit-target-missing",
+                    "pre-existing",
+                    "heading-anchor-not-found"
+                ),
+                ("explicit-target-missing", "pre-existing", "path-not-found"),
+            ],
+            "{}",
+            report["findings"]
+        );
+    }
+}
+
+/// Dropping the declaration is that rule read backwards, and it says so. Both
+/// sides read the candidate's declarations, so the fragment the resolved path
+/// exposed is not asked any more and no attribution records that it went. The
+/// file that held the declaration carries that under its own rule, in every
+/// profile, while the destination it routed is a missing path again.
+#[test]
+fn removing_a_router_declaration_reports_the_declaration_it_dropped() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs/setup/config")).unwrap();
+    fs::create_dir_all(root.join("docs/.amiss")).unwrap();
+    fs::write(
+        root.join("docs/setup/live.md"),
+        "# Live\n\n[present](../config/#absent)\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/setup/config/_index.md"),
+        "# Config\n\n## Present\n",
+    )
+    .unwrap();
+    fs::write(root.join("docs/.amiss/router.yml"), "router: hugo-pages\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    git(root, &["rm", "-q", "docs/.amiss/router.yml"]);
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let staged = payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap());
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let committed = payload(
+        &commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        )
+        .unwrap(),
+    );
+
+    for report in [&staged, &committed] {
+        let mut rows: Vec<(&str, &str, &str, &str)> = report["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|row| {
+                Some((
+                    row["kind"].as_str()?,
+                    row["attribution"].as_str()?,
+                    row["effective_disposition"].as_str()?,
+                    row["key_input"]["scope"]["rule_id"]
+                        .as_str()
+                        .or_else(|| {
+                            row["candidate_fact"]["evidence"]["resolution"]["reason"].as_str()
+                        })
+                        .unwrap_or_default(),
+                ))
+            })
+            .collect();
+        rows.sort_unstable();
+        assert_eq!(
+            rows,
+            [
+                (
+                    "explicit-target-missing",
+                    "pre-existing",
+                    "warn",
+                    "path-not-found"
+                ),
+                (
+                    "policy-weakened",
+                    "not-applicable",
+                    "fail",
+                    "router/declaration-removed"
+                ),
+            ],
+            "{}",
+            report["findings"]
+        );
+    }
+}

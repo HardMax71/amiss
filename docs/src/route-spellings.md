@@ -419,6 +419,24 @@ arrived. The undecided class stayed at 1,153 rows again. Of the 195 paths that w
 read: `../../panels-visualizations/visualizations/time-series/#connect-null-values` reaches the
 time series page, which publishes no such heading now that its options come from a shared file.
 
+Which side of a comparison the declaration is read from decides whether a repository can adopt
+one at all. It is tree state, so the commit that writes the file has a base without it, and read
+each side its own way, Grafana's adoption reports 476 claims resolved and 210 introduced, mostly
+anchors that become readable the moment their path resolves. Every one of the 210 was already
+broken and the author of that commit touched none of them. So both sides are read under the
+declarations the candidate holds. Grafana's adoption then reports the 278 the tree has either
+way, all of them pre-existing, and nothing introduced.
+
+Removing one is that rule read backwards, and that direction is reported. The candidate declares
+nothing, so neither side does, and Grafana's 544 claims come back, every one pre-existing. What
+the symmetry cannot do by itself is say that a claim went: a fragment is read because its path
+resolved, and once the declaration goes the path is missing instead, or, under a `built-route`
+generator above the document, a declared boundary. So a declaration the base held that the
+candidate does not hold identically is a `policy-weakened` control finding at the file that held
+it, `router/declaration-removed` where the candidate declares nothing there and
+`router/declaration-replaced` where it names another router. That is the one thing the
+declaration reports about itself, and it reports it in every profile.
+
 ## What this costs
 
 A repository with no site at all now resolves `./guide` when `guide.md` exists, and on

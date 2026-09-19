@@ -242,7 +242,7 @@ declare_taxonomy! {
             metadata: &ABSOLUTE_OBSERVATION,
         },
         PolicyWeakened => {
-            meaning: "the candidate loosens its own repository policy, dropping an include, a protected path, a projection assertion, or a raised disposition; loosening the rules is reported under the rules being loosened",
+            meaning: "the candidate loosens its own repository policy, dropping an include, a protected path, a projection assertion, a router declaration, or a raised disposition; loosening the rules is reported under the rules being loosened",
             metadata: &CONTROL_PLANE,
         },
         CoverageReduced => {

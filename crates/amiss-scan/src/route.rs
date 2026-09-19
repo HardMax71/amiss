@@ -735,6 +735,25 @@ fn zola_content(snapshot: &SnapshotDiscovery, document: &RepoPath) -> Option<Vec
     .then(|| content.as_bytes().to_vec())
 }
 
+/// Reads one snapshot under the routers another one declares and answers with
+/// the declarations its own tree held. This is what puts both sides of a
+/// comparison to the same question: a declaration is tree state, so a
+/// candidate that writes one would otherwise be measured against a base
+/// nothing declares, and every destination the declaration moves would answer
+/// differently on the two sides and change the identity of whatever finding it
+/// carried. The routes a document publishes are read from the same
+/// declarations, so they are read again whenever these differ.
+pub(crate) fn read_as_declared(
+    snapshot: &mut SnapshotDiscovery,
+    declared: &BTreeMap<RepoPath, String>,
+) -> BTreeMap<RepoPath, String> {
+    let held = std::mem::replace(&mut snapshot.declared_routers, declared.clone());
+    if held != snapshot.declared_routers {
+        (snapshot.published_routes, snapshot.redirect_routes) = published_routes(snapshot);
+    }
+    held
+}
+
 /// Every route the snapshot's documents claim and the document claiming each,
 /// as the routes pages are published at and, apart from them, the page URLs
 /// pages declare they moved away from. The two stay apart because a published
@@ -932,11 +951,22 @@ fn declared_site(
     if !declarable(rule) {
         return None;
     }
-    let root = declared_root(snapshot, document, &[ROUTER_DECLARATION])?;
-    RepoPath::from_bytes(join(&root, ROUTER_DECLARATION.as_bytes()))
+    let root = ancestor_root(document, &|directory| {
+        declared_at(snapshot, directory).is_some()
+    })?;
+    (declared_at(snapshot, &root)? == rule.name).then_some(root)
+}
+
+/// The router a declaration sitting in this exact directory names. The
+/// declarations a comparison reads are the candidate's on both sides, so this
+/// asks what was declared rather than which tree holds the file.
+fn declared_at<'snapshot>(
+    snapshot: &'snapshot SnapshotDiscovery,
+    directory: &[u8],
+) -> Option<&'snapshot str> {
+    RepoPath::from_bytes(join(directory, ROUTER_DECLARATION.as_bytes()))
         .and_then(|path| snapshot.declared_routers.get(&path))
-        .is_some_and(|declared| declared == rule.name)
-        .then_some(root)
+        .map(String::as_str)
 }
 
 /// Whether a repository's own declaration may name this rule.
@@ -1174,14 +1204,21 @@ pub(crate) fn declared_root(
     document: &[u8],
     declared_by: &[&str],
 ) -> Option<Vec<u8>> {
+    ancestor_root(document, &|directory| {
+        declared_by
+            .iter()
+            .any(|name| regular_file(snapshot, join(directory, name.as_bytes())))
+    })
+}
+
+/// The nearest directory on the document's ancestor chain the test holds for,
+/// the document's own directory first and the repository root last.
+fn ancestor_root(document: &[u8], holds: &dyn Fn(&[u8]) -> bool) -> Option<Vec<u8>> {
     let mut end = document.len();
     loop {
         let cut = document.get(..end)?.iter().rposition(|byte| *byte == b'/');
         let directory = cut.and_then(|cut| document.get(..cut)).unwrap_or_default();
-        if declared_by
-            .iter()
-            .any(|name| regular_file(snapshot, join(directory, name.as_bytes())))
-        {
+        if holds(directory) {
             return Some(directory.to_vec());
         }
         end = cut?;
