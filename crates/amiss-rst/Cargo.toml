@@ -12,7 +12,7 @@ exclude.workspace = true
 test = false
 
 [dependencies]
-amiss-wire = { path = "../amiss-wire", version = "0.30.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.31.0" }
 
 [dev-dependencies]
 divan.workspace = true
