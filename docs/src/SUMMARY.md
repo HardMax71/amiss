@@ -8,6 +8,7 @@
 - [Documentation drift](drift.md)
 - [Invocation](invocation.md)
 - [Profiles and findings](profiles.md)
+- [Analysis errors](errors.md)
 - [Running it in CI](ci.md)
 - [Working with agents](agents.md)
 

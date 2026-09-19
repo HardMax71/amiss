@@ -233,7 +233,7 @@ written path part respelled to the one tracked path it matches apart from case.
 [`amiss fix`](invocation.md) applies these spans to the staged working tree in
 place, refusing any document whose bytes moved since the evaluation. The sentences live in one place,
 [`FindingKind::meaning`, `AnalysisErrorCode::meaning`, and `FixKind::meaning`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs);
-the lists in [Profiles and findings](profiles.md) and [Limits and refusals](limits.md)
+the lists in [Profiles and findings](profiles.md) and [Analysis errors](errors.md)
 and the shipped example are checked against that source in CI. The human format prints
 the result plus at most ten grouped feedback items, replaces every byte outside printable ASCII with a
 `\uXXXX` escape so a hostile filename cannot inject terminal control codes or a forged CI
@@ -274,8 +274,8 @@ become cases under their stable finding keys: `fail` becomes a failure, while `w
 remain passing cases with their exact disposition in `system-out`. Retained analysis errors become
 error cases. A row-free passing report emits one passing report case so the artifact remains
 visible. File attributes carry only text that round-trips exactly through XML 1.0, and time is
-always zero because the report records no duration. JUnit remains display data—the renderer's exit
-is still the report's recorded verdict.
+always zero because the report records no duration. JUnit remains display data, since the
+renderer's exit is still the report's recorded verdict.
 
 A JSON report can be projected later without repeating repository evaluation:
 `amiss render --report amiss-report.json --format sarif`, `--format codequality`, or
