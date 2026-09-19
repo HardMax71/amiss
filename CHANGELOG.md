@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0](https://github.com/HardMax71/amiss/compare/v0.30.0...v0.31.0) - 2026-09-19
+
+### Changes
+
+- let a repository declare the router that publishes it
+- bind a document to the one site its tree declares
+- read an Antora component out of every root that names it
+- hold the document budget inside the address space the engine allows itself
+- read the name an mdx element sets in place of an id
+- read a file a Sphinx page includes as part of its tree
+- read the markup an mdx-code-block fence splices in
+- declare a Hugo page that calls a shortcode incomplete
+- leave a fragment in a Docusaurus partial undecided
+- read the names a MyST directive and a glossary publish
+- read a plain MyST link as the label it names
+- read a link whose label wraps before its closing bracket
+- spell the report without the sorted value tree
+
 ## [0.30.0](https://github.com/HardMax71/amiss/compare/v0.29.1...v0.30.0) - 2026-09-18
 
 ### Changes
