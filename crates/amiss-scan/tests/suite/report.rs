@@ -984,6 +984,51 @@ fn the_findings_counter_fires_before_the_wire_cap() {
     );
 }
 
+/// The output ceiling counts the payload before anything spells it
+/// canonically, and the two spellings hold the same bytes in a different
+/// order, so the count the ceiling reads is the length of the report the run
+/// would emit. Escaped text and numbers are where that would break first, so
+/// the fixture carries a quoted path, a path outside ASCII, and the byte
+/// counts and spans every report row already spells.
+#[test]
+fn the_counted_payload_length_is_the_canonical_length() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("hub.md"), "# Hub\n\n[b](b.md)\n").unwrap();
+    fs::write(root.join("b.md"), "# B\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(
+        root.join("\u{6587}\u{6863}.md"),
+        "# Wide\n\n[hub](hub.md)\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("hub.md"),
+        "# Hub\n\n[b](b.md) and [wide](\u{6587}\u{6863}.md) and [gone](<missing\"one.md>)\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let built = report_between(root, &base, &candidate);
+    let canonical = String::from_utf8(built.canonical_payload.clone()).unwrap();
+    for spelling in ["\\\"", "\u{6587}"] {
+        assert!(
+            canonical.contains(spelling),
+            "the fixture still reaches the {spelling:?} spelling"
+        );
+    }
+    assert_eq!(
+        serde_json::to_vec(&built.envelope.payload).unwrap().len(),
+        built.canonical_payload.len(),
+        "the counted length is the length of the canonical report"
+    );
+}
+
 #[test]
 fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
     let dir = TempDir::new().unwrap();
