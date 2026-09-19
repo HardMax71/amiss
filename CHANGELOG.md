@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0](https://github.com/HardMax71/amiss/compare/v0.31.0...v0.32.0) - 2026-09-19
+
+### Changes
+
+- read the source suffix a Sphinx project declares
+- read both sides of a comparison under the candidate's routers
+- check the report ceiling before the report is held
+- resolve a page URL a page declares it moved away from
+
 ## [0.31.0](https://github.com/HardMax71/amiss/compare/v0.30.0...v0.31.0) - 2026-09-19
 
 ### Changes
