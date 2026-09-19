@@ -150,12 +150,14 @@ fn convert(node: &mdast::Node, winners: &HashMap<String, usize>) -> Result<Node,
     Ok(Node::leaf(kind, span))
 }
 
-/// An element's tag name and the `id` it sets as a literal. An `id` computed
-/// by an expression is a value this engine cannot read, so the element carries
-/// none.
+/// An element's tag name and the identity it sets as a literal, from `id` or
+/// from `name`, whichever it writes first. One computed by an expression is a
+/// value this engine cannot read, so the element carries none.
 fn element_kind(name: Option<&str>, attributes: &[mdast::AttributeContent]) -> Kind {
     let id = attributes.iter().find_map(|attribute| match attribute {
-        mdast::AttributeContent::Property(property) if property.name == "id" => {
+        mdast::AttributeContent::Property(property)
+            if matches!(property.name.as_str(), "id" | "name") =>
+        {
             match property.value.as_ref() {
                 Some(mdast::AttributeValue::Literal(value)) => Some(value.clone()),
                 Some(mdast::AttributeValue::Expression(_)) | None => None,

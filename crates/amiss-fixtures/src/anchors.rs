@@ -4,7 +4,8 @@ use crate::{CommitChain, Staged, staged_repository};
 /// heading text. `page.mdx` declares one heading identity and then two
 /// expressions that declare none: one that never had a `#`, and one that has
 /// one but does not end the heading. Both leave the slug standing. `element.mdx`
-/// declares one from a plain JSX element and one nested inside another, beside
+/// declares one from a plain JSX element, one a `name` attribute sets instead of
+/// an `id`, and one nested inside another, beside
 /// a component that declares neither its own `id` nor the one under it, and
 /// then one inside a fence Docusaurus unwraps and one inside a fence that
 /// stays code. `parent.mdx` renders a partial that renders another, imports a
@@ -22,6 +23,7 @@ const MDX_IDENTITIES: [(&str, Staged<'static>); 8] = [
         "docs/element.mdx",
         Staged::File(
             b"<details id=\"node-env\">\n\nInside.\n\n</details>\n\n\
+              <a name=\"named\" />\n\n\
               <div id=\"outer\"><span id=\"inner\" /></div>\n\n\
               <APITable id=\"component\">\n\n<span id=\"under-component\" />\n\n</APITable>\n\n\
               ```mdx-code-block\n<details id=\"spliced\">\n<summary>Open</summary>\n```\n\n\
