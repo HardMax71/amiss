@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_wire::human::{atom, atom_bytes};
-use amiss_wire::model::RepoPath;
+use amiss_wire::model::{Digest, RepoPath};
 use amiss_wire::report::model::{
     Attribution, Evaluation, Feedback, FeedbackAction, FeedbackItem, FindingFactEvidence, Impact,
     LocationSide, Occurrence, ReportPayload, SourceSpan, occurrences,
@@ -46,6 +46,7 @@ struct Place<'report, P> {
     document: Option<&'report P>,
     span: Option<SourceSpan>,
     kind: FindingKind,
+    key: Digest,
     members: u64,
     reason: Option<String>,
 }
@@ -123,7 +124,7 @@ pub(crate) fn report<P, R, M, S, D, F>(
             );
         }
     }
-    let affected = places(payload, &resolution);
+    let affected = places(payload, path_atom, &resolution);
     windowed(
         &mut out,
         items
@@ -240,12 +241,16 @@ pub(crate) fn missing_detail(tag: MissingTag, near: Option<String>) -> String {
 }
 
 /// The engine groups feedback by action and target; the same grouping over
-/// the findings the report carries puts every place under its row.
-fn places<'report, P, R, M, S, D, F>(
+/// the findings the report carries puts every place under its row. Places
+/// read in document then position order, closed by the finding key the
+/// report holds distinct, so no two of them compare equal.
+fn places<'report, P, R, M, S, D, A, F>(
     payload: &'report ReportPayload<P, R, M, FindingFactEvidence<P, R, S, D, M>>,
+    path_atom: A,
     resolution: &F,
 ) -> Vec<Place<'report, P>>
 where
+    A: Fn(Option<&P>) -> String,
     F: Fn(&R) -> (ResolutionTag, Option<String>),
 {
     let mut candidates = BTreeMap::new();
@@ -258,7 +263,7 @@ where
             candidates.insert(&candidate.observation_id, (candidate, false));
         }
     }
-    payload
+    let mut ordered: Vec<Place<'report, P>> = payload
         .findings
         .iter()
         .filter(|finding| finding.effective_disposition != Disposition::Record)
@@ -308,11 +313,19 @@ where
                 document: finding.location.path.as_ref(),
                 span: finding.location.span,
                 kind: finding.kind,
+                key: finding.finding_key,
                 members: finding.aggregation.member_count,
                 reason,
             })
         })
-        .collect()
+        .collect();
+    ordered.sort_by_cached_key(|place| {
+        let (line, column) = place
+            .span
+            .map_or((0, 0), |span| (span.start_line, span.start_column));
+        (path_atom(place.document), line, column, place.key)
+    });
+    ordered
 }
 
 fn attributed(attribution: Attribution, side: LocationSide) -> Option<FeedbackAction> {
