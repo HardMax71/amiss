@@ -45,6 +45,56 @@ const ANTORA_COMPONENT: [(&str, Staged<'static>); 8] = [
     ),
 ];
 
+/// One component assembled from two source roots, a second component beside
+/// it, and a third whose descriptor reserves the `ext` block. The page under
+/// `docs/` names a module only the other root of its own component holds, a
+/// resource neither root holds, and a module that belongs to the component
+/// next door. The page under `built/` names one resource its own root holds
+/// and one an extension brings in.
+const ANTORA_COMPONENT_ROOTS: [(&str, Staged<'static>); 9] = [
+    (
+        "docs/antora.yml",
+        Staged::File(b"name: widgets\nversion: '1.0'\n"),
+    ),
+    (
+        "docs/modules/api/pages/index.adoc",
+        Staged::File(
+            b"= API\n\nxref:plugin:build.adoc[]\n\nxref:plugin:absent.adoc[]\n\n\
+              xref:extra:notes.adoc[]\n",
+        ),
+    ),
+    (
+        "plugin/antora.yml",
+        Staged::File(b"name: widgets\nversion: '1.0'\n"),
+    ),
+    (
+        "plugin/modules/plugin/pages/build.adoc",
+        Staged::File(b"= Build\n"),
+    ),
+    (
+        "other/antora.yml",
+        Staged::File(b"name: gadgets\nversion: '1.0'\n"),
+    ),
+    (
+        "other/modules/extra/pages/notes.adoc",
+        Staged::File(b"= Notes\n"),
+    ),
+    (
+        "built/antora.yml",
+        Staged::File(
+            b"name: parts\nversion: true\next:\n  zip_contents_collector:\n    include: []\n",
+        ),
+    ),
+    (
+        "built/modules/guide/pages/index.adoc",
+        Staged::File(b"= Guide\n\nxref:guide:here.adoc[]\n\nxref:guide:absent.adoc[]\n"),
+    ),
+    (
+        "built/modules/guide/pages/here.adoc",
+        Staged::File(b"= Here\n"),
+    ),
+];
+
 /// A Docusaurus site under `website/`: a nested current page and its
 /// versioned twin, each linking a bare Markdown path that lives at the content
 /// root, one at the site root, one nowhere, and the `@site/` alias to a static
@@ -302,6 +352,13 @@ const ZOLA_SITE: [(&str, Staged<'static>); 6] = [
 /// Any filesystem failure.
 pub fn antora_component() -> std::io::Result<CommitChain> {
     staged_repository(&ANTORA_COMPONENT)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn antora_component_roots() -> std::io::Result<CommitChain> {
+    staged_repository(&ANTORA_COMPONENT_ROOTS)
 }
 
 /// # Errors

@@ -121,6 +121,7 @@ fn late_case_neighbor_latency_and_memory() {
         labels: BTreeMap::new(),
         published_routes: BTreeMap::new(),
         sphinx_included: std::collections::BTreeSet::new(),
+        antora_components: BTreeMap::new(),
     };
     let document =
         RepoPath::new("README.md".to_owned()).unwrap_or_else(|| panic!("fixture document"));

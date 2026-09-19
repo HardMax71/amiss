@@ -332,6 +332,52 @@ fn an_antora_component_anchors_resource_ids_at_the_family_directory() {
     assert_eq!(outcomes(&chain), want);
 }
 
+/// A component is assembled from every source root whose `antora.yml` spells
+/// its name, so a module coordinate is answered by whichever of them holds
+/// the resource while the finding still names the root the author wrote
+/// under. A module of the component next door answers nothing, and a
+/// component whose descriptor reserves the `ext` block is assembled by an
+/// extension, so a resource it does not hold is undecided rather than absent.
+#[test]
+fn an_antora_component_reaches_every_root_that_names_it() {
+    let chain = amiss_fixtures::antora_component_roots().expect("the fixture stages");
+    let index = "docs/modules/api/pages/index.adoc";
+    let built = "built/modules/guide/pages/index.adoc";
+    let want = expected(vec![
+        row(
+            index,
+            Some("docs/modules/plugin/pages/build.adoc"),
+            ResolutionTag::Resolved,
+            Some("plugin/modules/plugin/pages/build.adoc"),
+        ),
+        row(
+            index,
+            Some("docs/modules/plugin/pages/absent.adoc"),
+            ResolutionTag::Missing,
+            Some("docs/modules/plugin/pages/absent.adoc"),
+        ),
+        row(
+            index,
+            Some("docs/modules/extra/pages/notes.adoc"),
+            ResolutionTag::Missing,
+            Some("docs/modules/extra/pages/notes.adoc"),
+        ),
+        row(
+            built,
+            Some("built/modules/guide/pages/here.adoc"),
+            ResolutionTag::Resolved,
+            Some("built/modules/guide/pages/here.adoc"),
+        ),
+        row(
+            built,
+            Some("built/modules/guide/pages/absent.adoc"),
+            ResolutionTag::UnsupportedSemantics,
+            None,
+        ),
+    ]);
+    assert_eq!(outcomes(&chain), want);
+}
+
 /// Under `docusaurus.config.*`, a bare Markdown destination the document's
 /// own directory does not hold is asked under the content root and then the
 /// site directory, `@site/` names a path from the site directory for links

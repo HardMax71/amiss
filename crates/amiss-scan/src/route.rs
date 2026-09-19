@@ -46,7 +46,7 @@ impl RouteRule {
     }
 }
 
-const ANTORA: RouteRule = RouteRule {
+pub(crate) const ANTORA: RouteRule = RouteRule {
     name: "antora",
     declared_by: &["antora.yml"],
     serves: &[Spelling::AntoraResource],
@@ -163,6 +163,12 @@ pub const ROUTERS: [RouteRule; 13] = [
     HUGO,
     JEKYLL,
 ];
+
+/// The two keys an Antora component descriptor opens a line with that this
+/// rule reads: the component the root contributes to, and the block reserved
+/// for the extensions that assemble that component when the site is built.
+const ANTORA_COMPONENT: &[u8] = b"name:";
+const ANTORA_EXTENSIONS: &[u8] = b"ext:";
 
 /// Antora's resource families: the coordinate an author writes before `$`,
 /// and the module directory the family is stored under.
@@ -296,9 +302,7 @@ pub fn anchors(
     path_part: &str,
 ) -> Vec<(Vec<u8>, String)> {
     match adapter {
-        Adapter::AsciiDoc => antora_anchor(snapshot, document, construct, path_part)
-            .into_iter()
-            .collect(),
+        Adapter::AsciiDoc => antora_anchor(snapshot, document, construct, path_part),
         Adapter::Markdown | Adapter::Mdx => {
             markdown_anchors(snapshot, document, construct, is_image, path_part)
         }
@@ -338,14 +342,16 @@ fn markdown_anchors(
 /// Whether the build answers this path instead of the tree. A generator on
 /// the document's ancestor chain either serves every relative destination
 /// from a page URL this engine does not model, or serves the built page a
-/// path names, and neither is a file any tree holds.
+/// path names, and neither is a file any tree holds. An Antora component an
+/// extension assembles answers the same way, for the path the coordinate
+/// named rather than for the document that wrote it.
 #[must_use]
 pub fn unplaced(snapshot: &SnapshotDiscovery, document: &RepoPath, missing: &RepoPath) -> bool {
     let page = output_extension(missing.as_bytes()).is_some();
     ROUTERS.iter().any(|rule| {
         (rule.serves(Spelling::BuiltRoute) || (page && rule.serves(Spelling::BuiltPage)))
             && declared_root(snapshot, document.as_bytes(), rule).is_some()
-    })
+    }) || assembled(snapshot, missing)
 }
 
 /// Whether no router publishes this document as a page of its own. A
@@ -383,18 +389,21 @@ pub fn directory(document: &[u8]) -> &[u8] {
 }
 
 /// An Antora resource ID, `[module:][family$]relative`, anchored at the family
-/// directory of the named module in the document's own component. A cross
-/// reference defaults to the page family and an image to the image family,
-/// while an include without a family coordinate stays relative to the file
-/// that includes it. A version or component coordinate names a catalogue this
-/// tree does not hold, and a `./` or `../` relative is relative to the page.
+/// directory of the named module in every source root of the document's own
+/// component, its own root first. A cross reference defaults to the page
+/// family and an image to the image family, while an include without a family
+/// coordinate stays relative to the file that includes it. A version or
+/// component coordinate names a catalogue this tree does not hold, and a `./`
+/// or `../` relative is relative to the page.
 fn antora_anchor(
     snapshot: &SnapshotDiscovery,
     document: &RepoPath,
     construct: Option<SourceConstruct>,
     path_part: &str,
-) -> Option<(Vec<u8>, String)> {
-    let construct = construct?;
+) -> Vec<(Vec<u8>, String)> {
+    let Some(construct) = construct else {
+        return Vec::new();
+    };
     let default_family = if construct == SourceConstruct::AsciidocCrossReference {
         Some("page")
     } else if construct.is_image() {
@@ -402,11 +411,13 @@ fn antora_anchor(
     } else if construct == SourceConstruct::AsciidocInclude {
         None
     } else {
-        return None;
+        return Vec::new();
     };
-    let (root, own_module) = antora_module(snapshot, document.as_bytes())?;
+    let Some((root, own_module)) = antora_module(snapshot, document.as_bytes()) else {
+        return Vec::new();
+    };
     if path_part.contains('@') {
-        return None;
+        return Vec::new();
     }
     let (module, resource) = match path_part.split_once(':') {
         None => (own_module, path_part),
@@ -415,25 +426,97 @@ fn antora_anchor(
         {
             (module.as_bytes(), resource)
         }
-        Some(_) => return None,
+        Some(_) => return Vec::new(),
     };
-    let (family, relative) = match resource.split_once('$') {
-        Some((family, relative)) => (family, relative),
-        None => (default_family?, resource),
+    let Some((family, relative)) = resource
+        .split_once('$')
+        .or_else(|| default_family.map(|family| (family, resource)))
+    else {
+        return Vec::new();
     };
-    let (_, family_directory) = ANTORA_FAMILIES.iter().find(|(name, _)| *name == family)?;
+    let Some((_, family_directory)) = ANTORA_FAMILIES.iter().find(|(name, _)| *name == family)
+    else {
+        return Vec::new();
+    };
     if relative.is_empty()
         || relative.starts_with('/')
         || relative.starts_with("./")
         || relative.starts_with("../")
     {
-        return None;
+        return Vec::new();
     }
-    let module_directory = join(&join(root, b"modules"), module);
-    Some((
-        join(&module_directory, family_directory),
-        relative.to_owned(),
-    ))
+    component_roots(snapshot, root)
+        .into_iter()
+        .map(|root| {
+            let module_directory = join(&join(&root, b"modules"), module);
+            (
+                join(&module_directory, family_directory),
+                relative.to_owned(),
+            )
+        })
+        .collect()
+}
+
+/// Every source root this tree holds for the component a root contributes to,
+/// that root first. Antora assembles one component from every root whose
+/// descriptor spells the same name, so a module's resources are stored across
+/// all of them and a coordinate naming one is answered by whichever holds it.
+fn component_roots(snapshot: &SnapshotDiscovery, root: &[u8]) -> Vec<Vec<u8>> {
+    let mut out = vec![root.to_vec()];
+    let Some((name, _)) = descriptor(snapshot, root) else {
+        return out;
+    };
+    for (path, (declared, _)) in &snapshot.antora_components {
+        let sibling = directory(path.as_bytes());
+        if declared == name && sibling != root {
+            out.push(sibling.to_vec());
+        }
+    }
+    out
+}
+
+/// What the descriptor of one Antora source root declares, when the tree holds
+/// one there and this reader spelled it out.
+fn descriptor<'a>(snapshot: &'a SnapshotDiscovery, root: &[u8]) -> Option<&'a (String, bool)> {
+    ANTORA.declared_by.iter().find_map(|name| {
+        RepoPath::from_bytes(join(root, name.as_bytes()))
+            .and_then(|path| snapshot.antora_components.get(&path))
+    })
+}
+
+/// What one `antora.yml` says about its own root: the component it contributes
+/// to, and whether it reserves the `ext` block Antora hands to the extensions
+/// that assemble the component. Each is a plain scalar on a line of its own,
+/// read the way a document's frontmatter is, and nothing else in the file is
+/// looked at.
+#[must_use]
+pub(crate) fn antora_descriptor(source: &[u8]) -> Option<(String, bool)> {
+    let mut name = None;
+    let mut extended = false;
+    for line in amiss_md::lines::scan(source) {
+        let content = line.content(source);
+        if let Some(value) = scalar(content, ANTORA_COMPONENT) {
+            name = name.or(Some(value.to_owned()));
+        } else if content.starts_with(ANTORA_EXTENSIONS) {
+            extended = true;
+        }
+    }
+    name.map(|name| (name, extended))
+}
+
+/// Whether the component a path belongs to is assembled by an extension rather
+/// than by the tree. Antora's `ext` block is where a component descriptor
+/// names the extensions that add resources to it while the site is built, and
+/// this engine runs none of them, so the resources such a component serves are
+/// not the ones a tree walk can count.
+fn assembled(snapshot: &SnapshotDiscovery, path: &RepoPath) -> bool {
+    let Some(root) = declared_root(snapshot, path.as_bytes(), &ANTORA) else {
+        return false;
+    };
+    component_roots(snapshot, &root)
+        .iter()
+        .filter_map(|root| descriptor(snapshot, root))
+        .any(|(_, extended)| *extended)
 }
 
 /// The component root and module a document belongs to: the nearest
@@ -657,10 +740,16 @@ fn published_route(
 fn declares_docusaurus(snapshot: &SnapshotDiscovery) -> bool {
     snapshot.entries.iter().any(|(path, (mode, _))| {
         matches!(mode, GitMode::RegularFile | GitMode::ExecutableFile)
-            && DOCUSAURUS.declared_by.iter().any(|name| {
-                path.as_bytes().rsplit(|byte| *byte == b'/').next() == Some(name.as_bytes())
-            })
+            && declares(&DOCUSAURUS, path)
     })
+}
+
+/// Whether a path's own name is one of the files declaring this rule's
+/// generator, wherever in the tree it sits.
+pub(crate) fn declares(rule: &RouteRule, path: &RepoPath) -> bool {
+    rule.declared_by
+        .iter()
+        .any(|name| path.as_bytes().rsplit(|byte| *byte == b'/').next() == Some(name.as_bytes()))
 }
 
 /// The name a document declares for its own page in frontmatter, which is

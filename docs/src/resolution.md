@@ -209,8 +209,10 @@ unambiguous `document.adoc#anchor` as an inter-document target rather than turni
 into a local ID. Inside an Antora component, a document under `modules/<name>/` with
 `antora.yml` at the component root, an xref, a family-qualified include, or an image is read as
 the resource ID Antora reads it as and anchored at the family directory of its module, so
-`xref:index.adoc[]` in `modules/api/nav.adoc` names `modules/api/pages/index.adoc`. A heading
-anchor on an AsciiDoc target resolves through the Asciidoctor rule in
+`xref:index.adoc[]` in `modules/api/nav.adoc` names `modules/api/pages/index.adoc`. The
+component is every source root whose `antora.yml` spells the same name, and one reserving the
+`ext` block is assembled by an extension, so a resource it does not hold is undecided rather
+than absent. A heading anchor on an AsciiDoc target resolves through the Asciidoctor rule in
 [What twelve renderers call a heading](anchor-rules.md), which is the only rule whose separator
 is `_` and whose identities all carry a prefix.
 

@@ -96,6 +96,25 @@ beside the file. A version coordinate (`2.0@`) or a component coordinate
 destination keeps the reading it had before, and a `./` or `../` relative is Antora's own
 page-relative form and stays beside the document.
 
+A component is not one directory. Antora assembles it from every source root whose
+`antora.yml` spells the same name, so a module coordinate is answered by whichever of those
+roots holds the resource. Spring Boot has four roots and all four declare `name: boot`, which
+is why `xref:gradle-plugin:packaging-oci-image.adoc` written under `documentation/` means a
+page stored under `build-plugin/`. The name is the one thing read out of the descriptor, a
+plain scalar on a line of its own, and a root naming another component answers nothing. The
+document's own root is asked first, so a finding still names the path under the root the
+author wrote in.
+
+The descriptor also says when the tree is not the whole component. The `ext` block is what
+Antora hands to the extensions that assemble a component while the site is built, and this
+engine runs none of them, so a component reserving that block holds resources no tree walk
+can enumerate. All four of Spring Boot's descriptors reserve it, and its build zips generated
+pages and partials into `modules/appendix/partials/configuration-properties`,
+`modules/api/partials/rest/actuator` and eleven more directories before Antora reads any of
+them. A resource ID such a component does not answer is `unsupported-reference-semantics`
+with the unmodelled-route reason rather than a missing file. Where no descriptor reserves the
+block, as in Asciidoctor's own documentation, every claim stands.
+
 `site-alias` and `content-root` are the order Docusaurus's `resolveMarkdownLink` tries
 directories in, read from `packages/docusaurus-utils/src/markdownLinks.ts`, for a document
 under the directory holding `docusaurus.config.ts` or its `.mts`, `.cts`, `.js`, `.mjs` and

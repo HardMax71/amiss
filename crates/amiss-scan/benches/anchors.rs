@@ -153,6 +153,7 @@ fn late_policy_bound_adapter(bencher: Bencher<'_, '_>) {
         labels: BTreeMap::new(),
         published_routes: BTreeMap::new(),
         sphinx_included: std::collections::BTreeSet::new(),
+        antora_components: BTreeMap::new(),
     };
     let path = RepoPath::new("generated/099999.page".to_owned())
         .unwrap_or_else(|| panic!("benchmark lookup path"));
