@@ -67,6 +67,28 @@ warnings, and you work them off on your own clock. External http links are never
 the report lists them, and [Amiss and link checkers](comparison.md) shows the one pipe that
 hands them to lychee.
 
+A first run can still report hundreds of missing targets against a tree nobody has broken. That
+happens when the site is built somewhere else. A generator's configuration file in the tree is
+what selects its rule, so a repository that keeps only its documentation gets none, and every
+destination is read against the source files rather than the URLs the site publishes.
+
+A repository can name its own router in one line. `.amiss/router.yml` says which router
+publishes the directory it sits in, and that directory is where the rule anchors:
+
+```yaml
+router: hugo-pages
+```
+
+The promise above holds. A declaration can move a destination onto a file the tree already
+holds, and it can never clear one the tree lacks, so nothing that is really missing goes quiet.
+Grafana keeps its Hugo configuration in a Docker image and a sibling repository. With that file
+under `docs/sources` its run reports 149 missing targets instead of 544, and every one of the
+395 that go reaches a file the tree already holds. Adding the file is safe under every profile:
+both sides of a comparison are read under the routers the candidate declares, so the commit that
+writes one introduces nothing. Deleting one is reported at the file that held it.
+[What a documentation router serves](route-spellings.md) lists every name you can write and
+what each one turns on.
+
 In CI the same engine ships as a GitHub Action that derives both commits from the event:
 
 ```yaml

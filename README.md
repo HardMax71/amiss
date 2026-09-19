@@ -75,6 +75,15 @@ run always reads the whole repository. A repository with a backlog ramps with
 `--profile enforce-introduced`, which blocks what a change introduces and keeps the pre-existing
 rows as warnings until they are worked off.
 
+When a site is built somewhere else, the tree holds no generator configuration, so every
+destination is read against the source files rather than the URLs the site publishes, and a
+first run can report hundreds of missing targets nobody broke. Writing `router: hugo-pages` into
+`.amiss/router.yml` names the router that publishes the directory it sits in, and takes Grafana
+from 544 missing targets to 149. It silences nothing: a declaration can move a destination onto
+a file the tree already holds, and it can never clear one the tree lacks.
+[What a documentation router serves](https://hardmax71.github.io/amiss/route-spellings.html)
+lists the names you can write.
+
 In CI the same engine ships as an action that derives both commits from the event and
 annotates the Fixes a pull request introduced:
 

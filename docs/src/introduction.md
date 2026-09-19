@@ -60,9 +60,10 @@ it cannot decode at all is named there as unsupported instead of dropping out of
 
 The scanner keeps no state. No baseline file, no cache, no database, nothing committed to
 your repository. Repository policy can expand discovery and raise three finding kinds; it
-can never lower a disposition or hide a finding. [Provenance](provenance.md) tells how the
-project arrived at that stance, and [Controls and policy](controls.md) draws the exact
-boundary.
+can never lower a disposition or hide a finding. The one other file read from the tree,
+`.amiss/router.yml`, widens what a destination can resolve to and reaches only files the
+tree already holds. [Provenance](provenance.md) tells how the project arrived at that
+stance, and [Controls and policy](controls.md) draws the exact boundary.
 
 Each promise below is pinned by tests:
 

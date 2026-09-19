@@ -34,7 +34,10 @@ jobs:
 The published first run uses `observe`: introduced problems appear as Fixes without blocking,
 changed targets appear as summary-only Checks, and pre-existing problems stay as pre-existing
 inventory. An incomplete or untrusted run still fails. Triage the initial report, adopt any
-repository policy it needs, then switch the input to `profile: enforce`. A repository whose
+repository policy it needs, then switch the input to `profile: enforce`. When the site is
+built somewhere else the tree carries no generator configuration, so every destination is read
+against the source files until `.amiss/router.yml` names the router;
+[What a documentation router serves](route-spellings.md) has the names. A repository whose
 backlog outlives its first triage can gate the middle of that road with
 `enforce-introduced`, which blocks what a pull request introduces while the carried
 findings stay warnings in the same reports.

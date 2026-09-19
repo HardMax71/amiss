@@ -62,7 +62,8 @@ count. Use it to orient, but use the raw finding rows above for exact repair evi
 Fix what the row points at: restore a missing target or correct the link, make a
 trailing slash agree with what the path is, reread prose whose referenced code changed.
 Never weaken `.amiss/scanner-policy.json` to silence a finding; policy can only raise
-severity, and loosening it is itself a blocking finding. Never delete a document just
+severity, and loosening it is itself a blocking finding. Leave `.amiss/router.yml` to a
+maintainer, since it states which router publishes the tree. Never delete a document just
 to clear a finding. If a finding names drift you cannot verify, say so instead of
 guessing.
 
