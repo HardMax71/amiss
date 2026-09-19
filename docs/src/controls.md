@@ -18,6 +18,15 @@ on route spellings that resolve a destination against files the tree already hol
 no rule that withholds an answer, so it can widen what resolves and can never clear a claim.
 [What a documentation router serves](route-spellings.md) holds the rules it selects.
 
+Both sides of a comparison are read under the declarations the candidate holds, since the file
+is tree state and the base of the commit that writes one does not have it. Read each side its
+own way and the references the declaration moves change identity, so the commit adopting the
+file is charged with breaking them. A declaration the base held that the candidate does not
+hold identically is `policy-weakened` at the file that held it, under
+`router/declaration-removed` where the candidate declares nothing there and
+`router/declaration-replaced` where it names another router, because dropping one takes its
+resolutions off both sides at once.
+
 The complete grammar in one example, with `projection_assertions` optional for compatibility
 with policies written before projections existed and the file valid only whole:
 

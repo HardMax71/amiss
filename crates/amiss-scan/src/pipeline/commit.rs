@@ -12,7 +12,7 @@ use super::external::{external_gate, external_reason};
 use super::{
     CandidateEvaluation, CandidateOutcomes, Evaluated, ExternalVerified, PipelineFailure,
     PipelineResult, ResolvedTree, SetupShell, binding_mismatch, conclude, controls_failure, detail,
-    effective_limits, effective_shell, evaluate_tree, floor_gate, pair_effects,
+    effective_limits, effective_policy, effective_shell, evaluate_tree, floor_gate, pair_effects,
     policy_unavailable_reason, resolve_tree,
 };
 
@@ -222,13 +222,12 @@ fn commit_pair_result(
                 external,
                 &base_policy,
                 &candidate_policy,
+                &base.declared,
                 (&base.discovery, &mut base_scan),
                 (&candidate.discovery, &mut candidate_scan),
                 &mut failures,
             );
-            setup.policy = effects;
-            setup.policy.errors_retained = setup_shell.errors_retained;
-            setup.policy.complete_findings = scan_limits.complete_findings;
+            setup.policy = effective_policy(effects, setup_shell, scan_limits);
             conclude(
                 &setup,
                 (&base.discovery, base.side),
@@ -276,7 +275,9 @@ fn pair_policies(
 type Evaluation = Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail>;
 
 /// Both snapshot evaluations, with claim outcomes gathered on the candidate
-/// side alone: a claim speaks for what the candidate asserts today.
+/// side alone: a claim speaks for what the candidate asserts today. The
+/// candidate goes first because the base is read under the routers the
+/// candidate declares, and the accumulated errors keep the base's first.
 #[expect(
     clippy::too_many_arguments,
     reason = "the two-sided evaluation context is the contract's"
@@ -294,21 +295,6 @@ fn evaluated_pair(
     candidate_tree: ResolvedTree,
 ) -> (Evaluation, Evaluation, CandidateOutcomes) {
     let (base_scan, candidate_scan) = scans;
-    let base = evaluate_tree(
-        repo,
-        git_resources,
-        base_scan,
-        engine,
-        forge,
-        crate::semantic::View {
-            labels: semantic.labels.as_ref(),
-            routes: None,
-        },
-        includes,
-        base_tree,
-        None,
-    );
-    candidate_scan.scans = std::mem::take(&mut base_scan.scans);
     let mut outcomes = CandidateOutcomes::default();
     let candidate = evaluate_tree(
         repo,
@@ -321,12 +307,32 @@ fn evaluated_pair(
             routes: Some(semantic.routes.as_ref()),
         },
         includes,
+        None,
         candidate_tree,
         Some(CandidateEvaluation {
             policy: candidate_policy.policy.as_ref(),
             record_sets: semantic.record_sets.as_ref(),
             outcomes: &mut outcomes,
         }),
+    );
+    base_scan.scans = std::mem::take(&mut candidate_scan.scans);
+    let base = evaluate_tree(
+        repo,
+        git_resources,
+        base_scan,
+        engine,
+        forge,
+        crate::semantic::View {
+            labels: semantic.labels.as_ref(),
+            routes: None,
+        },
+        includes,
+        candidate
+            .as_ref()
+            .ok()
+            .map(|(evaluated, _)| &evaluated.discovery.declared_routers),
+        base_tree,
+        None,
     );
     (base, candidate, outcomes)
 }

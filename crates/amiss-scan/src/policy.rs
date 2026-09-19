@@ -12,7 +12,7 @@ use amiss_wire::requests::RequestTrust;
 pub use acquire::{Includes, PolicySide, acquire, acquire_entry};
 pub use effects::{
     ConstraintContext, ControlSeed, DebtContext, Effects, InventoryState, TimeContext,
-    WaiverContext, effects,
+    WaiverContext, effects, removed_declarations,
 };
 pub(crate) use floor::protected_control;
 pub use floor::{

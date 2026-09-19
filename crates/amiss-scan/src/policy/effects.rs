@@ -93,6 +93,31 @@ fn removed_projection_assertions(
         .collect()
 }
 
+/// The router declarations the base carried that the candidate does not carry
+/// identically. Both sides are read under the candidate's declarations, so a
+/// dropped one takes back the resolutions it served on both sides at once, and
+/// a finding it was holding open leaves the report with nothing saying it went.
+/// The declaration that answers for a directory is one, so a name changed there
+/// drops the old one as surely as deleting the file does.
+#[must_use]
+pub fn removed_declarations(
+    base: &BTreeMap<RepoPath, String>,
+    candidate: &BTreeMap<RepoPath, String>,
+) -> Vec<ControlSeed> {
+    base.iter()
+        .filter(|(path, router)| candidate.get(*path) != Some(*router))
+        .map(|(path, _)| ControlSeed {
+            kind: FindingKind::PolicyWeakened,
+            rule_id: if candidate.contains_key(path) {
+                "router/declaration-replaced".to_owned()
+            } else {
+                "router/declaration-removed".to_owned()
+            },
+            control_path: Some(path.clone()),
+        })
+        .collect()
+}
+
 /// The verified debt snapshot as evaluation context: provenance plus the
 /// items the finding projection matches by key and fact digest.
 #[derive(Clone, Debug, PartialEq, Eq)]

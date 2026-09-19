@@ -16,13 +16,14 @@ use super::external::external_gate;
 use super::{
     CandidateEvaluation, CandidateOutcomes, Evaluated, ExternalVerified, PipelineFailure,
     PipelineResult, ResolvedTree, SetupShell, binding_mismatch, conclude, controls_failure, detail,
-    effective_limits, effective_shell, evaluate_tree, floor_gate, pair_effects,
+    effective_limits, effective_policy, effective_shell, evaluate_tree, floor_gate, pair_effects,
     policy_unavailable_reason, resolve_tree, side_observations,
 };
 
-/// The staged candidate's discovery and observations plus every accumulated
-/// failure row, or the fatal projection when the index side cannot be
-/// discovered at all.
+/// The staged candidate's discovery and observations plus the failure rows
+/// they raised, or the fatal projection when the index side cannot be
+/// discovered at all. It runs before the base, which is read under the routers
+/// this side declares, and the accumulated errors keep the base's first.
 #[expect(
     clippy::too_many_arguments,
     reason = "the staged pipeline context is the contract's"
@@ -38,13 +39,12 @@ fn staged_candidate(
     base_identity: &SnapshotIdentity,
     includes: &crate::policy::Includes,
     index: &amiss_git::LogicalIndex,
-    base_failures: Vec<ErrorDetail>,
     candidate: CandidateEvaluation<'_>,
 ) -> PipelineResult<(SnapshotDiscovery, Option<Side>, Vec<ErrorDetail>)> {
     let discovery =
         crate::discovery::discover_index(repo, git_resources, candidate_scan, includes, index)
             .map_err(|defect| candidate_unavailable(setup_shell, base_identity.clone(), &defect))?;
-    let mut failures = base_failures;
+    let mut failures = Vec::new();
     match side_observations(
         repo,
         git_resources,
@@ -423,24 +423,8 @@ fn staged_index_result(
         &base_tree.0,
         &index,
     )?;
-    let (base_evaluated, base_failures) = evaluate_tree(
-        repo,
-        &mut git_resources,
-        &mut base_scan,
-        engine,
-        forge,
-        crate::semantic::View {
-            labels: external.semantic.labels.as_ref(),
-            routes: None,
-        },
-        &includes,
-        base_tree,
-        None,
-    )
-    .map_err(|detail| not_evaluated(setup_shell, &base_placeholder, detail))?;
-    candidate_scan.scans = std::mem::take(&mut base_scan.scans);
     let mut outcomes = CandidateOutcomes::default();
-    let (candidate_discovery, candidate_side, mut failures) = staged_candidate(
+    let (candidate_discovery, candidate_side, candidate_failures) = staged_candidate(
         repo,
         &mut git_resources,
         &mut candidate_scan,
@@ -451,16 +435,33 @@ fn staged_index_result(
             routes: Some(external.semantic.routes.as_ref()),
         },
         setup_shell,
-        &base_evaluated.identity,
+        &base_tree.1,
         &includes,
         &index,
-        base_failures,
         CandidateEvaluation {
             policy: candidate_policy.policy.as_ref(),
             record_sets: external.semantic.record_sets.as_ref(),
             outcomes: &mut outcomes,
         },
     )?;
+    base_scan.scans = std::mem::take(&mut candidate_scan.scans);
+    let (base_evaluated, mut failures) = evaluate_tree(
+        repo,
+        &mut git_resources,
+        &mut base_scan,
+        engine,
+        forge,
+        crate::semantic::View {
+            labels: external.semantic.labels.as_ref(),
+            routes: None,
+        },
+        &includes,
+        Some(&candidate_discovery.declared_routers),
+        base_tree,
+        None,
+    )
+    .map_err(|detail| not_evaluated(setup_shell, &base_placeholder, detail))?;
+    failures.extend(candidate_failures);
     let (effects, site) = pair_effects(
         repo,
         &mut git_resources,
@@ -468,15 +469,14 @@ fn staged_index_result(
         external,
         &base_policy,
         &candidate_policy,
+        &base_evaluated.declared,
         (&base_evaluated.discovery, &mut base_scan),
         (&candidate_discovery, &mut candidate_scan),
         &mut failures,
     );
     let block = resolved_candidate_block(repo, base_oid, &index, skip_count, &mut failures);
     let mut setup = setup_shell.with(base_evaluated.identity.clone(), block);
-    setup.policy = effects;
-    setup.policy.errors_retained = setup_shell.errors_retained;
-    setup.policy.complete_findings = scan_limits.complete_findings;
+    setup.policy = effective_policy(effects, setup_shell, scan_limits);
     staged_finish(
         repo,
         &mut git_resources,

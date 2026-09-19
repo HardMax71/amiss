@@ -29,11 +29,14 @@ pub use staged::staged_index;
 use external::ExternalVerified;
 
 /// One side's full evaluation: discovery, then every scanned occurrence
-/// resolved against this same snapshot.
+/// resolved against this same snapshot. The declarations are the ones this
+/// side's own tree holds, which the comparison reports on where the snapshot
+/// was read under another side's.
 struct Evaluated {
     identity: SnapshotIdentity,
     discovery: SnapshotDiscovery,
     side: Side,
+    declared: BTreeMap<RepoPath, String>,
 }
 
 #[derive(Default)]
@@ -318,6 +321,21 @@ fn effective_shell(shell: &SetupShell, limits: &ScanLimits) -> SetupShell {
     }
 }
 
+/// The comparison's effects under the ceilings the report carries: the error
+/// ceiling the shell was reissued with, and the complete-findings ceiling a
+/// verified floor may have tightened.
+fn effective_policy(
+    effects: crate::policy::Effects,
+    shell: &SetupShell,
+    limits: ScanLimits,
+) -> crate::policy::Effects {
+    crate::policy::Effects {
+        errors_retained: shell.errors_retained,
+        complete_findings: limits.complete_findings,
+        ..effects
+    }
+}
+
 struct PipelineFailure(Box<PipelineFailureContext>);
 
 struct PipelineFailureContext {
@@ -467,6 +485,7 @@ fn pair_effects(
     external: ExternalVerified,
     base_policy: &crate::policy::PolicySide,
     candidate_policy: &crate::policy::PolicySide,
+    base_declared: &BTreeMap<RepoPath, String>,
     base: (&SnapshotDiscovery, &mut ScanResources),
     candidate: (&SnapshotDiscovery, &mut ScanResources),
     failures: &mut Vec<ErrorDetail>,
@@ -476,6 +495,10 @@ fn pair_effects(
         candidate_policy,
         &inventory_lookup(candidate.0),
     );
+    effects.controls.extend(crate::policy::removed_declarations(
+        base_declared,
+        &candidate.0.declared_routers,
+    ));
     let site = external.install(&mut effects);
     if let Err(row) = apply_floor(
         repo,
@@ -602,12 +625,17 @@ fn evaluate_tree(
     forge: Option<&ForgeContext>,
     semantic: crate::semantic::View<'_>,
     includes: &crate::policy::Includes,
+    declared: Option<&BTreeMap<RepoPath, String>>,
     tree: (Oid, SnapshotIdentity),
     candidate: Option<CandidateEvaluation<'_>>,
 ) -> Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail> {
     let (tree_oid, identity) = tree;
-    let discovery = discover(repo, git_resources, scan_resources, includes, &tree_oid)
+    let mut discovery = discover(repo, git_resources, scan_resources, includes, &tree_oid)
         .map_err(|defect| detail(&defect, None))?;
+    let held = match declared {
+        Some(declared) => crate::route::read_as_declared(&mut discovery, declared),
+        None => discovery.declared_routers.clone(),
+    };
     let (side, failures) = side_observations(
         repo,
         git_resources,
@@ -625,6 +653,7 @@ fn evaluate_tree(
             identity,
             discovery,
             side,
+            declared: held,
         },
         failures,
     ))

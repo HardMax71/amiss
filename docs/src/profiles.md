@@ -88,7 +88,7 @@ finding row, so this page is a reference, not a second source of truth.
 - `observation-correlation-ambiguous`: an occurrence has more than one plausible counterpart across the comparison; Amiss never chooses by input order, so the match is recorded as undecided
 - `unlinked-document`: a scanned structured document inside a complete site build's source root is unreachable from every rendered navigation entrypoint; link the page from rendered navigation or keep non-page material outside that root
 - `site-build-defect`: a complete site build reports a route with conflicting owners or a redirect whose declared terminal route or anchor is not uniquely published; repair the route table or its available routing source
-- `policy-weakened`: the candidate loosens its own repository policy, dropping an include, a protected path, a projection assertion, or a raised disposition; loosening the rules is reported under the rules being loosened
+- `policy-weakened`: the candidate loosens its own repository policy, dropping an include, a protected path, a projection assertion, a router declaration, or a raised disposition; loosening the rules is reported under the rules being loosened
 - `coverage-reduced`: a protected path is gone or not a scannable document while its protection stands; restore it or amend the protection in a reviewed change
 - `control-plane-changed`: a floor-protected control path is not the identical present blob on both sides, in mode and content; the floor exists so control edits are always visible
 - `debt-worsened`: the finding an accepted debt item names no longer matches the recorded fact; debt tolerates exactly the recorded state, so any drift fails
