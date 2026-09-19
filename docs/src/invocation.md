@@ -192,7 +192,7 @@ its line and column, the finding kind, and the reason the target did not answer,
 counts the rest, unless the report is replayed with `--full`. Then one fixed `note` sentence
 per finding kind the feedback carries, in the wording from
 [Profiles and findings](profiles.md), and one per error code, in the wording from
-[Limits and refusals](limits.md). Three totals lines close the output, and a `records` line
+[Analysis errors](errors.md). Three totals lines close the output, and a `records` line
 names the record-only kinds and their counts when the run has any. Pre-existing rows are the
 backlog at warn or fail, and the backlog keeps its own window, so introduced volume cannot
 push it off the terminal. The full findings stay in JSON. `--explain-scope` adds six scope

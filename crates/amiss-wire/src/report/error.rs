@@ -68,19 +68,19 @@ declare_taxonomy! {
             metadata: Some(&INVALID_EVENT),
         },
         InvalidProfile => {
-            meaning: "the profile is not observe, enforce-introduced, or enforce",
+            meaning: "the profile is not observe, enforce-introduced, or enforce; pass one of those three to --profile",
             metadata: Some(&INVALID_PROFILE),
         },
         RequestUnreadable => {
-            meaning: "the machine evaluation request bytes could not be read; nothing was evaluated",
+            meaning: "the machine evaluation request bytes could not be read; nothing was evaluated, so resend the whole sealed request frame on stdin with nothing after it",
             metadata: Some(&REQUEST_UNREADABLE),
         },
         ConfigurationInvalid => {
-            meaning: "a policy or control input violates its schema; one unknown field or malformed value makes the whole file invalid rather than partly honored",
+            meaning: "a policy or control input violates its schema; correct the file the row names, since one unknown field or malformed value makes the whole file invalid rather than partly honored",
             metadata: Some(&CONFIGURATION),
         },
         DuplicateJsonKey => {
-            meaning: "a JSON input repeats an object key; strict parsing refuses the file instead of choosing one of the values",
+            meaning: "a JSON input repeats an object key; drop the duplicate, since strict parsing refuses the file rather than choosing one of the values",
             metadata: Some(&CONFIGURATION),
         },
         InvalidUtf8 => {
@@ -88,11 +88,11 @@ declare_taxonomy! {
             metadata: Some(&CONFIGURATION),
         },
         InvalidJson => {
-            meaning: "an input that must be JSON does not parse as strict JSON",
+            meaning: "an input that must be JSON does not parse as strict JSON; fix the syntax in the file the row names",
             metadata: Some(&CONFIGURATION),
         },
         UnknownSchema => {
-            meaning: "a JSON input declares a schema identifier this engine does not recognize",
+            meaning: "a JSON input declares a schema identifier this engine does not recognize; correct the identifier, or upgrade to a release that defines it",
             metadata: Some(&CONFIGURATION),
         },
         UnknownField => {
@@ -100,7 +100,7 @@ declare_taxonomy! {
             metadata: Some(&CONFIGURATION),
         },
         NoncanonicalArray => {
-            meaning: "a JSON input array violates its required canonical ordering or uniqueness",
+            meaning: "a JSON input array violates its required canonical ordering or uniqueness; sort it and drop the repeated members",
             metadata: Some(&CONFIGURATION),
         },
         DigestMismatch => {
@@ -108,15 +108,15 @@ declare_taxonomy! {
             metadata: Some(&CONFIGURATION),
         },
         ControlBindingMismatch => {
-            meaning: "an external control is bound to a different repository, ref, or run identity than this evaluation; nothing is applied and the run ends incomplete",
+            meaning: "an external control is bound to a different repository, ref, or run identity than this evaluation; nothing is applied, so reissue the control against the identity under review or leave it out",
             metadata: Some(&CONFIGURATION),
         },
         ExceptionOverlap => {
-            meaning: "accepted exception items select the same finding more than once; overlap ends evaluation incomplete instead of double-suppressing",
+            meaning: "accepted exception items select the same finding more than once; narrow the debt and waiver items until each finding is selected once, since overlap is refused rather than double-suppressed",
             metadata: Some(&CONFIGURATION),
         },
         UnsupportedCapability => {
-            meaning: "a candidate document declares a reserved amiss: capability this engine does not implement; the run ends incomplete rather than guessing at the claim",
+            meaning: "a candidate document declares a reserved amiss: capability this engine does not implement; correct the declaration in the named document, or upgrade to a release that implements it",
             metadata: Some(&POLICY),
         },
         GitRepositoryUnavailable => {
@@ -132,11 +132,11 @@ declare_taxonomy! {
             metadata: Some(&GIT),
         },
         GitObjectUnreadable => {
-            meaning: "a Git object exists but its bytes cannot be decoded",
+            meaning: "a Git object exists but its bytes cannot be decoded; the object store is damaged, so check it with git fsck and restore it from a fresh clone",
             metadata: Some(&GIT),
         },
         GitIndexInvalid => {
-            meaning: "the staged index file does not parse under the index grammar",
+            meaning: "the staged index file does not parse under the index grammar; remove .git/index and run git reset to rebuild it, or compare two commits instead of the index",
             metadata: Some(&GIT),
         },
         GitIndexUnmerged => {
@@ -156,51 +156,51 @@ declare_taxonomy! {
             metadata: Some(&GIT),
         },
         DocumentInvalid => {
-            meaning: "a document's bytes cannot be decoded as its format requires; the scanner reports that document as unsupported with the reason on its document row rather than ending the run",
+            meaning: "a document's bytes cannot be decoded as its format requires; save the file as UTF-8 or fix the syntax its grammar refused, and only that document is unsupported, never the run",
             metadata: Some(&PARSE),
         },
         ParserError => {
-            meaning: "the pinned parser failed on a document; the document is named and the run is incomplete rather than the file silently dropped",
+            meaning: "the pinned parser failed on a document; this is an Amiss defect rather than a fault in the file, so report it as a bug with the named document",
             metadata: Some(&PARSE),
         },
         ParserPanic => {
-            meaning: "the pinned parser panicked on a document; the panic is caught and reported, and the run is incomplete",
+            meaning: "the pinned parser panicked on a document; the panic is caught and the run is incomplete, so report it as an Amiss bug with the named document",
             metadata: Some(&PARSE),
         },
         InvalidSourceSpan => {
-            meaning: "the parser returned a node whose byte span does not address the document; the parse is not trusted",
+            meaning: "the parser returned a node whose byte span does not address the document; the parse is not trusted, so report it as an Amiss bug with the named document",
             metadata: Some(&PARSE),
         },
         ResolutionError => {
-            meaning: "reference resolution failed internally; the run ends incomplete rather than reporting around the gap",
+            meaning: "reference resolution failed internally; no input fixes this, so report it as an Amiss bug with the command line",
             metadata: Some(&RESOLUTION),
         },
         ResourceLimitExceeded => {
-            meaning: "a named resource crossed its ceiling; the row carries the resource, the configured limit, and the observed lower bound",
+            meaning: "a named resource crossed its ceiling, and no option raises one, so the input has to come under it; the row carries the resource, the configured limit, and the observed lower bound",
             metadata: None,
         },
         OutputLimitExceeded => {
-            meaning: "the serialized report would cross the machine-json-bytes ceiling; the run ends incomplete instead of shortening the findings",
+            meaning: "the serialized report would cross the machine-json-bytes ceiling; no option raises it and findings are never dropped to fit, so the repository is past what one report holds",
             metadata: Some(&OUTPUT),
         },
         TooManyErrors => {
-            meaning: "more distinct analysis errors accumulated than the retention ceiling; the lowest-keyed rows are kept and this sentinel stands for the rest",
+            meaning: "more distinct analysis errors accumulated than the retention ceiling; the lowest-keyed rows are kept and this sentinel stands for the rest, so fix those and rerun for what is left",
             metadata: Some(&INTERNAL),
         },
         ReportConstructionFailed => {
-            meaning: "the report could not be constructed or emitted; the run has no trustworthy output",
+            meaning: "the report could not be constructed or emitted; the run has no trustworthy output, so check that the output stream can still be written, then report it as an Amiss bug",
             metadata: Some(&OUTPUT),
         },
         SandboxViolation => {
-            meaning: "the run breached its sandbox descriptor; the result is not trustworthy",
+            meaning: "the run breached its sandbox descriptor; the result is not trustworthy, so discard it and report an Amiss bug with the command line",
             metadata: Some(&INTERNAL),
         },
         TrustedTimeInvalid => {
-            meaning: "a control that needs trusted time has no statement that verifies, absent or failing its binding; the run will not act on an unverified clock",
+            meaning: "a control that needs trusted time has no statement that verifies, absent or failing its binding; the run will not act on an unverified clock, so supply a statement bound to this run or drop the control",
             metadata: Some(&CONFIGURATION),
         },
         InternalError => {
-            meaning: "an engine invariant failed; this is a defect in Amiss, not in the input, and the run has no trustworthy result",
+            meaning: "an engine invariant failed; this is a defect in Amiss, not in the input, so discard the run and report it as a bug with the command line",
             metadata: Some(&INTERNAL),
         },
     }

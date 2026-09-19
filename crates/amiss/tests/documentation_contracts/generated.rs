@@ -375,8 +375,8 @@ fn documented_finding_meanings_are_generated_from_the_engine_text() {
 
 #[test]
 fn documented_error_meanings_are_generated_from_the_engine_text() {
-    let path = repository_root().join("docs/src/limits.md");
-    let document = fs::read_to_string(&path).expect("limits documentation is readable");
+    let path = repository_root().join("docs/src/errors.md");
+    let document = fs::read_to_string(&path).expect("errors documentation is readable");
     assert_eq!(
         documented_contract(&document, "error-meanings"),
         meanings_list(
