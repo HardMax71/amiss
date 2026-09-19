@@ -42,6 +42,82 @@ fn measurement_report(finding_count: usize) -> amiss_wire::report::model::Report
     payload
 }
 
+/// Places read by document, then line, then column; two findings at one
+/// position settle on the finding key, so no pair of them can swap.
+#[test]
+fn places_read_in_location_order_and_settle_ties_on_the_finding_key() {
+    use amiss_wire::model::RepoPathText;
+    use amiss_wire::report::Disposition;
+    use amiss_wire::report::model::{Attribution, RepoPath, ReportEnvelope, SourceSpan};
+
+    let report: ReportEnvelope = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
+    let mut payload = report.payload;
+    let template = payload.findings[0].clone();
+    payload.findings = [
+        ("docs/beta.md", 10, 1, 7),
+        ("docs/alpha.md", 3, 2, 9),
+        ("docs/alpha.md", 200, 5, 1),
+        ("docs/alpha.md", 3, 2, 4),
+        ("docs/alpha.md", 3, 9, 2),
+    ]
+    .into_iter()
+    .map(|(path, start_line, start_column, key)| {
+        let mut finding = template.clone();
+        finding.attribution = Attribution::PreExisting;
+        finding.effective_disposition = Disposition::Warn;
+        finding.finding_key = format!("sha256:{key:064x}").parse().unwrap();
+        finding.location.path = Some(RepoPath::Text(
+            RepoPathText::try_from(path.to_owned()).unwrap(),
+        ));
+        finding.location.span = Some(SourceSpan {
+            start_byte: 0,
+            end_byte: 1,
+            start_line,
+            start_column,
+            end_line: start_line,
+            end_column: start_column,
+        });
+        finding
+    })
+    .collect();
+
+    let read: Vec<(String, u64, u64, String)> = super::places(
+        &payload,
+        |path: Option<&RepoPath>| path.map_or_else(|| "-".to_owned(), super::wire_path),
+        &|resolution| crate::render::wire_resolution(resolution, super::wire_path),
+    )
+    .iter()
+    .map(|place| {
+        let span = place.span.unwrap();
+        (
+            place.document.map_or_else(String::new, super::wire_path),
+            span.start_line,
+            span.start_column,
+            place.key.to_string(),
+        )
+    })
+    .collect();
+
+    assert_eq!(
+        read,
+        [
+            ("docs/alpha.md", 3, 2, 4),
+            ("docs/alpha.md", 3, 2, 9),
+            ("docs/alpha.md", 3, 9, 2),
+            ("docs/alpha.md", 200, 5, 1),
+            ("docs/beta.md", 10, 1, 7),
+        ]
+        .map(|(path, line, column, key)| (
+            format!("\"{path}\""),
+            line,
+            column,
+            format!("sha256:{key:064x}")
+        ))
+        .to_vec(),
+        "neither the report order nor the key order survives the sort"
+    );
+}
+
 fn measure<T, F: Fn() -> T>(label: &str, project: F) {
     let mut samples = [std::time::Duration::ZERO; 7];
     for elapsed in &mut samples {

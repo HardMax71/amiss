@@ -629,6 +629,10 @@ fn the_places_under_one_row_window_independently_of_the_rows() {
         text.contains("  places overflow: 2 more in the full report"),
         "the place window states what it hid: {text}"
     );
+    assert!(
+        !text.contains("\"doc-8.md\"") && !text.contains("\"doc-9.md\""),
+        "the window keeps the ten lowest documents, not ten arbitrary ones: {text}"
+    );
 
     let json = args("json");
     let shown: Vec<&str> = json.iter().map(String::as_str).collect();
@@ -645,14 +649,57 @@ fn the_places_under_one_row_window_independently_of_the_rows() {
     ]);
     assert_eq!((code, stderr.as_str()), (0, ""));
     let text = String::from_utf8(stdout).unwrap();
+    let replayed: Vec<&str> = text
+        .lines()
+        .filter(|line| line.starts_with("  \"doc-"))
+        .collect();
     assert_eq!(
-        text.lines()
-            .filter(|line| line.starts_with("  \"doc-"))
-            .count(),
+        replayed.len(),
         12,
         "the full replay prints every place: {text}"
     );
+    let mut ascending = replayed.clone();
+    ascending.sort_unstable();
+    assert_eq!(
+        replayed, ascending,
+        "the places read in document order, so a reader can scan down them: {text}"
+    );
     assert!(!text.contains(" overflow:"), "{text}");
+}
+
+/// Anchors into one target are their own findings, so a row lists them by
+/// the line a reader would scan to, not by the key that identifies them.
+#[test]
+fn places_in_one_document_read_by_line() {
+    let fx = amiss_fixtures::commit_pair(
+        &[("target.md", "# Target\n"), ("guide.md", "# Guide\n")],
+        &[(
+            "guide.md",
+            "# Guide\n\n[e](target.md#epsilon)\n[d](target.md#delta)\n[c](target.md#gamma)\n[b](target.md#beta)\n[a](target.md#alpha)\n",
+        )],
+    )
+    .unwrap();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 0);
+    let text = String::from_utf8(stdout).unwrap();
+    assert!(
+        text.contains(
+            "Fix target \"target.md\" affected places 5\n  \"guide.md\":3:1 explicit-target-missing heading-anchor-not-found\n  \"guide.md\":4:1 explicit-target-missing heading-anchor-not-found\n  \"guide.md\":5:1 explicit-target-missing heading-anchor-not-found\n  \"guide.md\":6:1 explicit-target-missing heading-anchor-not-found\n  \"guide.md\":7:1 explicit-target-missing heading-anchor-not-found\n"
+        ),
+        "the lines climb: {text}"
+    );
 }
 
 /// A path that exists under another case is missing, and the place says
