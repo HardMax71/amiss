@@ -143,3 +143,18 @@ fn projection_totals_cross_independently() {
         assert_eq!(resource_of(&crossing), Some(resource));
     }
 }
+
+/// The document budget and the address-space ceiling the binary imposes on
+/// itself are one pair, and nothing else checks that they agree. A snapshot
+/// was measured needing about 26 times its document bytes plus a fixed base,
+/// so a budget over a thirty-second of the ceiling aborts in the allocator
+/// before this limit can report.
+#[test]
+fn the_document_budget_fits_inside_the_address_space_the_engine_allows_itself() {
+    let budget = ScanLimits::CONTRACT.aggregate_document_bytes_per_snapshot;
+    assert!(
+        budget.saturating_mul(32) <= amiss_wire::report::EVALUATOR_MANAGED_MEMORY_BYTES,
+        "{budget} document bytes does not fit under the {} ceiling",
+        amiss_wire::report::EVALUATOR_MANAGED_MEMORY_BYTES
+    );
+}
