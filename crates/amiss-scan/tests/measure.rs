@@ -120,6 +120,7 @@ fn late_case_neighbor_latency_and_memory() {
         entries,
         labels: BTreeMap::new(),
         published_routes: BTreeMap::new(),
+        redirect_routes: BTreeMap::new(),
         sole_sites: BTreeMap::new(),
         sphinx_included: std::collections::BTreeSet::new(),
         antora_components: BTreeMap::new(),

@@ -76,7 +76,7 @@ pub(super) fn normalized_native_path(
 
 /// A destination relative to one directory: segments decode once and stay
 /// contained while `.` and internal `..` normalize away.
-pub(super) fn normalized_path_under(
+pub(crate) fn normalized_path_under(
     parent: &[u8],
     is_image: bool,
     path_part: &str,

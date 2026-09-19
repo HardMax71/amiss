@@ -213,6 +213,9 @@ pub struct SnapshotDiscovery {
     pub entries: BTreeMap<RepoPath, (GitMode, Oid)>,
     pub labels: BTreeMap<String, LabelState>,
     pub published_routes: BTreeMap<RepoPath, RepoPath>,
+    /// Each page URL a document declares it moved away from, by that URL,
+    /// against the document that declares it.
+    pub redirect_routes: BTreeMap<RepoPath, RepoPath>,
     pub sole_sites: BTreeMap<&'static str, Vec<u8>>,
     pub sphinx_included: BTreeSet<RepoPath>,
     /// Each `antora.yml` the tree holds, by its own path, against the
@@ -317,6 +320,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         path_defects: Vec::new(),
         entries: BTreeMap::new(),
         published_routes: BTreeMap::new(),
+        redirect_routes: BTreeMap::new(),
         sole_sites: BTreeMap::new(),
         sphinx_included: BTreeSet::new(),
         antora_components: BTreeMap::new(),
@@ -576,7 +580,8 @@ pub(crate) fn discover_walk(
         discovery.antora_components = declared.antora_components;
         discovery.declared_routers = declared.routers;
     }
-    discovery.published_routes = crate::route::published_routes(&discovery);
+    (discovery.published_routes, discovery.redirect_routes) =
+        crate::route::published_routes(&discovery);
     if let WalkMode::Documents { scan, .. } = &mut mode {
         settle_roles(scan, &mut discovery)?;
     }
@@ -633,7 +638,8 @@ pub fn discover_index(
     let declared = descriptors(repo, git, scan, &discovery)?;
     discovery.antora_components = declared.antora_components;
     discovery.declared_routers = declared.routers;
-    discovery.published_routes = crate::route::published_routes(&discovery);
+    (discovery.published_routes, discovery.redirect_routes) =
+        crate::route::published_routes(&discovery);
     settle_roles(scan, &mut discovery)?;
     Ok(discovery)
 }

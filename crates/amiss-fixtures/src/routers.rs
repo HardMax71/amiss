@@ -408,6 +408,56 @@ const ZOLA_SITE: [(&str, Staged<'static>); 6] = [
     ),
 ];
 
+/// A declared `hugo-pages` tree where pages moved and left the URLs they were
+/// served at in their own frontmatter. `site/guide` claims the URL one reader
+/// writes and a second URL `site/other` claims as well, so that one is left
+/// out. The bundle reader's own URL is the directory holding it, so its climb
+/// is a URL and the block answers it; the leaf reader beside it writes the
+/// same destination, whose reading beside the source is that same path and is
+/// no URL at all, so nothing answers it. A flow sequence is a shape the
+/// reader declines, and under `plain/` no declaration makes the same block
+/// mean anything.
+const PAGE_REDIRECTS: [(&str, Staged<'static>); 8] = [
+    (
+        "site/.amiss/router.yml",
+        Staged::File(b"router: hugo-pages\n"),
+    ),
+    (
+        "site/guide/index.md",
+        Staged::File(
+            b"---\naliases:\n  - old/guide/ # where it was served\n  - shared/page/\n\
+              title: Guide\n---\n\n# Guide\n",
+        ),
+    ),
+    (
+        "site/other/index.md",
+        Staged::File(b"---\naliases:\n  - shared/page/\n---\n\n# Other\n"),
+    ),
+    (
+        "site/flow/index.md",
+        Staged::File(b"---\naliases: [flowed/]\n---\n\n# Flow\n"),
+    ),
+    (
+        "site/notes/index.md",
+        Staged::File(
+            b"# Notes\n\n[moved](../old/guide/)\n[twice](../shared/page/)\n\
+              [gone](../nothing/)\n[flow](../flowed/)\n",
+        ),
+    ),
+    (
+        "site/notes/reader.md",
+        Staged::File(b"# Reader\n\n[shadow](../old/guide/)\n"),
+    ),
+    (
+        "plain/moved/index.md",
+        Staged::File(b"---\naliases:\n  - old/guide/\n---\n\n# Moved\n"),
+    ),
+    (
+        "plain/index.md",
+        Staged::File(b"# Plain\n\n[moved](old/guide/)\n"),
+    ),
+];
+
 /// # Errors
 ///
 /// Any filesystem failure.
@@ -483,4 +533,11 @@ pub fn declared_router() -> std::io::Result<CommitChain> {
 /// Any filesystem failure.
 pub fn zola_site() -> std::io::Result<CommitChain> {
     staged_repository(&ZOLA_SITE)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn page_redirects() -> std::io::Result<CommitChain> {
+    staged_repository(&PAGE_REDIRECTS)
 }

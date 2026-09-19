@@ -393,9 +393,31 @@ reports. Another thirty-one joined them, since a path that resolves has its frag
 `../../datasources/tempo/#span-filters` reaches the Tempo page, which publishes no such heading
 now that span filters are a page of their own.
 
-What is left is mostly one further mechanism this does not read. Of the 195 paths still missing,
-137 name a URL some page claims in the `aliases` block of its own front matter, which Hugo
-serves as a redirect and which is a list rather than the scalar this reader spells out.
+A page that moved leaves the URL it was served at behind, and that block is read under the same
+declaration. Hugo lists those URLs under `aliases` in front matter, serves a redirect at each
+one, and reads a relative entry against the directory the page's own URL sits in, one level
+above the route the page is published at. Grafana's own blocks show it: 784 of its entries
+carry the URL they produce in a trailing comment, 735 of those match that reading, and 6 match
+the page URL itself. Hugo's documentation says the same, giving `old-name` and `../old/path` on
+`content/examples/example-1.en.md` as `/en/examples/old-name/` and `/en/old/path/`.
+
+The grammar is a key opening a line with no value of its own, then the lines under it opening
+with a dash and a space, and the first line shaped any other way closes the block. A flow
+sequence, a plain scalar, and an entry opening with a slash are declined rather than guessed
+at, so this stays a reader of one block and not a reader of YAML. A URL two pages claim is left
+out the way a route two pages publish is, and the page that answers is a file the tree holds,
+so a block widens what resolves and cannot invent a target. Only the reading anchored at the
+page URL is answered from it, since the reading beside the source is a path and no URL at all:
+answering that one would clear `docs/sources/administration/cli.md`'s
+`../developers/http_api/user/`, whose page URL is `administration/developers/http_api/user` and
+is claimed by nothing.
+
+Grafana's 278 becomes 149. Each of the 129 claims that went names a URL exactly one page
+declares, out of the 1,276 single-claimant URLs its 1,336 relative entries spell, and no claim
+arrived. The undecided class stayed at 1,153 rows again. Of the 195 paths that were missing,
+152 resolve, and 23 of those become anchor claims because a path that resolves has its fragment
+read: `../../panels-visualizations/visualizations/time-series/#connect-null-values` reaches the
+time series page, which publishes no such heading now that its options come from a shared file.
 
 ## What this costs
 
