@@ -209,6 +209,13 @@ pub const DECLARABLE: [Spelling; 6] = [
 const ANTORA_COMPONENT: &[u8] = b"name:";
 const ANTORA_EXTENSIONS: &[u8] = b"ext:";
 
+/// The key a Sphinx configuration opens a line with to say which suffixes it
+/// reads, the parser name that means this engine's reStructuredText, and the
+/// suffix a source file carries where nothing declares another.
+const SOURCE_SUFFIX: &[u8] = b"source_suffix";
+const RESTRUCTUREDTEXT: &str = "restructuredtext";
+pub const DEFAULT_SOURCE_SUFFIX: &str = ".rst";
+
 /// Antora's resource families: the coordinate an author writes before `$`,
 /// and the module directory the family is stored under.
 const ANTORA_FAMILIES: [(&str, &[u8]); 5] = [
@@ -556,6 +563,82 @@ pub(crate) fn declared_router(source: &[u8]) -> Option<String> {
         .filter_map(|line| scalar(line.content(source), DECLARED_ROUTER))
         .find(|value| ROUTERS.iter().any(|rule| rule.name == *value))
         .map(str::to_owned)
+}
+
+/// Which suffixes one `conf.py` says Sphinx reads as reStructuredText. A
+/// Python assignment binds a name at the top level, so the key opens the line
+/// the way a descriptor's does, and an indented call or a commented-out line
+/// declares nothing. The value is one quoted suffix, or a mapping closed on
+/// the same line whose value names the reStructuredText parser. A mapping left
+/// open, a list, and a name spelled anywhere else are declined rather than
+/// parsed.
+#[must_use]
+pub(crate) fn source_suffixes(source: &[u8]) -> BTreeSet<String> {
+    let mut declared = BTreeSet::new();
+    for line in amiss_md::lines::scan(source) {
+        let Some(value) = assigned(line.content(source), SOURCE_SUFFIX) else {
+            continue;
+        };
+        match scalar(value, b"") {
+            Some(single) => {
+                declared.insert(single.to_owned());
+            }
+            None => declared.extend(mapped(value)),
+        }
+    }
+    declared
+}
+
+/// What one top-level Python assignment binds, where the key opens the line
+/// and an equals sign follows it.
+fn assigned<'a>(line: &'a [u8], key: &[u8]) -> Option<&'a [u8]> {
+    line.strip_prefix(key)?
+        .trim_ascii_start()
+        .strip_prefix(b"=")
+}
+
+/// Every key a one-line mapping binds to the reStructuredText parser, each
+/// side read as the scalar it is quoted as.
+fn mapped(value: &[u8]) -> Vec<String> {
+    let Some(entries) = std::str::from_utf8(value)
+        .ok()
+        .map(|text| text.trim_matches([' ', '\t']))
+        .and_then(|text| text.strip_prefix('{'))
+        .and_then(|text| text.strip_suffix('}'))
+    else {
+        return Vec::new();
+    };
+    entries
+        .split(',')
+        .filter_map(|entry| entry.split_once(':'))
+        .filter(|(_, parser)| scalar(parser.as_bytes(), b"") == Some(RESTRUCTUREDTEXT))
+        .filter_map(|(suffix, _)| scalar(suffix.as_bytes(), b"").map(str::to_owned))
+        .collect()
+}
+
+/// Whether a Sphinx root reads this path as one of its own source files,
+/// which is the nearest `conf.py` above it declaring the suffix it carries.
+#[must_use]
+pub(crate) fn declared_source(snapshot: &SnapshotDiscovery, path: &[u8]) -> bool {
+    let Some(root) = declared_root(snapshot, path, SPHINX.declared_by) else {
+        return false;
+    };
+    snapshot.source_suffixes.get(&root).is_some_and(|declared| {
+        declared
+            .iter()
+            .any(|suffix| path.ends_with(suffix.as_bytes()))
+    })
+}
+
+/// The suffix a docname takes under one root: the first its `conf.py`
+/// declares, or the default where it declares nothing this reader spells out.
+/// A docname names one file, so a root declaring several reads the first.
+fn docname_suffix<'a>(snapshot: &'a SnapshotDiscovery, root: &[u8]) -> &'a str {
+    snapshot
+        .source_suffixes
+        .get(root)
+        .and_then(BTreeSet::first)
+        .map_or(DEFAULT_SOURCE_SUFFIX, String::as_str)
 }
 
 /// Whether the component a path belongs to is assembled by an extension rather
@@ -1169,7 +1252,11 @@ fn plugin_path(site: &[u8], document: &[u8]) -> Option<Vec<u8>> {
 }
 
 /// A source-root-absolute `:doc:` target, anchored at the directory holding
-/// `conf.py`, with the source suffix an extensionless docname takes.
+/// `conf.py`. A docname names a source file without its suffix, so the name
+/// takes the suffix that root reads and a dot inside the name stays part of
+/// the name. A trailing slash is normalized away before the lookup, which is
+/// what `docname_join` does. A relative target keeps the default suffix the
+/// adapter spelled it with, since the adapter runs before any root is known.
 fn sphinx_anchor(
     snapshot: &SnapshotDiscovery,
     document: &RepoPath,
@@ -1179,21 +1266,19 @@ fn sphinx_anchor(
     if construct? != SourceConstruct::RstDocRole {
         return None;
     }
-    let relative = path_part.strip_prefix('/')?;
-    if relative.is_empty() || relative.starts_with('/') {
+    let absolute = path_part.strip_prefix('/')?;
+    let docname = absolute.strip_suffix('/').unwrap_or(absolute);
+    if docname.is_empty() || docname.starts_with('/') {
         return None;
     }
     let root = site_root(snapshot, document.as_bytes(), &SPHINX)?;
-    let named = relative
-        .rsplit('/')
-        .next()
-        .is_some_and(|last| last.contains('.'));
-    let relative = if named {
-        relative.to_owned()
+    let suffix = docname_suffix(snapshot, &root);
+    let spelled = if docname.ends_with(suffix) {
+        docname.to_owned()
     } else {
-        format!("{relative}.rst")
+        format!("{docname}{suffix}")
     };
-    Some((root, relative))
+    Some((root, spelled))
 }
 
 /// The nearest directory on the document's ancestor chain holding one of the

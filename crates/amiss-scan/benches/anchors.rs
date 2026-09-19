@@ -156,6 +156,7 @@ fn late_policy_bound_adapter(bencher: Bencher<'_, '_>) {
         sole_sites: BTreeMap::new(),
         sphinx_included: std::collections::BTreeSet::new(),
         antora_components: BTreeMap::new(),
+        source_suffixes: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
     };
     let path = RepoPath::new("generated/099999.page".to_owned())

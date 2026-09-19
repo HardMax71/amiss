@@ -61,8 +61,9 @@ The three spellings hold in every tree, since `guide` reaching `guide.md` costs 
 site with no router and nothing more. A second set holds only where the tree carries the
 generator's own configuration file, because each of these moves a destination to another
 directory and would be a guess anywhere else. A rule turns on when one of its files is a blob
-on the document's ancestor chain, nearest directory first. Only the file's presence is read,
-never its contents.
+on the document's ancestor chain, nearest directory first. Presence is what selects a rule.
+Two of them then read one value out of the file that selected them, the Antora component name
+and the Sphinx source suffix, and the rest never open it.
 
 Which sites a tree declares is a question about the whole tree, and which site owns a document
 is a question about that document. Where nothing on the chain declares a generator and the
@@ -216,11 +217,34 @@ one, so a raw destination that already reached a file beside the source still re
 
 `source-root` is Sphinx's `:doc:` role with a leading slash, in a document under the
 directory holding `conf.py`. `` :doc:`/testing` `` in `docs/tutorial/deploy.rst` is
-`docs/testing.rst`: the docname under the source directory, with the `.rst` suffix an
-extensionless name takes, the same suffix the relative form already took. A plain hyperlink
-with a leading slash is still a site route, since Sphinx emits it as written. A `:doc:` target
-in a document with no `conf.py` above it is answered by the one source directory the tree
-declares, and stays the declared site route it was where the tree declares several.
+`docs/testing.rst`: the docname under the source directory, with the suffix that root reads.
+A docname is a file name without its suffix, so the dot in `/releases/1.1` is part of the name
+and that target is `docs/releases/1.1.rst`, while a trailing slash is normalized away before
+the name is looked up, the way `docname_join` does it, so `` :doc:`</ref/applications/>` `` is
+`docs/ref/applications.rst`. A plain hyperlink with a leading slash is still a site route,
+since Sphinx emits it as written. A `:doc:` target in a document with no `conf.py` above it is
+answered by the one source directory the tree declares, and stays the declared site route it
+was where the tree declares several.
+
+Which suffix that root reads is the one thing read out of `conf.py`. A project that writes its
+pages in another suffix says so in `source_suffix`, and Django writes all 677 of its pages in
+`.txt`. Two forms are read, both on one line with the key opening it, which is where a Python
+assignment binds a name at the top level: `source_suffix = ".txt"` is one suffix, and
+`source_suffix = {".txt": "restructuredtext"}` is the mapping form, whose value has to name the
+reStructuredText parser, since `{".md": "markdown"}` says the opposite of what this rule wants.
+A commented-out line, an `add_source_suffix` call, a mapping left open across lines, and a list
+naming no parser are all declined, and a root that declares nothing this reader spells out
+plainly reads `.rst` as before. A root naming several reStructuredText suffixes is read under
+the first, because a docname names one file. So `` :doc:`/ref/models/querysets` `` in Django's
+tree is `docs/ref/models/querysets.txt`, and the same declaration is what makes those files
+documents at all, which [Discovery](discovery.md) states.
+
+A relative `:doc:` target keeps `.rst` whatever the root declares. The adapter spells that one
+while it parses, before anything knows which root the document sits under, and rewriting it
+afterwards would guess at a name the author never wrote. Django writes four relative targets in
+677 pages and all four name another project's inventory, so the boundary costs it nothing;
+a tree that writes relative docnames under another suffix would see them reported missing under
+`.rst`, which is the honest reading of what this rule does not do yet.
 
 Each of the spellings above widens what resolves and nothing else, like the three: an anchored
 destination is looked up in the tree and is missing when the tree does not hold it, so

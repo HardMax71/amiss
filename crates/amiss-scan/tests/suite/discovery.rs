@@ -215,6 +215,77 @@ fn tree_and_index_discovery_preserve_strict_raw_path_order() {
     );
 }
 
+/// A `conf.py` that says which suffix it reads widens the document set under
+/// its own directory and nowhere else: the same suffix beside another root
+/// that leaves its declaration open, and the same suffix where nothing
+/// declares anything, are text files as before. A text file under the root
+/// that is no prose is read like any other source there, which is what
+/// Sphinx does with it too, and it extracts nothing. Both snapshot forms
+/// answer alike.
+#[test]
+fn a_declared_source_suffix_widens_the_document_set_under_its_own_root() {
+    let chain = amiss_fixtures::sphinx_declared_suffix().unwrap();
+    let root = chain.root();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let mut git_resources = GitResources::new(GitLimits::CONTRACT);
+    let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
+    let includes = amiss_scan::Includes::default();
+    let from_tree = discover(
+        &repo,
+        &mut git_resources,
+        &mut scan_resources,
+        &includes,
+        &head_tree(root),
+    )
+    .unwrap();
+    let index_bytes = repo.read_index_bytes(&mut git_resources).unwrap();
+    let index = amiss_git::parse_index_file(ObjectFormat::Sha1, &index_bytes).unwrap();
+    let from_index = discover_index(
+        &repo,
+        &mut git_resources,
+        &mut scan_resources,
+        &includes,
+        &index,
+    )
+    .unwrap();
+
+    let listing = |discovery: &amiss_scan::SnapshotDiscovery| {
+        discovery
+            .documents
+            .iter()
+            .map(|record| {
+                (
+                    record.path.as_str().unwrap().to_owned(),
+                    <&'static str>::from(record.classification),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(listing(&from_tree), listing(&from_index));
+    assert_eq!(
+        listing(&from_tree),
+        vec![
+            ("docs/index.txt".to_owned(), "structured-rst"),
+            ("docs/releases/1.1.txt".to_owned(), "structured-rst"),
+            ("docs/requirements.txt".to_owned(), "structured-rst"),
+            ("docs/testing.txt".to_owned(), "structured-rst"),
+        ]
+    );
+    assert_eq!(
+        from_tree.outside_document_set, 4,
+        "both conf.py, the open root's page, and the plan outside every root"
+    );
+    let requirements = from_tree
+        .documents
+        .iter()
+        .find(|record| record.path.as_bytes() == b"docs/requirements.txt")
+        .unwrap();
+    let DocumentStatus::Scanned(scanned) = &requirements.status else {
+        panic!("a text file under the root is read")
+    };
+    assert_eq!(scanned.occurrences, Vec::new());
+}
+
 #[test]
 fn excluded_documents_are_never_admitted_or_read() {
     let dir = fixture();

@@ -545,6 +545,7 @@ fn bound_adapter_answers_only_policy_included_rows() {
         sole_sites: BTreeMap::new(),
         sphinx_included: BTreeSet::new(),
         antora_components: BTreeMap::new(),
+        source_suffixes: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
     };
     assert_eq!(

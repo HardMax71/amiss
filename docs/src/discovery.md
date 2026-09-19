@@ -7,8 +7,13 @@ the exact lowercase suffix `.md` or `.markdown` are `structured-markdown`; `.mdx
 Markdown adapter. `.cursorrules` and `llms.txt` are `plain-advisory`: they are scanned by an
 adapter that extracts no references. `.adoc` and `.asciidoc` are `structured-asciidoc`, and `.rst` is
 `structured-rst`. `.txt` stays off both lists: the suffix says nothing about what is inside.
-Django can state its convention without admitting every file under `docs` by using one exact
-tree-and-suffix selector bound to `rst`; unrelated suffixes remain outside. `.ipynb` and `.org`
+One file in the tree does say. A Sphinx `conf.py` names the suffixes that project reads, and
+Django's names `.txt`, so a file carrying a declared suffix under the directory holding that
+`conf.py` is `structured-rst` and reads under the reStructuredText grammar. Nothing else moves:
+the same suffix anywhere outside that directory is a text file, because a suffix one site
+declares says nothing about a file beside it. [What a documentation router
+serves](route-spellings.md) holds the two declaration forms that are read and what is declined.
+A repository policy include still binds a suffix no configuration declares. `.ipynb` and `.org`
 are `unparsed-markup`: this engine has no parser for a notebook or
 for Org markup, so those files are discovered and counted as `unsupported-document-format`
 and their content is never read, the same honest count an unbound policy include reaches.
@@ -59,7 +64,7 @@ is the case that made it a defect rather than noise, since seven intentionally m
 fixtures under `tests/format/` refused its entire run; it scans now, and the first thing it
 reports is a real break in its contributing guide.
 
-Nine paths through the classifier:
+Eleven paths through the classifier:
 
 ```text
 docs/guide.md               structured-markdown   scanned
@@ -68,10 +73,20 @@ README                      extensionless-markdown scanned
 llms.txt                    plain-advisory        scanned, nothing extracted
 docs/guide.adoc             structured-asciidoc   scanned
 docs/guide.rst              structured-rst        scanned
+docs/faq.txt                structured-rst        the docs/conf.py above it declares .txt
+notes/plan.txt              not a document        no conf.py above it declares that suffix
 notes/plan.org              unparsed-markup       counted, never read
 vendor/lib/README.md        excluded              the vendor component is in the closed set
 src/parser.rs               not a document        a reference target only
 ```
+
+A file under a declaring root that is not prose is read all the same. Django's
+`docs/requirements.txt` is 72 bytes of package names: it is discovered, parsed under the
+reStructuredText grammar, and extracts nothing, which costs the bytes it holds and reports
+no claim. That is also what Sphinx does with it, since Sphinx reads every file under its
+source directory carrying a source suffix and then says the file is in no toctree. Reading
+the declaration rather than the file is the whole rule: a suffix no `conf.py` names stays
+outside the document set however much prose it holds.
 
 Markdown and MDX recognize frontmatter only at byte zero, optionally after one UTF-8 BOM.
 The first complete line must be exactly `---` or `+++`; the closing line repeats it, except

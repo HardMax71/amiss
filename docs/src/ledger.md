@@ -207,6 +207,26 @@ reference. Each names a route the current tree does not hold under
 class as helix's one-character break: real, pre-existing, and invisible to a build that
 never resolves them.
 
+The policy is gone now and the numbers came back the same. Reading `source_suffix` out of
+`conf.py` makes those files documents with nothing staged at all, measured 2026-09-19 on
+django `862ade3409ce` against its own head with the staged index, engine
+`sha256:902c46474348978ecb588e46ddda3d35b3e86450ce54b42ba21b73bb1142ff80`. The run before
+that change reported `discovered 14 scanned 9` and seventeen references, all of them
+external, and passed: nine documents out of a 677-page set, with no hint in the verdict
+that the other 668 were never opened. The run after reports `discovered 691 scanned 686`
+and 3,057 references, 2,347 of them resolved.
+
+Thirty-one references go missing, and they are the same two classes the staged policy
+found: the nine dead relative directory links above, and twenty-two `:ref:` names that
+belong to another project's inventory, `genindex` and `modindex` into the index Sphinx
+builds for itself and the rest into CPython's own pages, which the prose around them
+usually says outright. The 677 files are 6.5 MB of source together, a fifth of the 32 MiB a
+snapshot may read. Two other repositories moved by one row each and both were
+false claims this work removed: numpy's `` :doc:`/reference/routines.err` `` names
+`routines.err.rst`, whose name carries a dot of its own, and Sphinx's own
+`` :doc:`/usage/referencing/` `` carries the trailing slash `docname_join` drops. The other
+fifty-two trees in the corpus did not move by one row.
+
 ## The same ten trees, a third time
 
 Scanned 2026-08-10 on the main build the Django row used, engine

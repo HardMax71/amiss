@@ -98,11 +98,12 @@ fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> 
 
 /// What every descriptor in the snapshot declares out of its own contents: an
 /// Antora component descriptor names the component its root contributes to,
-/// since Antora assembles one component from every source root naming it, and
-/// a router declaration names the router publishing the directory it sits in,
-/// which nothing on a path shows either. Each is read once here and the
-/// resolver answers from what they say. A descriptor past the document ceiling
-/// or unreadable declares nothing, which leaves its root standing alone as it
+/// since Antora assembles one component from every source root naming it, a
+/// Sphinx configuration names the suffixes its own root reads, and a router
+/// declaration names the router publishing the directory it sits in, none of
+/// which anything on a path shows. Each is read once here and the resolver
+/// answers from what they say. A descriptor past the document ceiling or
+/// unreadable declares nothing, which leaves its root standing alone as it
 /// did before.
 fn descriptors(
     repo: &Repository,
@@ -110,17 +111,11 @@ fn descriptors(
     scan: &mut ScanResources,
     discovery: &SnapshotDiscovery,
 ) -> Result<Declared, Error> {
-    let declaration = |path: &RepoPath| {
-        path.as_bytes()
-            .strip_suffix(crate::route::ROUTER_DECLARATION.as_bytes())
-            .is_some_and(|above| above.is_empty() || above.ends_with(b"/"))
-    };
     let wanted: Vec<(RepoPath, Oid)> = discovery
         .entries
         .iter()
         .filter(|(path, (mode, _))| {
-            matches!(mode, GitMode::RegularFile | GitMode::ExecutableFile)
-                && (crate::route::declares(&crate::route::ANTORA, path) || declaration(path))
+            matches!(mode, GitMode::RegularFile | GitMode::ExecutableFile) && declaring(path)
         })
         .map(|(path, (_, oid))| (path.clone(), oid.clone()))
         .collect();
@@ -134,22 +129,52 @@ fn descriptors(
             continue;
         };
         scan.charge_document_bytes(u64::try_from(object.body.len()).unwrap_or(u64::MAX))?;
-        if crate::route::declares(&crate::route::ANTORA, &path) {
-            if let Some(component) = crate::route::antora_descriptor(&object.body) {
-                declared.antora_components.insert(path, component);
-            }
-        } else if let Some(router) = crate::route::declared_router(&object.body) {
-            declared.routers.insert(path, router);
-        }
+        record_declaration(&mut declared, path, &object.body);
     }
     Ok(declared)
 }
 
-/// What one pass over the descriptors read: the Antora components, and the
-/// routers a repository declares for its own directories.
+/// Whether a path is one of the three files read for what it declares. A
+/// Sphinx configuration under a tree the scan excludes belongs to a fixture
+/// rather than to a site the repository publishes, the same reading that keeps
+/// Sphinx's own 176 test roots from declaring anything.
+fn declaring(path: &RepoPath) -> bool {
+    let router = path
+        .as_bytes()
+        .strip_suffix(crate::route::ROUTER_DECLARATION.as_bytes())
+        .is_some_and(|above| above.is_empty() || above.ends_with(b"/"));
+    router || crate::route::declares(&crate::route::ANTORA, path) || configures(path)
+}
+
+fn configures(path: &RepoPath) -> bool {
+    crate::route::declares(&crate::route::SPHINX, path) && !excluded_by_built_in(path.as_bytes())
+}
+
+/// What one descriptor's own bytes say, under the reading its name selects.
+fn record_declaration(declared: &mut Declared, path: RepoPath, body: &[u8]) {
+    if crate::route::declares(&crate::route::ANTORA, &path) {
+        if let Some(component) = crate::route::antora_descriptor(body) {
+            declared.antora_components.insert(path, component);
+        }
+    } else if configures(&path) {
+        let suffixes = crate::route::source_suffixes(body);
+        if !suffixes.is_empty() {
+            declared
+                .source_suffixes
+                .insert(crate::route::directory(path.as_bytes()).to_vec(), suffixes);
+        }
+    } else if let Some(router) = crate::route::declared_router(body) {
+        declared.routers.insert(path, router);
+    }
+}
+
+/// What one pass over the descriptors read: the Antora components, the
+/// suffixes each Sphinx root reads its own sources under, and the routers a
+/// repository declares for its own directories.
 #[derive(Default)]
 struct Declared {
     antora_components: BTreeMap<RepoPath, (String, bool)>,
+    source_suffixes: BTreeMap<Vec<u8>, BTreeSet<String>>,
     routers: BTreeMap<RepoPath, String>,
 }
 
@@ -221,6 +246,9 @@ pub struct SnapshotDiscovery {
     /// Each `antora.yml` the tree holds, by its own path, against the
     /// component name it declares and whether it reserves an `ext` block.
     pub antora_components: BTreeMap<RepoPath, (String, bool)>,
+    /// Each Sphinx root whose `conf.py` names the suffixes it reads, by the
+    /// directory holding that file.
+    pub source_suffixes: BTreeMap<Vec<u8>, BTreeSet<String>>,
     /// Each router declaration the tree holds, by its own path, against the
     /// router it names for the directory it sits in.
     pub declared_routers: BTreeMap<RepoPath, String>,
@@ -324,6 +352,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         sole_sites: BTreeMap::new(),
         sphinx_included: BTreeSet::new(),
         antora_components: BTreeMap::new(),
+        source_suffixes: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
     }
 }
@@ -341,6 +370,62 @@ fn charge_entry(discovery: &mut SnapshotDiscovery, limit: u64) -> Result<(), Err
     }
 }
 
+/// Every source file a Sphinx root reads under a suffix it declares, recorded
+/// as the reStructuredText document that root reads it as. The declaration
+/// sits beside documents the walk has already passed, so what it widens is
+/// settled once the walk is over. Only the nearest `conf.py` above a path
+/// answers for it, because a suffix a site declares says nothing about a file
+/// outside that site, and a path the built-in rows or a policy include already
+/// claim keeps the row it has.
+fn declared_documents(
+    context: &DocumentContext<'_>,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    discovery: &mut SnapshotDiscovery,
+) -> Result<(), Error> {
+    if discovery.source_suffixes.is_empty() {
+        return Ok(());
+    }
+    let sources: Vec<(RepoPath, TreeEntry)> = discovery
+        .entries
+        .iter()
+        .filter(|(path, (mode, _))| {
+            matches!(mode, GitMode::RegularFile | GitMode::ExecutableFile)
+                && discovery.document(path.as_bytes()).is_none()
+                && context
+                    .scope
+                    .is_none_or(|documents| documents.contains(*path))
+                && crate::route::declared_source(discovery, path.as_bytes())
+        })
+        .map(|(path, (mode, oid))| {
+            (
+                path.clone(),
+                TreeEntry {
+                    mode: *mode,
+                    name: path.as_bytes().to_vec(),
+                    oid: oid.clone(),
+                },
+            )
+        })
+        .collect();
+    for (path, entry) in sources {
+        discovery.outside_document_set = discovery.outside_document_set.saturating_sub(1);
+        record_document(
+            context,
+            git,
+            scan,
+            discovery,
+            path,
+            &entry,
+            Some(Classification::StructuredRst),
+        )?;
+    }
+    discovery
+        .documents
+        .sort_by(|left, right| left.path.as_bytes().cmp(right.path.as_bytes()));
+    Ok(())
+}
+
 fn record_document(
     context: &DocumentContext<'_>,
     git: &mut GitResources,
@@ -348,8 +433,9 @@ fn record_document(
     discovery: &mut SnapshotDiscovery,
     path: RepoPath,
     entry: &TreeEntry,
+    declared: Option<Classification>,
 ) -> Result<(), Error> {
-    let classification = match classify(path.as_bytes()) {
+    let classification = match classify(path.as_bytes()).or(declared) {
         Some(native) => native,
         None if context.includes.matches(&path) => Classification::PolicyIncluded,
         None => {
@@ -570,15 +656,27 @@ pub(crate) fn discover_walk(
                     includes,
                     scope: *scope,
                 };
-                record_document(&context, git, scan, &mut discovery, path, &entry)?;
+                record_document(&context, git, scan, &mut discovery, path, &entry, None)?;
             }
         }
     }
     discovery.sole_sites = crate::route::sole_sites(&discovery);
-    if let WalkMode::Documents { scan, .. } = &mut mode {
+    if let WalkMode::Documents {
+        scan,
+        includes,
+        scope,
+    } = &mut mode
+    {
         let declared = descriptors(repo, git, scan, &discovery)?;
         discovery.antora_components = declared.antora_components;
+        discovery.source_suffixes = declared.source_suffixes;
         discovery.declared_routers = declared.routers;
+        let context = DocumentContext {
+            repo,
+            includes,
+            scope: *scope,
+        };
+        declared_documents(&context, git, scan, &mut discovery)?;
     }
     (discovery.published_routes, discovery.redirect_routes) =
         crate::route::published_routes(&discovery);
@@ -632,12 +730,14 @@ pub fn discover_index(
             name: entry.path.clone(),
             oid: entry.oid.clone(),
         };
-        record_document(&context, git, scan, &mut discovery, path, &tree_entry)?;
+        record_document(&context, git, scan, &mut discovery, path, &tree_entry, None)?;
     }
     discovery.sole_sites = crate::route::sole_sites(&discovery);
     let declared = descriptors(repo, git, scan, &discovery)?;
     discovery.antora_components = declared.antora_components;
+    discovery.source_suffixes = declared.source_suffixes;
     discovery.declared_routers = declared.routers;
+    declared_documents(&context, git, scan, &mut discovery)?;
     (discovery.published_routes, discovery.redirect_routes) =
         crate::route::published_routes(&discovery);
     settle_roles(scan, &mut discovery)?;
