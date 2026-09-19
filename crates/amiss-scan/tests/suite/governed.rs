@@ -184,6 +184,7 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
         sole_sites: BTreeMap::new(),
         sphinx_included: BTreeSet::new(),
         antora_components: BTreeMap::new(),
+        declared_routers: BTreeMap::new(),
         documents: vec![DocumentRecord {
             path,
             classification: Classification::StructuredMarkdown,

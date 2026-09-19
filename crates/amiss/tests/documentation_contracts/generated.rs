@@ -11,7 +11,7 @@ use amiss_scan::ScanLimits;
 use amiss_scan::anchor::{DECLARATIONS, DeclarationRule};
 use amiss_scan::route::{
     BUNDLER_REQUESTS, DOCUSAURUS, DOCUSAURUS_CONTENT_ROOTS, ROUTERS, RouteRule,
-    TEMPLATE_EXPRESSIONS, UNROUTED_OPENING,
+    TEMPLATE_EXPRESSIONS, UNROUTED_OPENING, declarable,
 };
 use amiss_wire::controls::{ORGANIZATION_POLICY_ENTRIES_LIMIT, ResourceName};
 use amiss_wire::model::ForgeDialect;
@@ -296,6 +296,27 @@ fn documented_declared_routers_are_generated_from_the_route_table() {
         documented_contract(&document, "declared-routers"),
         declared_routers_table(&declared),
         "{} drifted from amiss_scan::route::ROUTERS",
+        path.display(),
+    );
+    let declarable: Vec<String> = ROUTERS
+        .iter()
+        .filter(|rule| declarable(rule))
+        .map(|rule| {
+            let turned_on: Vec<String> = rule
+                .serves
+                .iter()
+                .map(|spelling| format!("`{}`", spelling.as_ref()))
+                .collect();
+            format!("| `{}` | {} |", rule.name, turned_on.join(", "))
+        })
+        .collect();
+    assert_eq!(
+        documented_contract(&document, "declarable-routers"),
+        format!(
+            "| Declared router | Turns on |\n| --- | --- |\n{}",
+            declarable.join("\n")
+        ),
+        "{} drifted from amiss_scan::route::DECLARABLE",
         path.display(),
     );
     assert_eq!(

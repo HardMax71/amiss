@@ -634,6 +634,6 @@ pub(crate) fn sphinx_governed(snapshot: &SnapshotDiscovery, document: &RepoPath)
     ROUTERS
         .iter()
         .filter(|rule| rule.serves(Spelling::SourceRoot))
-        .any(|rule| declared_root(snapshot, document.as_bytes(), rule).is_some())
+        .any(|rule| declared_root(snapshot, document.as_bytes(), rule.declared_by).is_some())
         || snapshot.sphinx_included.contains(document)
 }

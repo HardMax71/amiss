@@ -2,8 +2,8 @@
 
 Two kinds of configuration can shape a run, and they carry opposite amounts of trust.
 
-The repository policy is the one input read from the scanned tree itself, and it is
-correspondingly weak. `.amiss/scanner-policy.json` can add directories to scan, list
+The repository policy is the stronger of the two inputs read from the scanned tree itself, and
+it is still weak. `.amiss/scanner-policy.json` can add directories to scan, list
 protected paths whose removal is always a finding, declare exact source-to-document
 projections, and raise the disposition of
 `explicit-target-missing`, `explicit-target-type-mismatch`, and `invalid-reference`. Raise
@@ -11,6 +11,12 @@ only: repository policy combines with the built-in profile by maximum, so it can
 observe warning to `fail` and can never downgrade or suppress it. An unknown
 field makes the whole file invalid and the run incomplete, which is what keeps the policy
 from growing into a plugin system one field at a time.
+
+The other tree-read input is weaker still. `.amiss/router.yml` names the router that publishes
+the directory it sits in, for a tree whose generator is configured somewhere else, and it turns
+on route spellings that resolve a destination against files the tree already holds. It reaches
+no rule that withholds an answer, so it can widen what resolves and can never clear a claim.
+[What a documentation router serves](route-spellings.md) holds the rules it selects.
 
 The complete grammar in one example, with `projection_assertions` optional for compatibility
 with policies written before projections existed and the file valid only whole:

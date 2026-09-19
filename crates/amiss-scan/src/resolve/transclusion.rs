@@ -197,7 +197,12 @@ pub(super) fn templated(
         && transclusions
             .iter()
             .any(|entry| entry.kind == Err(TransclusionRefusal::Template))
-        && crate::route::declared_root(snapshot, document.as_bytes(), &crate::route::HUGO).is_some()
+        && crate::route::declared_root(
+            snapshot,
+            document.as_bytes(),
+            crate::route::HUGO.declared_by,
+        )
+        .is_some()
 }
 
 /// The documents one document renders in place of its own includes, which is
@@ -251,5 +256,9 @@ fn snippet_root(
     if adapter != Adapter::Markdown {
         return None;
     }
-    crate::route::declared_root(snapshot, document.as_bytes(), &crate::route::MKDOCS)
+    crate::route::declared_root(
+        snapshot,
+        document.as_bytes(),
+        crate::route::MKDOCS.declared_by,
+    )
 }

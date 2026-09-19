@@ -319,6 +319,40 @@ const HUGO_SITE: [(&str, Staged<'static>); 4] = [
     ),
 ];
 
+/// A tree that declares its own router under `site/`, where no generator
+/// configuration sits: a leaf page whose destinations climb out of the
+/// directory its own name opened, reaching a branch bundle, a leaf bundle and
+/// a page nothing answers, plus one that stays beside the source and one
+/// anchor the reached page does not publish. The branch bundle's own page is
+/// its directory, so its climb reaches past `setup` rather than out of
+/// `config`. Under `other/` a declaration names a router that only withholds,
+/// and `notes/` declares nothing at all.
+const DECLARED_ROUTER: [(&str, Staged<'static>); 8] = [
+    (
+        "site/.amiss/router.yml",
+        Staged::File(b"router: hugo-pages\n"),
+    ),
+    (
+        "site/setup/live.md",
+        Staged::File(
+            b"# Live\n\n[present](../config/#present)\n[absent](../config/#absent)\n\
+              [gone](../nothing/)\n[sibling](sibling.md)\n[guide](../guide/)\n",
+        ),
+    ),
+    ("site/setup/sibling.md", Staged::File(b"# Sibling\n")),
+    (
+        "site/setup/config/_index.md",
+        Staged::File(b"# Config\n\n## Present\n\n[trap](../trap/)\n"),
+    ),
+    ("site/setup/config/trap.md", Staged::File(b"# Trap\n")),
+    ("site/setup/guide/index.md", Staged::File(b"# Guide\n")),
+    ("other/.amiss/router.yml", Staged::File(b"router: hugo\n")),
+    (
+        "other/page.md",
+        Staged::File(b"# Page\n\n[gone](absent/)\n"),
+    ),
+];
+
 /// Two mdBooks on one site: the outer book at the repository root and an
 /// archived one under `second/`, whose page climbs out of its own root the
 /// way the URL it is served at does. One climb reaches the outer book's
@@ -435,6 +469,13 @@ pub fn hugo_site() -> std::io::Result<CommitChain> {
 /// Any filesystem failure.
 pub fn mdbook_site() -> std::io::Result<CommitChain> {
     staged_repository(&MDBOOK_SITE)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn declared_router() -> std::io::Result<CommitChain> {
+    staged_repository(&DECLARED_ROUTER)
 }
 
 /// # Errors
