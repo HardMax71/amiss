@@ -96,6 +96,44 @@ fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> 
     Ok(())
 }
 
+/// What every Antora component descriptor in the snapshot declares. Antora
+/// assembles one component from every source root naming it, and the name is
+/// inside the file rather than on any path, so each descriptor is read once
+/// here and the resolver answers a module coordinate from all of them. A
+/// descriptor past the document ceiling or unreadable declares nothing, which
+/// leaves its root standing alone as it did before.
+fn antora_components(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    discovery: &SnapshotDiscovery,
+) -> Result<BTreeMap<RepoPath, (String, bool)>, Error> {
+    let descriptors: Vec<(RepoPath, Oid)> = discovery
+        .entries
+        .iter()
+        .filter(|(path, (mode, _))| {
+            matches!(mode, GitMode::RegularFile | GitMode::ExecutableFile)
+                && crate::route::declares(&crate::route::ANTORA, path)
+        })
+        .map(|(path, (_, oid))| (path.clone(), oid.clone()))
+        .collect();
+    let mut components = BTreeMap::new();
+    for (path, oid) in descriptors {
+        let cap = ValueCap {
+            resource: ResourceName::DocumentBlobBytes,
+            limit: scan.limits().document_blob_bytes,
+        };
+        let Ok(object) = repo.read_expected_capped(git, &oid, ObjectKind::Blob, cap) else {
+            continue;
+        };
+        scan.charge_document_bytes(u64::try_from(object.body.len()).unwrap_or(u64::MAX))?;
+        if let Some(declared) = crate::route::antora_descriptor(&object.body) {
+            components.insert(path, declared);
+        }
+    }
+    Ok(components)
+}
+
 /// Every document a page of a Sphinx tree renders in place of an include, and
 /// every document those reach in turn. Sphinx parses an included file as part
 /// of the page holding the directive, so that file writes `MyST` wherever in
@@ -157,6 +195,9 @@ pub struct SnapshotDiscovery {
     pub labels: BTreeMap<String, LabelState>,
     pub published_routes: BTreeMap<RepoPath, RepoPath>,
     pub sphinx_included: BTreeSet<RepoPath>,
+    /// Each `antora.yml` the tree holds, by its own path, against the
+    /// component name it declares and whether it reserves an `ext` block.
+    pub antora_components: BTreeMap<RepoPath, (String, bool)>,
 }
 
 /// What the snapshot's documents say about one `.. _name:` label: the one
@@ -254,6 +295,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         entries: BTreeMap::new(),
         published_routes: BTreeMap::new(),
         sphinx_included: BTreeSet::new(),
+        antora_components: BTreeMap::new(),
     }
 }
 
@@ -505,6 +547,7 @@ pub(crate) fn discover_walk(
     }
     discovery.published_routes = crate::route::published_routes(&discovery);
     if let WalkMode::Documents { scan, .. } = &mut mode {
+        discovery.antora_components = antora_components(repo, git, scan, &discovery)?;
         settle_roles(scan, &mut discovery)?;
     }
     Ok(discovery)
@@ -557,6 +600,7 @@ pub fn discover_index(
         record_document(&context, git, scan, &mut discovery, path, &tree_entry)?;
     }
     discovery.published_routes = crate::route::published_routes(&discovery);
+    discovery.antora_components = antora_components(repo, git, scan, &discovery)?;
     settle_roles(scan, &mut discovery)?;
     Ok(discovery)
 }

@@ -668,6 +668,7 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
         labels: std::collections::BTreeMap::new(),
         published_routes: std::collections::BTreeMap::new(),
         sphinx_included: std::collections::BTreeSet::new(),
+        antora_components: std::collections::BTreeMap::new(),
         documents: paths
             .iter()
             .map(|path| DocumentRecord {

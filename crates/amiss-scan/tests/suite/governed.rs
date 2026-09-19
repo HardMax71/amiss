@@ -182,6 +182,7 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
         labels: BTreeMap::new(),
         published_routes: BTreeMap::new(),
         sphinx_included: BTreeSet::new(),
+        antora_components: BTreeMap::new(),
         documents: vec![DocumentRecord {
             path,
             classification: Classification::StructuredMarkdown,
