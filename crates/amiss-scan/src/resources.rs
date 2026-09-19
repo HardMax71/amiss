@@ -47,7 +47,7 @@ impl ScanLimits {
     pub const CONTRACT: Self = Self {
         documents_per_snapshot: 100_000,
         document_blob_bytes: 4_194_304,
-        aggregate_document_bytes_per_snapshot: 536_870_912,
+        aggregate_document_bytes_per_snapshot: 33_554_432,
         raw_link_destination_bytes: 16_384,
         parser_nesting: 256,
         parser_nodes_per_document: 250_000,

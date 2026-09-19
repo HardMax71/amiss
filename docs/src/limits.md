@@ -63,7 +63,7 @@ memory and are represented by their exact omitted count.
 | `projection-records-compared-per-snapshot` | 200,000 |
 | `aggregate-projection-projected-bytes-per-snapshot` | 67,108,864 |
 | `aggregate-projection-preview-bytes-per-snapshot` | 16,777,216 |
-| `aggregate-document-bytes-per-snapshot` | 536,870,912 |
+| `aggregate-document-bytes-per-snapshot` | 33,554,432 |
 | `raw-link-destination-bytes` | 16,384 |
 | `parser-nesting` | 256 |
 | `parser-nodes-per-document` | 250,000 |
