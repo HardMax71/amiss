@@ -52,8 +52,6 @@ pub trait Payload: Serialize + Sized {
     const DOCUMENT_BYTES: u64;
     /// What the payload digest covers.
     const SEALING: Sealing = Sealing::Typed;
-    /// How the canonical bytes are produced.
-    const SPELLING: Spelling = Spelling::Canonicalizer;
 
     /// Checks the payload's closed grammar.
     ///
@@ -81,13 +79,8 @@ pub trait Payload: Serialize + Sized {
     ///
     /// Refuses a payload that does not serialize.
     fn spell(&self) -> Result<Vec<u8>, Self::Defect> {
-        match Self::SPELLING {
-            Spelling::Canonicalizer => serde_json_canonicalizer::to_vec(self),
-            Spelling::SortedKeys => {
-                serde_json::to_value(self).and_then(|value| serde_json::to_vec(&value))
-            }
-        }
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue).into())
+        serde_json_canonicalizer::to_vec(self)
+            .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue).into())
     }
 
     /// Seals this payload under its schema and encodes the canonical document,
@@ -165,15 +158,6 @@ pub trait Payload: Serialize + Sized {
             }
         }
     }
-}
-
-/// How a payload spells its canonical bytes. The sorted value tree is RFC 8785
-/// whenever every object key is a model field name and every number an
-/// integer; a payload carrying open JSON objects keeps the canonicalizer.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Spelling {
-    Canonicalizer,
-    SortedKeys,
 }
 
 /// What a payload digest covers.
