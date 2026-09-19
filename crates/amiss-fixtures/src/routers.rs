@@ -294,6 +294,36 @@ const SPHINX_SOURCE: [(&str, Staged<'static>); 5] = [
     ),
 ];
 
+/// A Sphinx source tree whose `conf.py` says it reads `.txt`: an index
+/// writing a docname that exists, one spelled with a dot of its own, one
+/// carrying the trailing slash Sphinx normalizes away, one relative docname
+/// that keeps the default suffix, one the tree does not hold, and a path into
+/// a text file outside the root. `requirements.txt` is the text file under the
+/// root that is no prose, `open/conf.py` leaves its declaration open across
+/// lines, and `notes/plan.txt` is the same suffix where nothing declares it.
+const SPHINX_DECLARED_SUFFIX: [(&str, Staged<'static>); 8] = [
+    (
+        "docs/conf.py",
+        Staged::File(b"project = 'widgets'\nsource_suffix = {\".txt\": \"restructuredtext\"}\n"),
+    ),
+    (
+        "docs/index.txt",
+        Staged::File(
+            b"Index\n=====\n\nSee :doc:`/testing`, :doc:`/releases/1.1`, :doc:`/testing/`, \
+              :doc:`testing` and :doc:`/absent`, with `the plan <../notes/plan.txt>`_.\n",
+        ),
+    ),
+    ("docs/testing.txt", Staged::File(b"Testing\n=======\n")),
+    ("docs/releases/1.1.txt", Staged::File(b"1.1\n===\n")),
+    ("docs/requirements.txt", Staged::File(b"sphinx>=7.0\n")),
+    (
+        "open/conf.py",
+        Staged::File(b"source_suffix = {\n    \".txt\": \"restructuredtext\",\n}\n"),
+    ),
+    ("open/page.txt", Staged::File(b"Open\n====\n")),
+    ("notes/plan.txt", Staged::File(b"Plan\n====\n")),
+];
+
 /// A Hugo site under `site/`: a page writing the destination its own render
 /// hook rewrites, a sibling page the tree holds, an anchor into that page
 /// that no heading publishes, and a page outside the site whose missing
@@ -505,6 +535,13 @@ pub fn mkdocs_site() -> std::io::Result<CommitChain> {
 /// Any filesystem failure.
 pub fn sphinx_source() -> std::io::Result<CommitChain> {
     staged_repository(&SPHINX_SOURCE)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn sphinx_declared_suffix() -> std::io::Result<CommitChain> {
+    staged_repository(&SPHINX_DECLARED_SUFFIX)
 }
 
 /// # Errors

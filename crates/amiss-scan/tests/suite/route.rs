@@ -741,6 +741,48 @@ fn a_sphinx_source_directory_anchors_absolute_doc_roles_at_its_conf() {
     assert_eq!(outcomes(&chain), want);
 }
 
+/// Where `conf.py` says which suffix it reads, a docname takes that suffix
+/// rather than the default: `/testing` is `docs/testing.txt`. A docname
+/// carrying a dot of its own is still a docname, a trailing slash is
+/// normalized away before the name is looked up, and a path into a text file
+/// outside the root reaches the file it names. A relative docname keeps the
+/// `.rst` the adapter spelled it with, which is the stated boundary.
+#[test]
+fn a_declared_source_suffix_spells_the_docname_a_doc_role_names() {
+    let chain = amiss_fixtures::sphinx_declared_suffix().expect("the fixture stages");
+    let index = "docs/index.txt";
+    let testing = "docs/testing.txt";
+    let want = expected(vec![
+        row(index, Some(testing), ResolutionTag::Resolved, Some(testing)),
+        row(index, Some(testing), ResolutionTag::Resolved, Some(testing)),
+        row(
+            index,
+            Some("docs/releases/1.1.txt"),
+            ResolutionTag::Resolved,
+            Some("docs/releases/1.1.txt"),
+        ),
+        row(
+            index,
+            Some("docs/absent.txt"),
+            ResolutionTag::Missing,
+            Some("docs/absent.txt"),
+        ),
+        row(
+            index,
+            Some("docs/testing.rst"),
+            ResolutionTag::Missing,
+            Some("docs/testing.rst"),
+        ),
+        row(
+            index,
+            Some("notes/plan.txt"),
+            ResolutionTag::Resolved,
+            Some("notes/plan.txt"),
+        ),
+    ]);
+    assert_eq!(outcomes(&chain), want);
+}
+
 /// Under a generator whose URL model this engine does not implement, a
 /// relative destination the tree does not hold is the build's answer rather
 /// than a missing file, while a destination the tree does hold still
