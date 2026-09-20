@@ -383,6 +383,34 @@ const DECLARED_ROUTER: [(&str, Staged<'static>); 8] = [
     ),
 ];
 
+/// A repository whose site is built somewhere else and says where: the
+/// declaration under `docs` names the router serving that directory and the
+/// URL path it is served at, so a route opening with that base is a path
+/// under `docs`. One route names a page the tree spells with a suffix, one
+/// names a directory, one names a page nothing answers, one sits outside the
+/// base, and one carries a fragment the page it reaches does not publish.
+/// The tree beside the declaration keeps the reading it had.
+const DECLARED_SITE_BASE: [(&str, Staged<'static>); 5] = [
+    (
+        "docs/.amiss/router.yml",
+        Staged::File(b"router: astro\nbase: /manual/\n"),
+    ),
+    (
+        "docs/page.md",
+        Staged::File(
+            b"# Page\n\n[guide](/manual/guide/)\n[section](/manual/intro/)\n\
+              [gone](/manual/nothing/)\n[other](/blog/post/)\n\
+              [anchor](/manual/guide/#missing)\n",
+        ),
+    ),
+    ("docs/guide.md", Staged::File(b"# Guide\n")),
+    ("docs/intro/index.md", Staged::File(b"# Intro\n")),
+    (
+        "outside/page.md",
+        Staged::File(b"# Outside\n\n[guide](/manual/guide/)\n"),
+    ),
+];
+
 /// Two mdBooks on one site: the outer book at the repository root and an
 /// archived one under `second/`, whose page climbs out of its own root the
 /// way the URL it is served at does. One climb reaches the outer book's
@@ -563,6 +591,13 @@ pub fn mdbook_site() -> std::io::Result<CommitChain> {
 /// Any filesystem failure.
 pub fn declared_router() -> std::io::Result<CommitChain> {
     staged_repository(&DECLARED_ROUTER)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn declared_site_base() -> std::io::Result<CommitChain> {
+    staged_repository(&DECLARED_SITE_BASE)
 }
 
 /// # Errors

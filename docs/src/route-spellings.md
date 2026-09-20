@@ -392,7 +392,8 @@ because those two withhold an answer rather than serve a file: a repository that
 them could clear its own findings with one line. What a declaration does reach is bounded the
 way every spelling is. It can move a destination onto a file the tree already holds, and it
 cannot clear a destination the tree lacks, so declaring `hugo` or `jekyll` or `astro` turns on
-nothing at all. There is still no ignore file and no way to silence a finding.
+no spelling at all. There is still no ignore file and no way to silence a finding. The `base`
+key below is the other half of the file and is read whichever router the line above it names.
 
 `page-url` is the row a declaration exists for. Hugo publishes a page at a directory of its own
 name and rewrites no destination, so a relative destination resolves against the page URL,
@@ -466,8 +467,43 @@ resolved, and once the declaration goes the path is missing instead, or, under a
 generator above the document, a declared boundary. So a declaration the base held that the
 candidate does not hold identically is a `policy-weakened` control finding at the file that held
 it, `router/declaration-removed` where the candidate declares nothing there and
-`router/declaration-replaced` where it names another router. That is the one thing the
-declaration reports about itself, and it reports it in every profile.
+`router/declaration-replaced` where it names another router or another base. That is the one
+thing the declaration reports about itself, and it reports it in every profile.
+
+The second key answers the destinations that open with a slash. Those are 54,717 of the 117,747
+in-scope references across 56 repositories, 46.5 percent, more than the resolver answers, and
+each one names a page of a site rather than a file. Which site is the part no tree holds: the
+Kubernetes community repository writes `/docs/comms/slack/` and means kubernetes.io. So the
+declaration says it. `base` is the URL path the directory it sits in is served at, and a route
+opening with that base is a path under that directory:
+
+```yaml
+router: astro
+base: /
+```
+
+Under that file at `src/content/docs`, `/en/guides/astro-components/` is
+`src/content/docs/en/guides/astro-components`, which the extensionless spelling reads as the
+`.mdx` beside it, and the trailing slash names the page rather than a tree the way it does
+under `page-url`. Grafana serves `docs/sources` at `/docs/grafana/latest/` and writes that
+prefix into its own links, so its base carries it and a route without it stays where it was.
+
+The tree has to hold the page. A route that reaches no file keeps the boundary it had, because
+a site serves routes its own build makes up and a tree can enumerate only what it holds:
+Astro's translated pages fall back to English, Kubernetes generates its API reference from
+OpenAPI, its blog is published at a permalink its sources do not spell, and its images come
+from a directory the declaration does not cover. All four stay declined, and across five
+declared trees not one missing-target claim arrived. What does arrive is anchors, because a
+path that resolves has its fragment read: 61 anchor claims against 15,890 references resolved,
+every one read by hand. Fifty-six name a heading the page it reaches does not publish, three
+name one a Hugo shortcode writes, and two name an anchor a generated reference page spells
+three ways. A declaration with no `base` line reads exactly as it did before.
+
+A route naming a directory reaches that directory, since a tree holding `guides/index.mdx`
+holds `guides`, and a fragment on a directory stays undecided the way it already does for
+`../guides/#setup`. That is 1,106 of those references, with 302 fragments left unread. Nothing
+else about the reading is new: the destination is a path under the declared directory, read by
+the spellings every other path is read by.
 
 Nothing in the output suggests writing one, and nothing honestly could. A tree says whether a
 generator is configured inside it; it never says whether its documents are published at all. So
