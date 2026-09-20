@@ -326,8 +326,9 @@ const SPHINX_DECLARED_SUFFIX: [(&str, Staged<'static>); 8] = [
 
 /// A Hugo site under `site/`: a page writing the destination its own render
 /// hook rewrites, a sibling page the tree holds, an anchor into that page
-/// that no heading publishes, and a page outside the site whose missing
-/// destination is still a missing file.
+/// that no heading publishes, a page source the tree lacks and an asset the
+/// tree lacks, and a page outside the site whose missing destination is still
+/// a missing file.
 const HUGO_SITE: [(&str, Staged<'static>); 4] = [
     (
         "site/hugo.toml",
@@ -336,7 +337,8 @@ const HUGO_SITE: [(&str, Staged<'static>); 4] = [
     (
         "site/content/en/guide.md",
         Staged::File(
-            b"# Guide\n\n[glossary](g)\n[install](install.md)\n[setup](install.md#absent)\n",
+            b"# Guide\n\n[glossary](g)\n[install](install.md)\n[setup](install.md#absent)\n\
+              [notes](absent.md)\n[chart](diagram.svg)\n",
         ),
     ),
     (

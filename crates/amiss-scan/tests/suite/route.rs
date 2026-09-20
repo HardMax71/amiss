@@ -793,8 +793,10 @@ fn a_declared_source_suffix_spells_the_docname_a_doc_role_names() {
 /// relative destination the tree does not hold is the build's answer rather
 /// than a missing file, while a destination the tree does hold still
 /// resolves, an anchor into it is still read, and a document outside the site
-/// keeps its missing path. The three other rules of this kind differ only by
-/// the file that declares them.
+/// keeps its missing path. A destination naming a page source is out of the
+/// build's reach and stays the missing file it is, while the asset beside it
+/// takes the boundary the whole site takes. The three other rules of this
+/// kind differ only by the file that declares them.
 #[test]
 fn a_hugo_site_leaves_an_unresolved_relative_destination_to_its_build() {
     let chain = amiss_fixtures::hugo_site().expect("the fixture stages");
@@ -809,6 +811,18 @@ fn a_hugo_site_leaves_an_unresolved_relative_destination_to_its_build() {
         ),
         row(guide, Some(install), ResolutionTag::Resolved, Some(install)),
         row(guide, Some(install), ResolutionTag::Missing, None),
+        row(
+            guide,
+            Some("site/content/en/absent.md"),
+            ResolutionTag::Missing,
+            Some("site/content/en/absent.md"),
+        ),
+        row(
+            guide,
+            Some("site/content/en/diagram.svg"),
+            ResolutionTag::UnsupportedSemantics,
+            None,
+        ),
         row(
             "notes/readme.md",
             Some("notes/absent.md"),

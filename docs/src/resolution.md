@@ -164,7 +164,9 @@ relative destination is resolved against that URL rather than against the file. 
 `hugo.toml`, `hugo.yaml`, `_config.yml`, `eleventy.config.*`, `.eleventy.js` or
 `astro.config.*` on the document's ancestor chain, a destination the tree does not hold takes
 `unsupported-reference-semantics` with `reason: unmodelled-route`, the answer a leading-slash
-site route already takes, instead of being claimed missing. Under a `book.toml` the same
+site route already takes, instead of being claimed missing. A destination ending in `.md`,
+`.mdx` or `.markdown` is the exception: a build reads those files and serves what it made
+under a name of its own, so the missing path stands. Under a `book.toml` the same
 answer covers a destination ending in `.html` that no book source reaches, because that names
 a page of the built site. Only the path side moves: a fragment on a document the tree holds
 is still read against the identities that document publishes, and a tree declaring none of
