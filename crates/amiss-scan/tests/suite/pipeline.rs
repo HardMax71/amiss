@@ -2501,7 +2501,11 @@ fn adopting_a_router_declaration_introduces_nothing() {
     let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
 
     fs::create_dir_all(root.join("docs/.amiss")).unwrap();
-    fs::write(root.join("docs/.amiss/router.yml"), "router: hugo-pages\n").unwrap();
+    fs::write(
+        root.join("docs/.amiss/router.yml"),
+        "router: directory-pages\n",
+    )
+    .unwrap();
     git(root, &["add", "-A"]);
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
     let staged = payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap());
@@ -2573,7 +2577,11 @@ fn removing_a_router_declaration_reports_the_declaration_it_dropped() {
         "# Config\n\n## Present\n",
     )
     .unwrap();
-    fs::write(root.join("docs/.amiss/router.yml"), "router: hugo-pages\n").unwrap();
+    fs::write(
+        root.join("docs/.amiss/router.yml"),
+        "router: directory-pages\n",
+    )
+    .unwrap();
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "base"]);
     let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
