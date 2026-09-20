@@ -77,8 +77,14 @@ A repository can name its own router in one line. `.amiss/router.yml` says which
 publishes the directory it sits in, and that directory is where the rule anchors:
 
 ```yaml
-router: hugo-pages
+router: directory-pages
 ```
+
+That name is a shape rather than a generator: a site publishing every page at a directory of
+its own name and rewriting no destination, which Hugo, Jekyll, Eleventy and Astro all build by
+default. `docusaurus`, `mkdocs`, `sphinx` and `zola` are the other four names that turn a
+spelling on, and every router name is read for the second key below, whether it turns one on
+or not.
 
 A second line says where that directory is published, and it is what answers the destinations
 opening with a slash:
@@ -95,8 +101,8 @@ undecided. A route the tree cannot answer stays undecided, so the key adds no mi
 The promise above holds. A declaration can move a destination onto a file the tree already
 holds, and it can never clear one the tree lacks, so nothing that is really missing goes quiet.
 Grafana keeps its Hugo configuration in a Docker image and a sibling repository. With that file
-under `docs/sources` its run reports 149 missing targets instead of 544, and every one of the
-395 that go reaches a file the tree already holds. Adding the file is safe under every profile:
+under `docs/sources` its run reports 153 missing targets instead of 546, and every one of the
+393 that go reaches a file the tree already holds. Adding the file is safe under every profile:
 both sides of a comparison are read under the routers the candidate declares, so the commit that
 writes one introduces nothing. Deleting one is reported at the file that held it.
 [What a documentation router serves](route-spellings.md) lists every name you can write and

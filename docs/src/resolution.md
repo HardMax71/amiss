@@ -177,8 +177,9 @@ slash-rooted route opening with that base is read as a path under it. A route re
 keeps the boundary it had, so the base can resolve a destination and cannot claim one.
 
 [What a documentation router serves](route-spellings.md) holds the spellings, the routers
-they were harvested from, the generator rules and what selects each, the names a repository
-may declare, and what the union costs.
+they were harvested from, the generator rules and what selects each, and what the union costs.
+[What a repository declares](route-spellings.md#what-a-repository-declares-about-its-own-build)
+is the section with the names you can write and four trees read with the file and without it.
 
 A destination that opens `{{` or `{%` never reaches the tree at all. The build fills it in, so
 it takes the same `unsupported-reference-semantics` an AsciiDoc `{attribute}` takes. The
