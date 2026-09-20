@@ -92,10 +92,10 @@ fn convert(node: &mdast::Node, winners: &HashMap<String, usize>) -> Result<Node,
         mdast::Node::MdxjsEsm(esm) => Kind::MdxEsm(esm.value.clone()),
         mdast::Node::MdxFlowExpression(_) => Kind::Mdx { expression: None },
         mdast::Node::MdxJsxFlowElement(element) => {
-            element_kind(element.name.as_deref(), &element.attributes)
+            element_kind(element.name.as_deref(), &element.attributes, true)
         }
         mdast::Node::MdxJsxTextElement(element) => {
-            element_kind(element.name.as_deref(), &element.attributes)
+            element_kind(element.name.as_deref(), &element.attributes, false)
         }
         mdast::Node::MdxTextExpression(expression) => Kind::Mdx {
             expression: Some(expression.value.clone()),
@@ -153,7 +153,7 @@ fn convert(node: &mdast::Node, winners: &HashMap<String, usize>) -> Result<Node,
 /// An element's tag name and the identity it sets as a literal, from `id` or
 /// from `name`, whichever it writes first. One computed by an expression is a
 /// value this engine cannot read, so the element carries none.
-fn element_kind(name: Option<&str>, attributes: &[mdast::AttributeContent]) -> Kind {
+fn element_kind(name: Option<&str>, attributes: &[mdast::AttributeContent], flow: bool) -> Kind {
     let id = attributes.iter().find_map(|attribute| match attribute {
         mdast::AttributeContent::Property(property)
             if matches!(property.name.as_str(), "id" | "name") =>
@@ -168,6 +168,7 @@ fn element_kind(name: Option<&str>, attributes: &[mdast::AttributeContent]) -> K
     Kind::MdxElement {
         name: name.map(str::to_owned),
         id,
+        flow,
     }
 }
 

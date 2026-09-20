@@ -297,8 +297,10 @@ fn raw_html_publishes_its_id_and_name_attributes() {
 
 /// MDX has no raw HTML, so an element written there is JSX. A lowercase tag
 /// is an HTML element and its `id` reaches the page; anything else is a
-/// component, whose rendered output is unknown, so neither the `id` written on
-/// one nor an `id` under one is an identity this document publishes.
+/// component, whose rendered output is unknown, so the `id` written on one is
+/// a prop and never an identity. A block a component wraps is still this
+/// document's own Markdown, so a plain element written there publishes as it
+/// would anywhere else.
 #[test]
 fn a_plain_jsx_element_publishes_its_id_and_a_component_publishes_none() {
     let source = concat!(
@@ -313,7 +315,8 @@ fn a_plain_jsx_element_publishes_its_id_and_a_component_publishes_none() {
         vec![
             "declared".to_owned(),
             "outer".to_owned(),
-            "inner".to_owned()
+            "inner".to_owned(),
+            "under-component".to_owned()
         ]
     );
 }

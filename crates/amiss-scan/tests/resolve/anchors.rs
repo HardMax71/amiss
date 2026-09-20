@@ -170,9 +170,10 @@ fn publishes(
 /// Docusaurus escapes the classic `{#id}` before MDX parses the file and reads
 /// the identity back out of the heading text, so the identity replaces the slug
 /// and an expression declaring none leaves the slug standing. `element.mdx` is
-/// the JSX `id`, read from a plain element and from one nested inside another,
-/// and never from a component or from under one, because what a component
-/// renders is unknown here. An `mdx-code-block` fence there is markup rather
+/// the JSX `id`, read from a plain element, from one nested inside another, and
+/// from the block a component wraps, which is this document's own Markdown,
+/// but never from the component's own tag, because what a component renders
+/// with a prop is unknown here. An `mdx-code-block` fence there is markup rather
 /// than code, since Docusaurus strips the fence lines before anything parses
 /// the file, while a fence naming any other language stays code and declares
 /// nothing. `parent.mdx` is the partial, whose headings and whose own
@@ -198,7 +199,7 @@ fn an_mdx_document_publishes_the_identities_it_writes_down() {
         ("docs/element.mdx", "outer", Some(true)),
         ("docs/element.mdx", "inner", Some(true)),
         ("docs/element.mdx", "component", Some(false)),
-        ("docs/element.mdx", "under-component", Some(false)),
+        ("docs/element.mdx", "under-component", Some(true)),
         ("docs/element.mdx", "spliced", Some(true)),
         ("docs/element.mdx", "quoted", Some(false)),
         ("docs/element.mdx", "absent", Some(false)),
