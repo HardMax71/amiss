@@ -275,15 +275,15 @@ pub fn bundler_request(path_part: &str) -> bool {
 pub const TEMPLATE_EXPRESSIONS: [(&str, &str); 2] = [("{{", "}}"), ("{%", "%}")];
 
 /// Whether a destination is an expression the build fills in rather than a
-/// path. Both delimiters must be there in order, so a file whose name merely
-/// carries a brace is a path like any other.
+/// path. The opening decides on its own, since a host grammar ends a
+/// destination where its own syntax says and hands back an expression with
+/// the closer cut off, so a file whose name merely carries a brace is a path
+/// like any other and one carrying an opening is not.
 #[must_use]
 pub fn template_expression(semantic: &str) -> bool {
-    TEMPLATE_EXPRESSIONS.iter().any(|(open, close)| {
-        semantic
-            .split_once(open)
-            .is_some_and(|(_, rest)| rest.contains(close))
-    })
+    TEMPLATE_EXPRESSIONS
+        .iter()
+        .any(|(open, _)| semantic.contains(open))
 }
 
 /// Every source path a modelled router would serve for this destination, in a
