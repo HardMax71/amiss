@@ -896,13 +896,16 @@ fn an_unquoted_attribute_keeps_its_slash() {
 /// markdown: the raw value keeps the author's references and the semantic
 /// value decodes them, while a bare ampersand in a query stays itself. A `>`
 /// inside a quoted value neither ends the tag scan nor hides a later
-/// destination attribute, and the occurrence spans the whole opening tag.
+/// destination attribute, and the occurrence spans the whole opening tag. A
+/// template expression that quotes an argument ends where HTML says the value
+/// ends, which is the quote inside it.
 #[test]
 fn html_destinations_decode_references_and_survive_quoted_closers() {
     let source = "<div>\n<a href=\"a&amp;b.md\">e</a>\n<a href=\"p?a=1&b=2\">q</a>\n\
                   <a title=\"a>b\" href=\"real.md\">r</a>\n<a href=\"x>y.md\">x</a>\n\
                   <p title=\"<script>\">t</p>\n<a href=\"after.md\">a</a>\n\
-                  <a href=\"a&#x2f;b.md\">n</a>\n</div>\n";
+                  <a href=\"a&#x2f;b.md\">n</a>\n<a href=\"{{< ref \"#h\" >}}\">s</a>\n\
+                  </div>\n";
     let got = extraction(Adapter::Markdown, source);
     assert_eq!(
         triples(&got),
@@ -937,6 +940,11 @@ fn html_destinations_decode_references_and_survive_quoted_closers() {
                 "a&#x2f;b.md".to_owned(),
                 "a/b.md".to_owned()
             ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "{{< ref ".to_owned(),
+                "{{< ref ".to_owned()
+            ),
         ]
     );
     let spans: Vec<&str> = got
@@ -953,6 +961,7 @@ fn html_destinations_decode_references_and_survive_quoted_closers() {
             "<a href=\"x>y.md\">",
             "<a href=\"after.md\">",
             "<a href=\"a&#x2f;b.md\">",
+            "<a href=\"{{< ref \"#h\" >}}\">",
         ],
         "each occurrence spans its whole opening tag, quoted closers included"
     );

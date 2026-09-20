@@ -172,8 +172,10 @@ fn an_asciidoc_page_identity_is_a_catalogue_question() {
 }
 
 /// A destination carrying a template expression is filled in when the site is
-/// built, so no tree answers it whatever the dialect. Both delimiters must be
-/// there in order, so a name that merely carries a brace stays a path.
+/// built, so no tree answers it whatever the dialect. The opening is what
+/// says so, since the grammar holding the destination can end it before the
+/// closer and hand over half an expression, and a name that merely carries a
+/// brace stays a path.
 #[test]
 fn a_template_expression_is_not_a_path_in_any_dialect() {
     let mut bed = bed();
@@ -181,6 +183,9 @@ fn a_template_expression_is_not_a_path_in_any_dialect() {
         "{{ sponsor.url }}",
         "img/{{ sponsor.img }}",
         "{% url 'x' %}",
+        "{{< ref ",
+        "{{<",
+        "{% include ",
     ] {
         let row = bed
             .run_as(Adapter::Markdown, None, "docs/index.md", false, filled)

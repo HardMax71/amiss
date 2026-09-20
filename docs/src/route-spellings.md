@@ -301,11 +301,20 @@ of the 79 missing targets a fastapi clone reported.
 | `{%` | `%}` |
 <!-- amiss-doc-contract:template-expressions:end -->
 
-Both delimiters have to be there, in that order, so a file whose name carries one brace is an
-ordinary path and resolves as written. Jinja, Liquid, Nunjucks and Handlebars all spell an
-expression this way, which is why the rows are the delimiters rather than the name of one
-generator. A tree that holds a real file whose name spells an expression, as a cookiecutter
-template does, gets this answer for it instead of the file.
+The opening is what decides, and the closer need not be there at all. A destination ends
+where the grammar holding it says, and that cuts an expression in half whenever the
+expression quotes something of its own. HTML ends an attribute value at the next quote, or at
+the first space when the value is unquoted, so `<a href="{{< ref "#LifecycleHandler" >}}">`
+hands the resolver `{{< ref ` and `<a href={{ ref . "x" }}>` hands it `{{`. Read as a relative
+path, each claims a file nobody wrote under a name nobody spelled. Kubernetes' website tree
+writes the first shape 2,774 times.
+
+A name carrying one brace is still an ordinary path and resolves as written, and so is one
+carrying a closer alone. Jinja, Liquid, Nunjucks and Handlebars all spell an expression this
+way, which is why the rows are the delimiters rather than the name of one generator. A tree
+that holds a real file whose name spells an expression, as a cookiecutter template does, gets
+this answer for it instead of the file, and so does one whose file opens an expression it
+never closes.
 
 ## What the build answers instead of the tree
 
