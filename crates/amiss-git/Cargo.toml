@@ -9,7 +9,7 @@ exclude.workspace = true
 
 [dependencies]
 hex.workspace = true
-amiss-wire = { path = "../amiss-wire", version = "0.32.1" }
+amiss-wire = { path = "../amiss-wire", version = "0.32.2" }
 crc32fast = "1"
 flate2.workspace = true
 fs_at = "0.2"

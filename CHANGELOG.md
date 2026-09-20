@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.2](https://github.com/HardMax71/amiss/compare/v0.32.1...v0.32.2) - 2026-09-20
+
+### Changes
+
+- read the Markdown a block level MDX element wraps
+- read the ignore lines a slash anchors, and the bare star
+- let an extensionless route reach an MDX page
+
 ## [0.32.1](https://github.com/HardMax71/amiss/compare/v0.32.0...v0.32.1) - 2026-09-20
 
 ### Changes
