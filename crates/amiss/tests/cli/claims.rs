@@ -98,7 +98,7 @@ fn a_broken_claim_lands_as_one_fix_item_in_human_output() {
     );
     assert!(
         text.contains(
-            "Fix target - affected places 1\n  \"docs/claims.md\":3:1 claim-broken line-differs\n"
+            "Fix target - affected places 1 claim-broken line-differs\n  \"docs/claims.md\":3:1\n"
         ),
         "the claim finding groups into one untargeted fix item with its place: {text}"
     );

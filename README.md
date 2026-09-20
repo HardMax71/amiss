@@ -50,17 +50,18 @@ amiss check --repo . --object-format sha1 \
 ```
 
 The first line is the verdict, `amiss: pass (fix 0, check 0, pre-existing 0, errors 0, exit 0)`
-on a repository with nothing wrong. On one with three broken references it reads like this,
-naming the place, the kind and the reason for each:
+on a repository with nothing wrong. On one with three broken references, a row names the
+target with the kind and reason its places share, and each place below names the document
+and the position:
 
 ```text
 amiss: pass (fix 0, check 0, pre-existing 3, errors 0, exit 0)
-Pre-existing target "README.md" affected places 1
-  "README.md":3:33 explicit-target-missing heading-anchor-not-found
-Pre-existing target "docs/guide.md" affected places 1
-  "README.md":3:5 explicit-target-missing path-not-found
-Pre-existing target "src/lib.rs" affected places 1
-  "README.md":3:59 explicit-target-missing line-fragment-out-of-range
+Pre-existing target "README.md" affected places 1 explicit-target-missing heading-anchor-not-found
+  "README.md":3:33
+Pre-existing target "docs/guide.md" affected places 1 explicit-target-missing path-not-found
+  "README.md":3:5
+Pre-existing target "src/lib.rs" affected places 1 explicit-target-missing line-fragment-out-of-range
+  "README.md":3:59
 ```
 
 A Fix is a reference this change broke. A Check is a file that changed under a paragraph that

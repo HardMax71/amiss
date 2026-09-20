@@ -186,9 +186,11 @@ validated report through `render`.
 `human` is the default. It prints a status header, one `error` row per retained analysis
 error, then at most ten grouped Fix and Check rows, each naming a target and an
 affected-place count, with an overflow line when more exist, then at most ten Pre-existing
-rows under their own window. Under each row, one line per affected place names the document,
-its line and column, the finding kind, and the reason the target did not answer, such as
-`path-not-found` with the nearby spelling it almost matched. A row shows ten places and
+rows under their own window. Where every place under a row carries the same finding kind and
+the same reason the target did not answer, the row states both after its count, such as
+`path-not-found` with the nearby spelling it almost matched, and each place below it is one
+line naming the document with its line and column. Where the places disagree the row stops at
+the count and every place spells its own kind and reason. A row shows ten places and
 counts the rest, unless the report is replayed with `--full`. Then one fixed `note` sentence
 per finding kind the feedback carries, in the wording from
 [Profiles and findings](profiles.md), and one per error code, in the wording from
