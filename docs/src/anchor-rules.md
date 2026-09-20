@@ -144,9 +144,12 @@ heading or it declares nothing, which is `parseMarkdownHeadingId`'s own rule and
 in an MDX file is JSX. The split JSX itself makes is the one this rule uses: a tag name
 starting with a lowercase letter is an HTML element, so its `id` reaches the page and is
 read, and every other name is a component. A component's rendered output is unknown here,
-so an `id` written on one is a prop rather than an identity, and nothing under one is read
-either. That is why the option tables Docusaurus builds with `<APITable>` publish
-identities this check cannot see, and why a link into one stays a finding.
+so an `id` written on one is a prop rather than an identity. The blocks a component wraps
+are a different thing. The MDX grammar parsed them as Markdown of this page, so they are
+read like any other blocks, and a plain element written there publishes its `id` as it
+would anywhere else. What the component makes of those blocks stays unknown, which is why
+the option tables Docusaurus builds with `<APITable>` publish row identities this check
+cannot see, and why a link into one stays a finding.
 
 `mdx-partial` is the one rule that reads another file. Docusaurus composes a page out of
 several documents by importing one and rendering it, `import Tags from './_tags.mdx'` and

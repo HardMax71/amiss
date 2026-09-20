@@ -10,7 +10,13 @@ either the spelling or the meaning is visible later.
 What the parser cannot see into is declared instead of skipped. Raw HTML blocks and [MDX](https://mdxjs.com)
 expressions become opaque regions, reported with their size and place as
 `opaque-html-region` and `opaque-mdx-region` findings, so a link hidden inside JSX is a
-stated blind spot rather than an invisible one. An HTML region still yields what a
+stated blind spot rather than an invisible one. JSX splits in two there, and the split is
+the MDX grammar's own. A tag standing alone on its line opens a block, so what stands
+between it and its closing tag is Markdown of the page, already parsed into blocks: that
+body is read like any other, and only the tags on either side are opaque. A tag in the run
+of a line is one paragraph's phrasing instead, and it stays opaque whole, attributes and
+body together. Either way the attributes and any expression among them are unreadable, so
+an identity a component computes is still a blind spot. An HTML region still yields what a
 renderer would follow: `<a href>` and `<img src>` values resolve like any markdown
 destination, character references decoded into the semantic spelling, alongside the
 headings and `id` attributes the anchor tables already harvest. A tag spelled inside a

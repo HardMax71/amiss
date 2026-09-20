@@ -323,7 +323,7 @@ fn visible_content_between_code_and_carrier_breaks_the_sink_address() {
     assert_eq!(got.governed[0].previous_code, None);
 }
 
-/// A JSX element's outer span is opaque, so nothing inside it is extracted;
+/// A text element's outer span is opaque, so nothing inside it is extracted;
 /// constructs outside it still are. ESM and expressions contribute their own
 /// intervals.
 #[test]
@@ -381,6 +381,66 @@ fn an_mdx_document_that_would_attack_if_evaluated_is_only_ever_read() {
         !got.opaque.mdx.is_empty(),
         "what it could not see into, it says it could not see into"
     );
+}
+
+/// The MDX grammar takes a tag standing alone on its line in flow position,
+/// where what follows is blocks of the page, and a tag in the run of a line in
+/// text position, where it is one paragraph's phrasing. The two spell the same
+/// element, so the tree's own answer is the whole rule: a flow element spends
+/// only its tags on opacity and everything between them is read, while a text
+/// element stays one region with nothing extracted from it.
+#[test]
+fn a_flow_element_is_read_through_and_a_text_element_is_not() {
+    let block = extraction(
+        Adapter::Mdx,
+        "<div id=\"x\">\n\n## Head\n\n[gone](./gone.md)\n\n</div>\n",
+    );
+    assert_eq!(
+        triples(&block),
+        vec![(
+            SourceConstruct::InlineLink,
+            "./gone.md".to_owned(),
+            "./gone.md".to_owned()
+        )]
+    );
+    assert_eq!(block.opaque.mdx, vec![(0, 14), (40, 48)]);
+    assert_eq!(block.declared_anchors, vec!["x".to_owned()]);
+    assert_eq!(
+        block
+            .headings
+            .iter()
+            .map(|one| &one.text)
+            .collect::<Vec<_>>(),
+        vec!["Head"]
+    );
+
+    let inline = extraction(Adapter::Mdx, "text <b>[gone](./gone.md)</b> more\n");
+    assert_eq!(triples(&inline), Vec::new());
+    assert_eq!(inline.opaque.mdx, vec![(5, 29)]);
+
+    let one_line = extraction(Adapter::Mdx, "<div>[gone](./gone.md)</div>\n");
+    assert_eq!(triples(&one_line), Vec::new());
+    assert_eq!(one_line.opaque.mdx, vec![(0, 28)]);
+}
+
+/// Nesting composes: each flow element gives up only its own tags, so the
+/// opaque regions union into the syntax on either side of the innermost block,
+/// and a text element inside that block is still whole.
+#[test]
+fn nested_flow_elements_give_up_only_their_tags() {
+    let source = "<section>\n\n<div id=\"in\">\n\nsee <code>x</code> [gone](./gone.md)\n\n</div>\n\n</section>\n";
+    let got = extraction(Adapter::Mdx, source);
+    assert_eq!(
+        triples(&got),
+        vec![(
+            SourceConstruct::InlineLink,
+            "./gone.md".to_owned(),
+            "./gone.md".to_owned()
+        )]
+    );
+    assert_eq!(got.opaque.mdx, vec![(0, 26), (30, 44), (62, 82)]);
+    assert_eq!(source.get(30..44), Some("<code>x</code>"));
+    assert_eq!(got.declared_anchors, vec!["in".to_owned()]);
 }
 
 /// Exactly adjacent regions union into one maximal interval.

@@ -13,7 +13,7 @@ fn root() -> PathBuf {
 /// manifest; this constant must then be updated by hand, so no golden can move
 /// without the move appearing in review.
 const CORPUS_DIGEST: &str =
-    "sha256:61a3a82b5997df81867af55c86f16496cc6d0cab7ca9cd0c36b118024e3320f5";
+    "sha256:43c9803eb3e536ebfc1f2d1b7b64c5d17ea1dd5ad51ae78413248ddb3ddfbe14";
 
 /// The manifest is the gate: every case's raw source with its exact node count
 /// and depth under every published profile. It is regenerated here and must

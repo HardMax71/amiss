@@ -6,7 +6,8 @@ use crate::{CommitChain, Staged, staged_repository};
 /// one but does not end the heading. Both leave the slug standing. `element.mdx`
 /// declares one from a plain JSX element, one a `name` attribute sets instead of
 /// an `id`, and one nested inside another, beside
-/// a component that declares neither its own `id` nor the one under it, and
+/// a component that declares no identity of its own while the block it wraps
+/// declares one, and
 /// then one inside a fence Docusaurus unwraps and one inside a fence that
 /// stays code. `parent.mdx` renders a partial that renders another, imports a
 /// component that is no document at all, and the two `cycle` documents render

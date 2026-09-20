@@ -255,12 +255,16 @@ struct Sweep<'a> {
 
 impl Sweep<'_> {
     /// One node of the pre-order walk. Returns whether to descend: an MDX
-    /// construct's outer span makes all its children opaque, so nothing inside
-    /// one is extracted.
+    /// construct's outer span makes its children opaque, except for the
+    /// document blocks a flow element wraps, where only the tags are.
     fn visit(&mut self, node: &Node, path: &[usize], owners: &mut Owners) -> Result<bool, Fault> {
         let bytes = self.suffix.as_bytes();
         let span = node.span;
         match &node.kind {
+            Kind::MdxElement { flow: true, .. } if !node.children.is_empty() => {
+                self.mdx.extend(element_tags(node));
+                mdx_declaration(self, node);
+            }
             Kind::Mdx { .. } | Kind::MdxElement { .. } | Kind::MdxEsm(_) => {
                 self.mdx.push(span);
                 mdx_declarations(self, node);
@@ -406,44 +410,71 @@ impl Sweep<'_> {
     }
 }
 
-/// What one MDX region writes down: the identity a plain element declares, the
-/// modules the block imports, and the components it renders. JSX reads a
-/// lowercase tag as an HTML element and anything else as a component, whose
-/// rendered output this engine does not know, so the walk stops at a component
-/// and reads nothing from it or under it.
+/// Every MDX region an opaque span covers, read for what it writes down. JSX
+/// reads a lowercase tag as an HTML element and anything else as a component,
+/// whose rendered output this engine does not know, so the walk stops at a
+/// component and reads nothing under it.
 fn mdx_declarations(sweep: &mut Sweep<'_>, root: &Node) {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
-        match &node.kind {
-            Kind::MdxEsm(source) => default_imports(source, &mut sweep.imports),
-            Kind::MdxElement { name, id } if plain_element(name.as_deref()) => {
-                sweep.declared.extend(id.clone());
-            }
-            Kind::MdxElement { name, .. } => {
-                sweep
-                    .rendered
-                    .extend(name.clone().map(|name| (name, node.span)));
-                continue;
-            }
-            Kind::Root
-            | Kind::Paragraph
-            | Kind::Heading
-            | Kind::ListItem
-            | Kind::TableCell
-            | Kind::Html
-            | Kind::Mdx { .. }
-            | Kind::Text(_)
-            | Kind::InlineCode(_)
-            | Kind::CodeBlock(_)
-            | Kind::Link { .. }
-            | Kind::Image { .. }
-            | Kind::LinkReference(_)
-            | Kind::ImageReference(_)
-            | Kind::Definition(_)
-            | Kind::Other => {}
+        if mdx_declaration(sweep, node) {
+            stack.extend(node.children.iter().rev());
         }
-        stack.extend(node.children.iter().rev());
     }
+}
+
+/// What one MDX node writes down: the identity a plain element declares, the
+/// modules an ESM block imports, and the component a tag renders. Returns
+/// whether anything under it is the document's own to read.
+fn mdx_declaration(sweep: &mut Sweep<'_>, node: &Node) -> bool {
+    match &node.kind {
+        Kind::MdxEsm(source) => default_imports(source, &mut sweep.imports),
+        Kind::MdxElement { name, id, .. } if plain_element(name.as_deref()) => {
+            sweep.declared.extend(id.clone());
+        }
+        Kind::MdxElement { name, .. } => {
+            sweep
+                .rendered
+                .extend(name.clone().map(|name| (name, node.span)));
+            return false;
+        }
+        Kind::Root
+        | Kind::Paragraph
+        | Kind::Heading
+        | Kind::ListItem
+        | Kind::TableCell
+        | Kind::Html
+        | Kind::Mdx { .. }
+        | Kind::Text(_)
+        | Kind::InlineCode(_)
+        | Kind::CodeBlock(_)
+        | Kind::Link { .. }
+        | Kind::Image { .. }
+        | Kind::LinkReference(_)
+        | Kind::ImageReference(_)
+        | Kind::Definition(_)
+        | Kind::Other => {}
+    }
+    true
+}
+
+/// The bytes a flow element spends on its own syntax, which is everything
+/// before its first child and everything after its last. The attributes and
+/// any expression among them stay unreadable; what stands between the tags is
+/// the document's own Markdown, already parsed.
+fn element_tags(node: &Node) -> Vec<(usize, usize)> {
+    let open = node
+        .children
+        .first()
+        .map(|child| (node.span.0, child.span.0));
+    let close = node
+        .children
+        .last()
+        .map(|child| (child.span.1, node.span.1));
+    open.into_iter()
+        .chain(close)
+        .filter(|(start, end)| start < end)
+        .collect()
 }
 
 /// The partials one module imports: a default import of a relative Markdown

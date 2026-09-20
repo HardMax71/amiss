@@ -22,11 +22,14 @@ pub(crate) enum Kind {
     Mdx {
         expression: Option<String>,
     },
-    /// A JSX element, with the tag name as written and the literal value of
-    /// its `id` attribute.
+    /// A JSX element, with the tag name as written, the literal value of its
+    /// `id` attribute, and whether the grammar took it in flow position, where
+    /// its children are blocks of the document rather than one paragraph's
+    /// phrasing.
     MdxElement {
         name: Option<String>,
         id: Option<String>,
+        flow: bool,
     },
     /// An ESM block, kept as written for the bindings it declares.
     MdxEsm(String),
