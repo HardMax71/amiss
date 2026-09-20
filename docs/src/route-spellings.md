@@ -327,6 +327,27 @@ held 41 real breaks. So `built-route` answers such a destination with
 `unsupported-reference-semantics` and a reason saying the route model is not modelled, the way
 an absolute site route already does, instead of naming a file nobody wrote.
 
+A page's own source is out of that reach. A build reads `foo.md` and publishes what it made
+from it under a URL of its own, so no URL it serves is called `foo.md`, and no route model is
+needed to say the destination reaches nothing. `built-route` therefore reads the destination's
+own suffix, the three that `extensionless` appends, and leaves the tree's answer standing. It
+is the other end of the pair `built-page` reads: `.html` is what a build serves, and `.md`,
+`.mdx` and `.markdown` are what it consumed. An asset keeps the boundary, because its own
+prefix still moves: Jekyll's docs write `<img src="../../img/jekylllayoutconcept.png">` from a
+page served at `/tutorials/convert-site-to-jekyll/`, the climb lands on the site root rather
+than on the repository root, and `docs/img/jekylllayoutconcept.png` is there.
+
+Sixteen destinations across a 56-repository corpus are that shape, out of the 1,523 the
+boundary covered, and they carry twelve findings. Eleven are breaks. Kubernetes' website goes
+from 89 missing targets to 97: six translated READMEs link a `code-of-conduct.md` that only
+the repository root holds, and one Korean page copied two English links without their leading
+slash. Jekyll gains the `docs/pages/team.md` its `docs/_docs/security.md` writes, which that
+repository already reports from the copy of the same sentence under `.github/`. The eleventy
+site gains two siblings written with a directory too many, and the twelfth finding is a page
+of it showing `<a href="my-template.md">` as an example of markup rather than as a link.
+hugoDocs, the rust book and spring-boot do not move, since no destination behind their
+boundary names a source.
+
 The selection is the same as every rule above: the file has to sit on the document's ancestor
 chain, and only the path side moves. An anchor into a document the tree holds is still read,
 because the identities a document publishes are enumerable whatever a site does with its URLs,
@@ -364,10 +385,11 @@ away.
 
 Jekyll's permalink template is what this leaves undone. `docs/_config.yml` in Jekyll's own
 repository sets `permalink: "/:collection/:path/"`, every page URL then ends in a slash, and a
-`../` climbs one level less than the file path does, which is 20 of that repository's 24
+`../` climbs one level less than the file path does, which is 19 of that repository's 24
 missing targets. Reading the template means opening the configuration file, and no rule here
-opens one, so the boundary answers the whole `docs/` tree instead and those 20 go with it. All
-three real breaks sit in `.github/`, outside the tree that file declares, and they stay.
+opens one, so the boundary answers the whole `docs/` tree instead and those 19 go with it.
+Three of the four real breaks sit in `.github/`, outside the tree that file declares, and the
+fourth is the page source `docs/_docs/security.md` names.
 
 ## What a repository declares about its own build
 
