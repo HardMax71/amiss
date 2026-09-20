@@ -89,6 +89,10 @@ Read in [#171](https://github.com/hardmax71/amiss/pull/171) and asked in
 [#172](https://github.com/hardmax71/amiss/pull/172). The parser is
 [`crates/amiss-scan/src/declared.rs`](https://github.com/hardmax71/amiss/blob/main/crates/amiss-scan/src/declared.rs).
 
+Two line shapes were added after this phase closed, since a leading slash is not how Git anchors a
+pattern and a directory that keeps nothing says so with one character.
+[Resolution](../resolution.md) carries the rule as it now stands.
+
 ## AsciiDoc and reStructuredText are read by their own parsers
 
 Both had sat as one roadmap candidate for months, and treating either as Markdown with different
