@@ -318,7 +318,9 @@ pub fn spellings(rule: &RouteRule, destination: &RepoPath) -> Vec<(Spelling, Rep
         push(Spelling::OutputExtension, source.clone());
     }
     if rule.serves(Spelling::Extensionless) {
-        push(Spelling::Extensionless, extensionless(raw));
+        for suffix in PAGE_SUFFIXES {
+            push(Spelling::Extensionless, extensionless(raw, suffix));
+        }
     }
     if rule.serves(Spelling::ReadmeIndex) {
         push(Spelling::ReadmeIndex, readme_index(raw));
@@ -1329,18 +1331,22 @@ fn join(directory: &[u8], name: &[u8]) -> Vec<u8> {
     [directory, b"/", name].concat()
 }
 
+/// The suffixes a page's own source file carries. A router that elides the
+/// extension elides any of them, so a destination naming none is looked up
+/// under each in turn.
+const PAGE_SUFFIXES: [&[u8]; 3] = [b".md", b".mdx", b".markdown"];
+
 fn output_extension(raw: &[u8]) -> Option<Vec<u8>> {
     let stem = raw.strip_suffix(b".html")?;
     (!stem.is_empty()).then(|| [stem, b".md"].concat())
 }
 
-fn extensionless(raw: &[u8]) -> Option<Vec<u8>> {
+fn extensionless(raw: &[u8], suffix: &[u8]) -> Option<Vec<u8>> {
     let last = raw.rsplit(|byte| *byte == b'/').next()?;
     let named = !last.is_empty()
-        && !last.ends_with(b".md")
-        && !last.ends_with(b".markdown")
-        && !last.ends_with(b".html");
-    named.then(|| [raw, b".md"].concat())
+        && !last.ends_with(b".html")
+        && !PAGE_SUFFIXES.iter().any(|held| last.ends_with(held));
+    named.then(|| [raw, suffix].concat())
 }
 
 /// Only a directory's index is answered by its README, because that is the
