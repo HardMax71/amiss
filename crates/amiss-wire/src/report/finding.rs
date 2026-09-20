@@ -178,7 +178,7 @@ declare_taxonomy! {
             metadata: &RATCHETED_OBSERVATION,
         },
         TargetDeclaredUntracked => {
-            meaning: "a reference names a path a tracked ignore file names literally, so the repository declares it does not keep that target and no tree can answer for the link; the reference is recorded and counted, never cleared",
+            meaning: "a tracked ignore file says the repository does not keep the path this reference names, either by naming that path or by emptying the directory the file sits in, so no tree can answer for the link; the reference is recorded and counted, never cleared",
             metadata: &COVERAGE_OBSERVATION,
         },
         UnsupportedReferenceSemantics => {
