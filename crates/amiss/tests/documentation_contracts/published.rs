@@ -109,7 +109,7 @@ fn the_ci_chapter_carries_the_shared_workflow() {
 fn published_ci_examples_expose_every_moving_release_choice() {
     let root = repository_root();
     let sources = [
-        (root.join("README.md"), 2_usize),
+        (root.join("README.md"), 1_usize),
         (root.join("docs/src/ci.md"), 4_usize),
     ];
     let workspace_major = env!("CARGO_PKG_VERSION")
