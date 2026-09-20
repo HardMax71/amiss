@@ -17,13 +17,21 @@ and where they came from.
 
 | Spelling | A destination like | Reaches | Served by |
 | --- | --- | --- | --- |
-| `extensionless` | `guide` | `guide.md` | vitepress |
+| `extensionless` | `guide` | `guide.md`, `guide.mdx`, `guide.markdown` | vitepress |
 | `output-extension` | `guide.html` | `guide.md` | mdbook, vitepress |
 | `readme-index` | `dir/index.md`, `dir/index.html` | `dir/README.md` | mdbook, vitepress when configured for it |
 
 A spelling only ever names a file that is already in the tree, so it can widen what
 resolves and can never invent a target. Everything a spelling does not reach stays exactly
 as missing as it was, under the destination the author wrote.
+
+The elided extension is tried under each suffix a page source carries, `.md` first, then
+`.mdx`, then `.markdown`. A router serving a page at a clean URL serves an MDX page there
+the same way, so reading `guide` as `guide.md` alone leaves `[items](./item)` missing in a
+tree whose page is `item.mdx`. Ionic's documentation writes that link in seven pages and
+reaches `item.mdx` from every one, 24 references counted once per versioned copy. A
+destination already carrying one of those suffixes names a source file rather than a route,
+so `page.mdx` is never looked up as `page.mdx.md`.
 
 Two spellings are never tried. A destination ending in `/` promised a directory, and the
 tree answers a directory itself. A same-repository forge URL is read by the forge, which

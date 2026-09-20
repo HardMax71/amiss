@@ -154,8 +154,9 @@ fn a_router_that_serves_no_spelling_offers_no_candidate() {
     }
 }
 
-/// The elided extension is not offered where the destination already carries
-/// a source or output name, so no `page.md.md` is ever looked up.
+/// A bare name is offered under every suffix a page source carries, and a
+/// destination already carrying a source or output name is offered none, so
+/// neither `page.md.md` nor `page.mdx.md` is ever looked up.
 #[test]
 fn the_elided_extension_only_applies_to_a_bare_name() {
     let vitepress = ROUTERS
@@ -163,16 +164,21 @@ fn the_elided_extension_only_applies_to_a_bare_name() {
         .find(|rule| rule.name == "vitepress")
         .unwrap_or_else(|| panic!("vitepress is a known router"));
     for (destination, want) in [
-        ("docs/page", Some("docs/page.md")),
-        ("docs/page.markdown", None),
-        ("docs/page.md", None),
+        (
+            "docs/page",
+            vec!["docs/page.md", "docs/page.mdx", "docs/page.markdown"],
+        ),
+        ("docs/page.md", Vec::new()),
+        ("docs/page.mdx", Vec::new()),
+        ("docs/page.markdown", Vec::new()),
+        ("docs/page.html", Vec::new()),
     ] {
         let offered: Vec<String> = spellings(vitepress, &path(destination))
             .into_iter()
             .filter(|(spelling, _)| *spelling == Spelling::Extensionless)
             .filter_map(|(_, candidate)| candidate.as_str().map(str::to_owned))
             .collect();
-        assert_eq!(offered.first().map(String::as_str), want, "{destination}");
+        assert_eq!(offered, want, "{destination}");
     }
 }
 
