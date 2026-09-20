@@ -197,16 +197,26 @@ or replacement bytes. The case-only `near` fact remains independent.
 
 A destination no spelling reaches is asked one last question, against a declaration the
 repository already publishes for Git rather than for this engine. Only the tracked
-`.gitignore` files on the path's own ancestor chain can name it, and a line qualifies only
-when it is anchored with a leading slash, carries no pattern or escape byte, is neither a
-comment nor a negation, and spells a path with no empty, `.`, or `..` segment. The nearest
-file that names the path answers and travels with the result, and a directory line answers for
-its descendants. The result is `target-declared-untracked`, a record under both profiles, so
-the reference stays counted rather than cleared. The engine never asks whether a path is
-ignored; it asks whether a tracked ignore file names exactly that path, because one wildcard
-would let a single line answer for an unbounded number of references. Git applies no ignore
-rule to a file already tracked, and neither does this: a path the tree holds never reaches the
-question.
+`.gitignore` files on the path's own ancestor chain can name it, and the nearest one that
+answers travels with the finding. What comes back is `target-declared-untracked`, a record
+under both profiles, so the reference stays counted rather than cleared. The engine never asks
+whether a path is ignored; it asks whether a line's own spelling bounds what that line can
+clear, since a line reaching further than it spells would answer for an unbounded number of
+references.
+
+Two shapes qualify. The first is a literal that a slash anchors to the file's own directory,
+at the front or in the middle, with no pattern or escape byte and no empty, `.`, or `..`
+segment; it names one path, and a trailing slash makes it answer for that path's descendants
+too. The second is the bare `*`, which says the directory holding the file keeps nothing, so
+it answers for every path under that directory. A negation is counter-evidence to a `*`
+standing beside it: `!.gitignore` keeps that one entry out of the declaration, while a
+negation this cannot bound, `!*.md` or anything carrying a slash, drops the emptied directory
+altogether.
+
+Everything else is refused. A pattern with no slash matches wherever the tree happens to hold
+that name, at any depth, so one word in a root file could answer for a path anywhere in the
+repository; those references stay missing targets. Git applies no ignore rule to a file
+already tracked, and neither does this: a path the tree holds never reaches the question.
 
 AsciiDoc destinations reach one rule of their own before anything else. A target still
 holding `{name}` cannot be a path, because the value arrives when the site is built and this
