@@ -14,9 +14,10 @@ from growing into a plugin system one field at a time.
 
 The other tree-read input is weaker still. `.amiss/router.yml` names the router that publishes
 the directory it sits in, for a tree whose generator is configured somewhere else, and it turns
-on route spellings that resolve a destination against files the tree already holds. It reaches
-no rule that withholds an answer, so it can move a destination onto a file the tree already
-holds and can never clear one the tree lacks.
+on route spellings that resolve a destination against files the tree already holds. Its `base`
+line says the URL path that directory is served at, which reads a slash-rooted route as a path
+under it. It reaches no rule that withholds an answer, so it can move a destination onto a file
+the tree already holds and can never clear one the tree lacks.
 [What a documentation router serves](route-spellings.md) holds the rules it selects.
 
 Both sides of a comparison are read under the declarations the candidate holds, since the file
@@ -25,8 +26,8 @@ own way and the references the declaration moves change identity, so the commit 
 file is charged with breaking them. A declaration the base held that the candidate does not
 hold identically is `policy-weakened` at the file that held it, under
 `router/declaration-removed` where the candidate declares nothing there and
-`router/declaration-replaced` where it names another router, because dropping one takes its
-resolutions off both sides at once.
+`router/declaration-replaced` where it names another router or another base, because dropping
+one takes its resolutions off both sides at once.
 
 The complete grammar in one example, with `projection_assertions` optional for compatibility
 with policies written before projections existed and the file valid only whole:

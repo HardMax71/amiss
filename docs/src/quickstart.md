@@ -80,6 +80,18 @@ publishes the directory it sits in, and that directory is where the rule anchors
 router: hugo-pages
 ```
 
+A second line says where that directory is published, and it is what answers the destinations
+opening with a slash:
+
+```yaml
+router: astro
+base: /
+```
+
+With that file under `src/content/docs`, `/en/guides/astro-components/` is the `.mdx` of that
+name under it, and the Astro documentation resolves 8,663 references it used to leave
+undecided. A route the tree cannot answer stays undecided, so the key adds no missing target.
+
 The promise above holds. A declaration can move a destination onto a file the tree already
 holds, and it can never clear one the tree lacks, so nothing that is really missing goes quiet.
 Grafana keeps its Hugo configuration in a Docker image and a sibling repository. With that file

@@ -36,7 +36,7 @@ struct Evaluated {
     identity: SnapshotIdentity,
     discovery: SnapshotDiscovery,
     side: Side,
-    declared: BTreeMap<RepoPath, String>,
+    declared: BTreeMap<RepoPath, (String, Option<String>)>,
 }
 
 #[derive(Default)]
@@ -485,7 +485,7 @@ fn pair_effects(
     external: ExternalVerified,
     base_policy: &crate::policy::PolicySide,
     candidate_policy: &crate::policy::PolicySide,
-    base_declared: &BTreeMap<RepoPath, String>,
+    base_declared: &BTreeMap<RepoPath, (String, Option<String>)>,
     base: (&SnapshotDiscovery, &mut ScanResources),
     candidate: (&SnapshotDiscovery, &mut ScanResources),
     failures: &mut Vec<ErrorDetail>,
@@ -625,7 +625,7 @@ fn evaluate_tree(
     forge: Option<&ForgeContext>,
     semantic: crate::semantic::View<'_>,
     includes: &crate::policy::Includes,
-    declared: Option<&BTreeMap<RepoPath, String>>,
+    declared: Option<&BTreeMap<RepoPath, (String, Option<String>)>>,
     tree: (Oid, SnapshotIdentity),
     candidate: Option<CandidateEvaluation<'_>>,
 ) -> Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail> {

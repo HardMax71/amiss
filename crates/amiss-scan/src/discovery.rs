@@ -175,7 +175,7 @@ fn record_declaration(declared: &mut Declared, path: RepoPath, body: &[u8]) {
 struct Declared {
     antora_components: BTreeMap<RepoPath, (String, bool)>,
     source_suffixes: BTreeMap<Vec<u8>, BTreeSet<String>>,
-    routers: BTreeMap<RepoPath, String>,
+    routers: BTreeMap<RepoPath, (String, Option<String>)>,
 }
 
 /// Every document a page of a Sphinx tree renders in place of an include, and
@@ -251,7 +251,7 @@ pub struct SnapshotDiscovery {
     pub source_suffixes: BTreeMap<Vec<u8>, BTreeSet<String>>,
     /// Each router declaration the tree holds, by its own path, against the
     /// router it names for the directory it sits in.
-    pub declared_routers: BTreeMap<RepoPath, String>,
+    pub declared_routers: BTreeMap<RepoPath, (String, Option<String>)>,
 }
 
 /// What the snapshot's documents say about one `.. _name:` label: the one

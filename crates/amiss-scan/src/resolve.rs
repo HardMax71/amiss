@@ -502,7 +502,11 @@ fn awaits_attribute(semantic: &str) -> bool {
 /// route. A promised directory is never re-spelled, and every spelling names
 /// a file the tree already holds, so this can only turn an absent target into
 /// a present one.
-fn routed(snapshot: &SnapshotDiscovery, path: &RepoPath, target_kind: TargetKind) -> RepoPath {
+pub(crate) fn routed(
+    snapshot: &SnapshotDiscovery,
+    path: &RepoPath,
+    target_kind: TargetKind,
+) -> RepoPath {
     if target_kind == TargetKind::Tree || snapshot.locate(path).is_some() {
         return path.clone();
     }

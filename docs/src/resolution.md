@@ -38,7 +38,9 @@ repository; `../../../etc/passwd` is an `invalid-reference`, not a file read, an
 beginning with `/` is a site route, not a repository-root shorthand. It stays unsupported unless sealed,
 candidate-bound site-build evidence maps that exact route and optional decoded anchor to a
 published source-backed or generated page, either directly or through a proved fragment-aware
-terminal redirect, or unless it is a Sphinx `:doc:` target under a `conf.py` the tree holds.
+terminal redirect, unless it is a Sphinx `:doc:` target under a `conf.py` the tree holds, or
+unless a `.amiss/router.yml` above the document declares the URL path its own directory is
+served at and the tree holds the page the rest of the route names.
 Forge URLs need the complete identity group, not only the repository name. When
 the invocation provides `--repository`, `--ref`, and `--default-branch-ref` and
 selects a dialect, a URL on the declared host that names the same repository in that
@@ -170,7 +172,9 @@ these files reports every missing path it reported before.
 
 A tree whose site is built somewhere else keeps no such configuration, so it names its own
 router in `.amiss/router.yml` instead. That turns on the spellings that reach files the tree
-already holds, and no others.
+already holds, and no others. The same file says where the directory is published, and a
+slash-rooted route opening with that base is read as a path under it. A route reaching no file
+keeps the boundary it had, so the base can resolve a destination and cannot claim one.
 
 [What a documentation router serves](route-spellings.md) holds the spellings, the routers
 they were harvested from, the generator rules and what selects each, the names a repository

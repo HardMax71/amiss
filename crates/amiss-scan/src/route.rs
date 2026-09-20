@@ -178,11 +178,14 @@ pub const ROUTERS: [RouteRule; 14] = [
 ];
 
 /// The file a repository names its own router in, for a tree whose generator
-/// is configured somewhere else, and the key it opens a line with. The value
-/// is a router name, and a declaration turns on that router's resolving
-/// spellings under the directory holding the file.
+/// is configured somewhere else, and the two keys it opens a line with. The
+/// router is a router name, and a declaration turns on that router's
+/// resolving spellings under the directory holding the file. The base is the
+/// URL path that router serves the directory at, which is what a site route
+/// is read against.
 pub const ROUTER_DECLARATION: &str = ".amiss/router.yml";
 const DECLARED_ROUTER: &[u8] = b"router:";
+const PUBLISHED_BASE: &[u8] = b"base:";
 
 /// The frontmatter key a page lists the URLs it moved away from under, which
 /// a router serving page URLs answers with the page that carries the block.
@@ -349,6 +352,9 @@ pub fn anchors(
     is_image: bool,
     path_part: &str,
 ) -> Vec<(Vec<u8>, String)> {
+    if let Some(declared) = declared_site_anchor(snapshot, adapter, document, is_image, path_part) {
+        return vec![declared];
+    }
     match adapter {
         Adapter::AsciiDoc => antora_anchor(snapshot, document, construct, path_part),
         Adapter::Markdown | Adapter::Mdx => {
@@ -385,6 +391,61 @@ fn markdown_anchors(
         return site;
     }
     mdbook_anchors(snapshot, document, path_part)
+}
+
+/// A site route under the base a declaration gives the directory holding it.
+/// The base opens the route, what follows names a page under that directory,
+/// and a trailing slash is the page's own URL rather than a tree. The tree
+/// has to hold the page, as written or under a router spelling, because a
+/// site serves routes its own build makes up and a tree can enumerate only
+/// the files it holds: a route reaching none keeps the boundary it had. The
+/// generators a declaration names publish Markdown, and the other adapters
+/// read a leading slash as a coordinate of their own.
+fn declared_site_anchor(
+    snapshot: &SnapshotDiscovery,
+    adapter: Adapter,
+    document: &RepoPath,
+    is_image: bool,
+    path_part: &str,
+) -> Option<(Vec<u8>, String)> {
+    let route = path_part
+        .strip_prefix('/')
+        .filter(|route| !route.starts_with('/'))?;
+    let (root, base) = matches!(adapter, Adapter::Markdown | Adapter::Mdx)
+        .then(|| declared_base(snapshot, document.as_bytes()))
+        .flatten()?;
+    let page = under_base(&base, route).map(|under| under.strip_suffix('/').unwrap_or(under))?;
+    (!page.is_empty() && tracked_page(snapshot, &root, is_image, page))
+        .then(|| (root, page.to_owned()))
+}
+
+/// What one route names under a declared base: the rest of it once the base
+/// it opens with is off.
+fn under_base<'a>(base: &str, route: &'a str) -> Option<&'a str> {
+    let rest = route.strip_prefix(base)?;
+    if base.is_empty() {
+        Some(rest)
+    } else {
+        rest.strip_prefix('/')
+    }
+}
+
+/// Whether the tree holds what one anchoring names, which is the question the
+/// resolver asks of it: the path as written, or the source a router spelling
+/// serves it from.
+fn tracked_page(
+    snapshot: &SnapshotDiscovery,
+    parent: &[u8],
+    is_image: bool,
+    relative: &str,
+) -> bool {
+    normalized_path_under(parent, is_image, relative)
+        .ok()
+        .is_some_and(|(path, kind)| {
+            snapshot
+                .locate(&crate::resolve::routed(snapshot, &path, kind))
+                .is_some()
+        })
 }
 
 /// Whether the build answers this path instead of the tree. A generator on
@@ -555,16 +616,37 @@ pub(crate) fn antora_descriptor(source: &[u8]) -> Option<(String, bool)> {
     name.map(|name| (name, extended))
 }
 
-/// The router one `.amiss/router.yml` names for the directory it sits in, a
+/// What one `.amiss/router.yml` says about the directory it sits in: the
+/// router serving it, and the URL path that router serves it at. Each is a
 /// plain scalar on a line of its own, read the way a component descriptor is.
 /// A name no rule in the table carries is declined here, so a declaration
-/// reaches exactly the rules this engine already models.
+/// reaches exactly the rules this engine already models, and a file naming no
+/// router declares nothing whatever else it holds.
 #[must_use]
-pub(crate) fn declared_router(source: &[u8]) -> Option<String> {
-    amiss_md::lines::scan(source)
-        .filter_map(|line| scalar(line.content(source), DECLARED_ROUTER))
-        .find(|value| ROUTERS.iter().any(|rule| rule.name == *value))
-        .map(str::to_owned)
+pub(crate) fn declared_router(source: &[u8]) -> Option<(String, Option<String>)> {
+    let mut router = None;
+    let mut base = None;
+    for line in amiss_md::lines::scan(source) {
+        let content = line.content(source);
+        if let Some(value) = scalar(content, DECLARED_ROUTER)
+            .filter(|value| ROUTERS.iter().any(|rule| rule.name == *value))
+        {
+            router = router.or(Some(value.to_owned()));
+        } else if let Some(value) = scalar(content, PUBLISHED_BASE).and_then(site_base) {
+            base = base.or(Some(value.to_owned()));
+        }
+    }
+    router.map(|router| (router, base))
+}
+
+/// The path prefix one base declares, which is what every site route the
+/// directory answers opens with: an absolute URL path without the slashes
+/// bounding it, so a directory served at the site root declares nothing
+/// before the route.
+fn site_base(value: &str) -> Option<&str> {
+    value
+        .strip_prefix('/')
+        .map(|path| path.trim_end_matches('/'))
 }
 
 /// Which suffixes one `conf.py` says Sphinx reads as reStructuredText. A
@@ -830,8 +912,8 @@ fn zola_content(snapshot: &SnapshotDiscovery, document: &RepoPath) -> Option<Vec
 /// declarations, so they are read again whenever these differ.
 pub(crate) fn read_as_declared(
     snapshot: &mut SnapshotDiscovery,
-    declared: &BTreeMap<RepoPath, String>,
-) -> BTreeMap<RepoPath, String> {
+    declared: &BTreeMap<RepoPath, (String, Option<String>)>,
+) -> BTreeMap<RepoPath, (String, Option<String>)> {
     let held = std::mem::replace(&mut snapshot.declared_routers, declared.clone());
     if held != snapshot.declared_routers {
         (snapshot.published_routes, snapshot.redirect_routes) = published_routes(snapshot);
@@ -990,7 +1072,7 @@ fn published_by(snapshot: &SnapshotDiscovery, rule: &RouteRule) -> bool {
         || snapshot
             .declared_routers
             .values()
-            .any(|declared| declared == rule.name)
+            .any(|(declared, _)| declared == rule.name)
 }
 
 /// The directory each generator this tree declares exactly once is configured
@@ -1039,19 +1121,30 @@ fn declared_site(
     let root = ancestor_root(document, &|directory| {
         declared_at(snapshot, directory).is_some()
     })?;
-    (declared_at(snapshot, &root)? == rule.name).then_some(root)
+    (declared_at(snapshot, &root)?.0 == rule.name).then_some(root)
 }
 
-/// The router a declaration sitting in this exact directory names. The
-/// declarations a comparison reads are the candidate's on both sides, so this
-/// asks what was declared rather than which tree holds the file.
+/// The nearest declaration above the document that says where its own
+/// directory is published, with that directory. The nearest declaration
+/// answers whatever it holds, so one naming no base withholds this reading
+/// rather than passing the question further up.
+fn declared_base(snapshot: &SnapshotDiscovery, document: &[u8]) -> Option<(Vec<u8>, String)> {
+    let root = ancestor_root(document, &|directory| {
+        declared_at(snapshot, directory).is_some()
+    })?;
+    let (_, base) = declared_at(snapshot, &root)?;
+    base.clone().map(|base| (root, base))
+}
+
+/// What a declaration sitting in this exact directory names. The declarations
+/// a comparison reads are the candidate's on both sides, so this asks what
+/// was declared rather than which tree holds the file.
 fn declared_at<'snapshot>(
     snapshot: &'snapshot SnapshotDiscovery,
     directory: &[u8],
-) -> Option<&'snapshot str> {
+) -> Option<&'snapshot (String, Option<String>)> {
     RepoPath::from_bytes(join(directory, ROUTER_DECLARATION.as_bytes()))
         .and_then(|path| snapshot.declared_routers.get(&path))
-        .map(String::as_str)
 }
 
 /// Whether a repository's own declaration may name this rule.

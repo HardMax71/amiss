@@ -97,12 +97,12 @@ fn removed_projection_assertions(
 /// identically. Both sides are read under the candidate's declarations, so a
 /// dropped one takes back the resolutions it served on both sides at once, and
 /// a finding it was holding open leaves the report with nothing saying it went.
-/// The declaration that answers for a directory is one, so a name changed there
-/// drops the old one as surely as deleting the file does.
+/// The declaration that answers for a directory is one, so a router or a base
+/// changed there drops the old one as surely as deleting the file does.
 #[must_use]
 pub fn removed_declarations(
-    base: &BTreeMap<RepoPath, String>,
-    candidate: &BTreeMap<RepoPath, String>,
+    base: &BTreeMap<RepoPath, (String, Option<String>)>,
+    candidate: &BTreeMap<RepoPath, (String, Option<String>)>,
 ) -> Vec<ControlSeed> {
     base.iter()
         .filter(|(path, router)| candidate.get(*path) != Some(*router))

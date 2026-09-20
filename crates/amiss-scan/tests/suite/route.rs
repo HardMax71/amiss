@@ -982,6 +982,39 @@ fn a_page_that_moved_answers_the_url_it_declares_it_moved_from() {
     assert_eq!(outcomes(&chain), expected(want));
 }
 
+/// A declaration that says where its directory is published reads a site
+/// route as a path under that directory. The base opens the route and the
+/// rest is the path, so `/manual/guide/` is the source `docs/guide.md` the
+/// extensionless spelling serves, and `/manual/intro/` is the directory the
+/// tree holds. A route the tree answers with nothing keeps the boundary it
+/// had, since the build serves routes no tree holds, and so does a route
+/// outside the base and a document no declaration covers. A fragment is read
+/// once its path resolves, which is the claim this reading can add.
+#[test]
+fn a_declared_base_reads_a_site_route_as_a_path_under_the_directory() {
+    let chain = amiss_fixtures::declared_site_base().expect("the fixture stages");
+    let page = "docs/page.md";
+    let want: Vec<Outcome> = vec![
+        row(
+            page,
+            Some("docs/guide"),
+            ResolutionTag::Resolved,
+            Some("docs/guide.md"),
+        ),
+        row(page, Some("docs/guide"), ResolutionTag::Missing, None),
+        row(page, Some("docs/intro"), ResolutionTag::Resolved, None),
+        row(page, None, ResolutionTag::UnsupportedSemantics, None),
+        row(page, None, ResolutionTag::UnsupportedSemantics, None),
+        row(
+            "outside/page.md",
+            None,
+            ResolutionTag::UnsupportedSemantics,
+            None,
+        ),
+    ];
+    assert_eq!(outcomes(&chain), expected(want));
+}
+
 /// A repository that declares its own router gets that router's resolving
 /// spellings where no configuration file names the generator. Under
 /// `hugo-pages` a page is published at a directory of its own name, so a
