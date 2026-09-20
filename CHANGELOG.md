@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.1](https://github.com/HardMax71/amiss/compare/v0.32.0...v0.32.1) - 2026-09-20
+
+### Changes
+
+- hand the README's detail to the book
+- state a row's kind and reason once when its places share them
+- order a row's places by document and position
+- say what to do about every analysis error
+
 ## [0.32.0](https://github.com/HardMax71/amiss/compare/v0.31.0...v0.32.0) - 2026-09-19
 
 ### Changes
