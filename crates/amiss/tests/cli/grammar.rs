@@ -2,7 +2,7 @@ use std::process::{Command, Stdio};
 
 use amiss_wire::report::AnalysisErrorCode;
 
-use crate::support::{amiss, fixture, payload, report};
+use crate::support::{amiss, declined_fixture, fixture, payload, report};
 
 /// `${{ github.repository }}` is `Owner/Name`, capitals and all, and the engine
 /// requires the canonical lowercase identity. It will not fold the value itself:
@@ -467,8 +467,7 @@ fn every_refusal_class_names_its_option() {
 
 #[test]
 fn explain_scope_adds_the_deterministic_block() {
-    let fx = fixture();
-    let run = |extra: &[&str]| {
+    let run = |fx: &amiss_fixtures::CommitPair, extra: &[&str]| {
         let mut args = vec![
             "check",
             "--repo",
@@ -485,11 +484,39 @@ fn explain_scope_adds_the_deterministic_block() {
         args.extend_from_slice(extra);
         amiss(&args)
     };
-    let (_c, plain, _e) = run(&[]);
-    let (_c, explained, _e) = run(&["--explain-scope"]);
+    let fx = fixture();
+    let (_c, plain, _e) = run(&fx, &[]);
+    let (_c, explained, _e) = run(&fx, &["--explain-scope"]);
     let plain = String::from_utf8_lossy(&plain);
     let explained = String::from_utf8_lossy(&explained);
     assert!(!plain.contains("scope:"));
     assert!(explained.contains("scope: built-in documents"));
     assert!(explained.contains("scope: this run discovered"));
+    assert!(
+        explained.contains("scope: this run declined 0 references and resolved 2"),
+        "a run that declined nothing still says so: {explained}"
+    );
+    assert!(
+        !explained.contains("scope: declined "),
+        "nothing declined leaves no reason row: {explained}"
+    );
+
+    let declined = declined_fixture();
+    let (_c, reasons, _e) = run(&declined, &["--explain-scope"]);
+    let reasons = String::from_utf8_lossy(&reasons);
+    let rows: Vec<&str> = reasons
+        .lines()
+        .filter(|row| row.starts_with("scope: "))
+        .skip(6)
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            "scope: a destination the tree cannot answer for is declined with a reason",
+            "scope: this run declined 3 references and resolved 1",
+            "scope: declined unsupported-semantics site-route 2",
+            "scope: declined unsupported-semantics network-path 1",
+        ],
+        "the reasons read largest first under the run's own counts: {reasons}"
+    );
 }
