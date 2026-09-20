@@ -70,30 +70,17 @@ already there before this change. Exit 0 means the run completed and nothing blo
 means a finding blocks. Exit 2 means the run itself could not be trusted, so there is no
 verdict.
 
-There is no ignore file, no exclude list, and no way to silence one finding. The nine skipped
-directory names (`node_modules`, `vendor`, `target`, `tests` and the rest) are fixed, and a
-run always reads the whole repository. A repository with a backlog ramps with
-`--profile enforce-introduced`, which blocks what a change introduces and keeps the pre-existing
-rows as warnings until they are worked off.
+There is no ignore file, no exclude list, and no way to silence one finding. A repository with
+a backlog ramps with `--profile enforce-introduced`, which blocks what a change introduces and
+leaves the pre-existing rows as warnings until they are worked off. A repository whose site is
+built somewhere else names its router in one line, so destinations resolve against the URLs the
+site publishes rather than against the source files.
 
-When a site is built somewhere else, the tree holds no generator configuration, so every
-destination is read against the source files rather than the URLs the site publishes, and a
-first run can report hundreds of missing targets nobody broke. Writing `router: hugo-pages` into
-`.amiss/router.yml` names the router that publishes the directory it sits in, and takes Grafana
-from 544 missing targets to 149. It silences nothing: a declaration can move a destination onto
-a file the tree already holds, and it can never clear one the tree lacks.
-[What a documentation router serves](https://hardmax71.github.io/amiss/route-spellings.html)
-lists the names you can write.
-
-In CI the same engine ships as an action that derives both commits from the event and
-annotates the Fixes a pull request introduced:
+In CI the same engine ships as an action that derives both commits from the event:
 
 ```yaml
 name: docs
-on:
-  pull_request:
-  push:
-    branches: [main]
+on: [pull_request]
 permissions:
   contents: read
 jobs:
@@ -102,35 +89,23 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
-      - id: amiss
-        uses: HardMax71/amiss@v0
+          fetch-depth: 2
+      - uses: HardMax71/amiss@v0
         with:
           profile: observe
-      - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: amiss-report
-          path: ${{ steps.amiss.outputs.report }}
-          if-no-files-found: ignore
 ```
 
-The `profile` input picks the gate: `observe` reports without blocking, `enforce` fails the
-job on any blocking finding, and the action's own default is `enforce`, so the snippet starts
-at `observe` and you switch once the first report is triaged. `fetch-depth` gives the
-checkout both commits the action compares: a pull request compares the merge commit with its
-first parent, so depth 2 is enough, while a push compares the event's before and after, which
-can be any distance apart. The upload keeps the JSON report where a failed run can be read.
-[Running it in CI](https://hardmax71.github.io/amiss/ci.html) has the direct form, GitLab,
-and the pre-commit hook.
+The action defaults to `enforce`, so the snippet starts at `observe` and you switch once the
+first report is triaged.
 
-Coding agents get the same treatment as people: every finding and error row carries a
-sentence saying what it means and what to do, and
-[Working with agents](https://hardmax71.github.io/amiss/agents.html) has a paste block for
-your repository's `AGENTS.md`.
+[The documentation](https://hardmax71.github.io/amiss/) has the rest: the
+[quickstart](https://hardmax71.github.io/amiss/quickstart.html),
+[running it in CI](https://hardmax71.github.io/amiss/ci.html) with GitLab and the pre-commit
+hook, [every finding kind](https://hardmax71.github.io/amiss/profiles.html),
+[every analysis error](https://hardmax71.github.io/amiss/errors.html) and
+[working with agents](https://hardmax71.github.io/amiss/agents.html). It is served as one file
+at [llms-full.txt](https://hardmax71.github.io/amiss/llms-full.txt) too.
 
 Amiss is source-available under FSL-1.1-ALv2: you may run it in your own CI, and each
 release converts to Apache-2.0 two years after it ships. The terms are in
 [the license](LICENSE.md) and third-party attributions in [notices](THIRD_PARTY_NOTICES.md).
-Everything else is in the [documentation](https://hardmax71.github.io/amiss/), also served
-as one file at [llms-full.txt](https://hardmax71.github.io/amiss/llms-full.txt).
