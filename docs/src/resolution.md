@@ -180,9 +180,11 @@ keeps the boundary it had, so the base can resolve a destination and cannot clai
 they were harvested from, the generator rules and what selects each, the names a repository
 may declare, and what the union costs.
 
-A destination holding `{{ ... }}` or `{% ... %}` never reaches the tree at all. The build
-fills it in, so it takes the same `unsupported-reference-semantics` an AsciiDoc `{attribute}`
-takes, and a file whose own name carries a single brace stays a path.
+A destination that opens `{{` or `{%` never reaches the tree at all. The build fills it in, so
+it takes the same `unsupported-reference-semantics` an AsciiDoc `{attribute}` takes. The
+opening is enough, since an HTML attribute value ends at the next quote and hands over an
+expression with the closer cut off, and a file whose own name carries a single brace stays a
+path.
 
 A destination no spelling reaches, in a tree that declares no such generator, is
 `kind: missing` with `reason: path-not-found`. The path
