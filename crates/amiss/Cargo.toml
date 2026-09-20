@@ -35,10 +35,10 @@ js_int.workspace = true
 percent-encoding.workspace = true
 sha2.workspace = true
 hex.workspace = true
-amiss-git = { path = "../amiss-git", version = "0.32.0" }
-amiss-md = { path = "../amiss-md", version = "0.32.0" }
-amiss-scan = { path = "../amiss-scan", version = "0.32.0" }
-amiss-wire = { path = "../amiss-wire", version = "0.32.0" }
+amiss-git = { path = "../amiss-git", version = "0.32.1" }
+amiss-md = { path = "../amiss-md", version = "0.32.1" }
+amiss-scan = { path = "../amiss-scan", version = "0.32.1" }
+amiss-wire = { path = "../amiss-wire", version = "0.32.1" }
 quick-xml.workspace = true
 serde.workspace = true
 serde_json.workspace = true
