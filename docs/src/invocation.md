@@ -197,9 +197,13 @@ per finding kind the feedback carries, in the wording from
 [Analysis errors](errors.md). Three totals lines close the output, and a `records` line
 names the record-only kinds and their counts when the run has any. Pre-existing rows are the
 backlog at warn or fail, and the backlog keeps its own window, so introduced volume cannot
-push it off the terminal. The full findings stay in JSON. `--explain-scope` adds six scope
-lines to that human output, five fixed and one naming this run's counts, and changes nothing
-in JSON, behavior pinned by the
+push it off the terminal. The full findings stay in JSON. `--explain-scope` adds six fixed
+scope lines to that human output, two naming this run's counts, and one row per reason a
+reference was declined, largest count first. A reference is declined when the tree holds no
+answer for the destination, so the rows come to the same total as the run's
+`unsupported-reference-semantics` and `unsupported-target-kind` records. Each row spells the
+resolution and its reason the way the report spells them, and [Resolution](resolution.md)
+says what each reason means. None of this changes JSON, behavior pinned by the
 [CLI tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/cli).
 
 `amiss render --report <path> --format <human|sarif|codequality|junit>` reopens one JSON report

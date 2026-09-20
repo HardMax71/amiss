@@ -32,6 +32,16 @@ pub(crate) fn claim_fixture() -> amiss_fixtures::CommitPair {
     amiss_fixtures::commit_pair(&base, &[("subject.txt", "beta\n")]).unwrap()
 }
 
+/// A candidate whose new document declines three references for two reasons:
+/// two destinations naming a site route, and one query the grammar leaves
+/// unevaluated on a path the tree does hold.
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+pub(crate) fn declined_fixture() -> amiss_fixtures::CommitPair {
+    let routes = "[a](/docs/guide.md) [b](/README) [c](guide.md?plain=1) [d](//example.com/page)\n";
+    let base = [("README", "start\n"), ("docs/guide.md", "# Guide\n")];
+    amiss_fixtures::commit_pair(&base, &[("docs/routes.md", routes)]).unwrap()
+}
+
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 pub(crate) fn amiss(args: &[&str]) -> (i32, Vec<u8>, String) {
     let output = Command::new(env!("CARGO_BIN_EXE_amiss"))

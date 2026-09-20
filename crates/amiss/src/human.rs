@@ -100,7 +100,7 @@ pub(crate) fn report<P, R, M, S, D, F>(
         }
     };
     if options.explain_scope {
-        explain(&mut out, payload);
+        explain(&mut out, payload, &resolution);
     }
     for row in &payload.errors {
         if let Some(resource) = row.resource {
@@ -543,7 +543,47 @@ fn totals<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
     }
 }
 
-fn explain<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
+/// How often each declined reason answered a reference this report carries,
+/// over the same candidate occurrences the summary counted as extracted.
+fn declines<P, R, M, E, F>(
+    payload: &ReportPayload<P, R, M, E>,
+    resolution: &F,
+) -> BTreeMap<String, u64>
+where
+    F: Fn(&R) -> (ResolutionTag, Option<String>),
+{
+    let mut counts: BTreeMap<String, u64> = BTreeMap::new();
+    for comparison in &payload.observations {
+        let alternatives = comparison.alternatives.candidate.iter();
+        for occurrence in occurrences(comparison)
+            .candidate
+            .into_iter()
+            .chain(alternatives)
+        {
+            let (tag, reason) = resolution(&occurrence.resolution);
+            if !matches!(
+                tag,
+                ResolutionTag::UnsupportedSemantics
+                    | ResolutionTag::UnsupportedTarget
+                    | ResolutionTag::UnsupportedVersion
+            ) {
+                continue;
+            }
+            let row = reason.map_or_else(
+                || tag.as_ref().to_owned(),
+                |reason| format!("{} {reason}", tag.as_ref()),
+            );
+            let count = counts.entry(row).or_default();
+            *count = count.saturating_add(1);
+        }
+    }
+    counts
+}
+
+fn explain<P, R, M, E, F>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>, resolution: &F)
+where
+    F: Fn(&R) -> (ResolutionTag, Option<String>),
+{
     say!(
         out,
         "scope: built-in documents are *.md, *.mdx, *.markdown, *.adoc, *.asciidoc,"
@@ -572,6 +612,22 @@ fn explain<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
         documents.discovered,
         documents.scanned,
     );
+    say!(
+        out,
+        "scope: a destination the tree cannot answer for is declined with a reason"
+    );
+    let declined = declines(payload, resolution);
+    let total = declined.values().copied().fold(0_u64, u64::saturating_add);
+    say!(
+        out,
+        "scope: this run declined {total} references and resolved {}",
+        payload.summary.references.resolved,
+    );
+    let mut ranked: Vec<(String, u64)> = declined.into_iter().collect();
+    ranked.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+    for (row, count) in ranked {
+        say!(out, "scope: declined {row} {count}");
+    }
 }
 
 pub(crate) fn plan(payload: &amiss_wire::external::ExternalPlan) {
