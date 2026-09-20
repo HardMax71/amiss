@@ -370,6 +370,26 @@ fn spelled((tag, detail): (ResolutionTag, Option<String>)) -> String {
     detail.unwrap_or_else(|| tag.as_ref().to_owned())
 }
 
+/// One place's kind and reason, in the single spelling a row heading and a
+/// place line both read from.
+fn finding_tokens<P>(place: &Place<'_, P>) -> String {
+    place.reason.as_ref().map_or_else(
+        || place.kind.as_ref().to_owned(),
+        |reason| format!("{} {reason}", place.kind.as_ref()),
+    )
+}
+
+/// The kind and reason every place under one row carries, where they all
+/// carry the same one. A row whose places disagree answers `None`, so a
+/// heading never speaks for a place that differs from it.
+fn shared_tokens<P>(places: &[&Place<'_, P>]) -> Option<String> {
+    let first = places.first()?;
+    places
+        .iter()
+        .all(|place| place.kind == first.kind && place.reason == first.reason)
+        .then(|| finding_tokens(first))
+}
+
 fn windowed<'report, P: 'report + PartialEq>(
     out: &mut Channel,
     items: impl Iterator<Item = &'report FeedbackItem<P>> + Clone,
@@ -387,37 +407,37 @@ fn windowed<'report, P: 'report + PartialEq>(
             FeedbackAction::Check => "Check",
             FeedbackAction::Existing => "Pre-existing",
         };
+        let under: Vec<&Place<'report, P>> = places
+            .iter()
+            .filter(|place| place.action == item.action && place.target == item.target.as_ref())
+            .collect();
+        let shared = shared_tokens(&under);
         say!(
             out,
-            "{action} target {} affected places {}",
+            "{action} target {} affected places {}{}",
             path_atom(item.target.as_ref()),
-            item.location_count
+            item.location_count,
+            shared
+                .as_ref()
+                .map_or_else(String::new, |tokens| format!(" {tokens}"))
         );
-        let under = places
-            .iter()
-            .filter(|place| place.action == item.action && place.target == item.target.as_ref());
-        let shown = under.clone().count();
-        for place in under.take(window) {
+        for place in under.iter().take(window) {
             let at = place.span.map_or_else(String::new, |span| {
                 format!(":{}:{}", span.start_line, span.start_column)
             });
-            let reason = place
-                .reason
-                .as_ref()
-                .map_or_else(String::new, |reason| format!(" {reason}"));
+            let tokens = if shared.is_some() {
+                String::new()
+            } else {
+                format!(" {}", finding_tokens(place))
+            };
             let members = if place.members > 1 {
                 format!(" ({} places)", place.members)
             } else {
                 String::new()
             };
-            say!(
-                out,
-                "  {}{at} {}{reason}{members}",
-                path_atom(place.document),
-                place.kind.as_ref()
-            );
+            say!(out, "  {}{at}{tokens}{members}", path_atom(place.document));
         }
-        let hidden = shown.saturating_sub(window);
+        let hidden = under.len().saturating_sub(window);
         if hidden > 0 {
             say!(out, "  places overflow: {hidden} more in the full report");
         }

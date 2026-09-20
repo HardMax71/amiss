@@ -32,13 +32,13 @@ fn human_output_projects_the_same_result() {
     );
     assert!(
         text.contains(
-            "Fix target \"docs/missing.md\" affected places 1\n  \"docs/guide.md\":3:23 explicit-target-missing path-not-found\n"
+            "Fix target \"docs/missing.md\" affected places 1 explicit-target-missing path-not-found\n  \"docs/guide.md\":3:23\n"
         ),
-        "the row names its target and count, the place under it the document, position, kind, and reason: {text}"
+        "the row names its target, count, kind, and reason, the place under it the document and position: {text}"
     );
     assert!(
         text.contains(
-            "Check target \"docs/guide.md\" affected places 1\n  \"README\":1:5 dependency-changed-subject-unchanged\n"
+            "Check target \"docs/guide.md\" affected places 1 dependency-changed-subject-unchanged\n  \"README\":1:5\n"
         ),
         "the unchanged backlink becomes one check with its place: {text}"
     );
@@ -226,7 +226,7 @@ fn pre_existing_findings_render_as_pre_existing_rows_with_the_kind_note() {
     );
     assert!(
         text.contains(
-            "Pre-existing target \"docs/missing.md\" affected places 1\n  \"docs/guide.md\":3:23 explicit-target-missing path-not-found\n"
+            "Pre-existing target \"docs/missing.md\" affected places 1 explicit-target-missing path-not-found\n  \"docs/guide.md\":3:23\n"
         ),
         "the backlog renders under its own label with its place: {text}"
     );
@@ -487,10 +487,10 @@ fn every_row_names_its_places_reasons_and_meaning_verbatim() {
     assert_eq!((code, stderr.as_str()), (1, ""));
     let expected = format!(
         "amiss: fail (fix 0, check 0, pre-existing 2, errors 0, exit 1)\n\
-         Pre-existing target \"README.md\" affected places 1\n\
-         \x20 \"README.md\":3:5 explicit-target-missing heading-anchor-not-found\n\
-         Pre-existing target \"docs/guide.md\" affected places 1\n\
-         \x20 \"README.md\":3:31 explicit-target-missing path-not-found\n\
+         Pre-existing target \"README.md\" affected places 1 explicit-target-missing heading-anchor-not-found\n\
+         \x20 \"README.md\":3:5\n\
+         Pre-existing target \"docs/guide.md\" affected places 1 explicit-target-missing path-not-found\n\
+         \x20 \"README.md\":3:31\n\
          note explicit-target-missing: {}\n\
          documents: discovered 1 scanned 1 unsupported 0 excluded 0 unlinked 0\n\
          references: extracted 2 local 2 same-repo 0 external 0 unsupported 0 missing 2\n\
@@ -696,7 +696,7 @@ fn places_in_one_document_read_by_line() {
     let text = String::from_utf8(stdout).unwrap();
     assert!(
         text.contains(
-            "Fix target \"target.md\" affected places 5\n  \"guide.md\":3:1 explicit-target-missing heading-anchor-not-found\n  \"guide.md\":4:1 explicit-target-missing heading-anchor-not-found\n  \"guide.md\":5:1 explicit-target-missing heading-anchor-not-found\n  \"guide.md\":6:1 explicit-target-missing heading-anchor-not-found\n  \"guide.md\":7:1 explicit-target-missing heading-anchor-not-found\n"
+            "Fix target \"target.md\" affected places 5 explicit-target-missing heading-anchor-not-found\n  \"guide.md\":3:1\n  \"guide.md\":4:1\n  \"guide.md\":5:1\n  \"guide.md\":6:1\n  \"guide.md\":7:1\n"
         ),
         "the lines climb: {text}"
     );
@@ -728,9 +728,56 @@ fn a_case_mismatch_names_the_nearby_spelling() {
     let text = String::from_utf8_lossy(&stdout);
     assert!(
         text.contains(
-            "Fix target \"docs/Guide.md\" affected places 1\n  \"README.md\":3:1 explicit-target-missing path-not-found near \"docs/guide.md\"\n"
+            "Fix target \"docs/Guide.md\" affected places 1 explicit-target-missing path-not-found near \"docs/guide.md\"\n  \"README.md\":3:1\n"
         ),
         "{text}"
+    );
+}
+
+/// A row heads the kind and reason its places all carry, so a place under it
+/// is a position and nothing else. A row whose places disagree heads neither,
+/// and every place there spells its own, so no heading ever speaks for a
+/// place that differs from it.
+#[test]
+fn a_row_heads_the_tokens_its_places_share_and_leaves_the_ones_they_do_not() {
+    let fx = amiss_fixtures::commit_pair(
+        &[
+            ("uniform.md", "# Uniform\n"),
+            ("mixed.md", "# Mixed\n\n## Alpha Step\n"),
+            ("guide.md", "# Guide\n"),
+        ],
+        &[(
+            "guide.md",
+            "# Guide\n\n[a](uniform.md#gone-one)\n[b](uniform.md#gone-two)\n[c](mixed.md#Alpha_Step)\n[d](mixed.md#nothing-alike)\n",
+        )],
+    )
+    .unwrap();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 0);
+    let text = String::from_utf8_lossy(&stdout);
+    assert!(
+        text.contains(
+            "Fix target \"uniform.md\" affected places 2 explicit-target-missing heading-anchor-not-found\n  \"guide.md\":3:1\n  \"guide.md\":4:1\n"
+        ),
+        "two places carrying one kind and reason read them once, off the heading: {text}"
+    );
+    assert!(
+        text.contains(
+            "Fix target \"mixed.md\" affected places 2\n  \"guide.md\":5:1 explicit-target-missing heading-anchor-not-found near \"alpha-step\"\n  \"guide.md\":6:1 explicit-target-missing heading-anchor-not-found\n"
+        ),
+        "one nearby spelling and no nearby spelling disagree, so both places keep their own: {text}"
     );
 }
 
