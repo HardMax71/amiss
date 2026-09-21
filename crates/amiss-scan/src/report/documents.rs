@@ -68,6 +68,12 @@ fn side_facets(
             ContentAvailability::Available,
             None,
         ),
+        DocumentStatus::Unsupported(UnsupportedKind::Unparsable) => (
+            model::DocumentStatus::Unsupported,
+            Some(UnsupportedReason::UnparsableDocument),
+            ContentAvailability::Available,
+            None,
+        ),
         DocumentStatus::Unsupported(UnsupportedKind::Ceiling) => (
             model::DocumentStatus::Unsupported,
             Some(UnsupportedReason::ResourceCeilingCrossed),

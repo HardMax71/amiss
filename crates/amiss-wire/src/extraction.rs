@@ -21,6 +21,7 @@ pub struct Work {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fault {
     DocumentInvalid,
+    DocumentUnparsable,
     ParserError,
     ParserPanic,
     InvalidSourceSpan,
@@ -29,7 +30,7 @@ pub enum Fault {
 impl From<Fault> for AnalysisErrorCode {
     fn from(fault: Fault) -> Self {
         match fault {
-            Fault::DocumentInvalid => Self::DocumentInvalid,
+            Fault::DocumentInvalid | Fault::DocumentUnparsable => Self::DocumentInvalid,
             Fault::ParserError => Self::ParserError,
             Fault::ParserPanic => Self::ParserPanic,
             Fault::InvalidSourceSpan => Self::InvalidSourceSpan,

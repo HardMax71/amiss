@@ -22,6 +22,7 @@ pub enum UnsupportedKind {
     LfsPointer,
     Format,
     Undecodable,
+    Unparsable,
     Ceiling,
 }
 
@@ -778,6 +779,9 @@ fn document_outcome(defect: Error) -> Result<DocumentStatus, Error> {
     match defect {
         Error::Parse(Fault::DocumentInvalid) => {
             Ok(DocumentStatus::Unsupported(UnsupportedKind::Undecodable))
+        }
+        Error::Parse(Fault::DocumentUnparsable) => {
+            Ok(DocumentStatus::Unsupported(UnsupportedKind::Unparsable))
         }
         Error::ResourceLimit { .. } => Ok(DocumentStatus::Unsupported(UnsupportedKind::Ceiling)),
         Error::Parse(Fault::ParserError | Fault::ParserPanic | Fault::InvalidSourceSpan)
