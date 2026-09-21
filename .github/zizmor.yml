@@ -7,3 +7,10 @@ rules:
   artipacked:
     ignore:
       - agentic_commands.yml
+  # gh aw compile writes each pinned SHA back as its own version comment, so
+  # naming the tag is the generator's to fix; the pin is still a SHA.
+  ref-version-mismatch:
+    ignore:
+      - agent-mention.lock.yml
+      - agent-review.lock.yml
+      - agent-triage.lock.yml
