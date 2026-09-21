@@ -275,15 +275,22 @@ const MKDOCS_SITE: [(&str, Staged<'static>); 8] = [
 /// page writing the same source-root-absolute `:doc:` targets, one target
 /// that exists and one that does not, and `notes/readme.rst` outside any
 /// `conf.py`, where the absolute target names the one source tree there is.
-const SPHINX_SOURCE: [(&str, Staged<'static>); 5] = [
+/// `arrays.scalars` is the relative docname carrying a dot of its own, and
+/// `python:tutorial/venv` is the intersphinx project another inventory holds.
+const SPHINX_SOURCE: [(&str, Staged<'static>); 6] = [
     ("docs/conf.py", Staged::File(b"project = 'widgets'\n")),
     (
         "docs/index.rst",
         Staged::File(
-            b"Index\n=====\n\nSee :doc:`/testing` and :doc:`/absent` and :doc:`/deploying/index`.\n",
+            b"Index\n=====\n\nSee :doc:`/testing` and :doc:`/absent` and :doc:`/deploying/index` \
+and :doc:`arrays.scalars` and :doc:`arrays.absent` and :doc:`python:tutorial/venv`.\n",
         ),
     ),
     ("docs/testing.rst", Staged::File(b"Testing\n=======\n")),
+    (
+        "docs/arrays.scalars.rst",
+        Staged::File(b"Scalars\n=======\n"),
+    ),
     (
         "docs/deploying/index.rst",
         Staged::File(b"Deploying\n=========\n\nSee :doc:`/testing` and :doc:`../testing`.\n"),

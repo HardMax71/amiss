@@ -363,9 +363,7 @@ pub fn anchors(
         Adapter::Markdown | Adapter::Mdx => {
             markdown_anchors(snapshot, document, construct, is_image, path_part)
         }
-        Adapter::Rst => sphinx_anchor(snapshot, document, construct, path_part)
-            .into_iter()
-            .collect(),
+        Adapter::Rst => sphinx_anchor(snapshot, document, construct, path_part),
         Adapter::PlainAdvisory => Vec::new(),
     }
 }
@@ -1277,13 +1275,11 @@ fn published_anchors(
     construct: Option<SourceConstruct>,
     path_part: &str,
 ) -> Vec<(Vec<u8>, String)> {
+    let Some((beside, relative)) = beside_document(document, path_part) else {
+        return Vec::new();
+    };
     let raw = document.as_bytes();
-    let beside = directory(raw).to_vec();
-    let relative = path_part.strip_suffix('/').unwrap_or(path_part).to_owned();
     let mut out: Vec<(Vec<u8>, String)> = Vec::new();
-    if path_part.is_empty() || path_part.starts_with('/') || scheme(path_part).is_some() {
-        return out;
-    }
     if site_root(snapshot, raw, &DIRECTORY_PAGES).is_some() {
         let published = page_route(raw, true);
         out.push((beside.clone(), relative.clone()));
@@ -1355,34 +1351,82 @@ fn plugin_path(site: &[u8], document: &[u8]) -> Option<Vec<u8>> {
     })
 }
 
-/// A source-root-absolute `:doc:` target, anchored at the directory holding
-/// `conf.py`. A docname names a source file without its suffix, so the name
-/// takes the suffix that root reads and a dot inside the name stays part of
-/// the name. A trailing slash is normalized away before the lookup, which is
-/// what `docname_join` does. A relative target keeps the default suffix the
-/// adapter spelled it with, since the adapter runs before any root is known.
+/// Where a `:doc:` target is anchored: a leading slash at the directory
+/// holding `conf.py`, and anything else beside the document, which is what
+/// `docname_join` does. A trailing slash is normalized away first.
 fn sphinx_anchor(
     snapshot: &SnapshotDiscovery,
     document: &RepoPath,
     construct: Option<SourceConstruct>,
     path_part: &str,
-) -> Option<(Vec<u8>, String)> {
-    if construct? != SourceConstruct::RstDocRole {
-        return None;
+) -> Vec<(Vec<u8>, String)> {
+    let docname = path_part.strip_suffix('/').unwrap_or(path_part);
+    let Some((root, suffix)) = docname_root(snapshot, document, construct) else {
+        return Vec::new();
+    };
+    match docname.strip_prefix('/') {
+        Some(absolute) => rooted_docname(root, absolute, suffix),
+        None => docname_beside(document, docname, suffix),
     }
-    let absolute = path_part.strip_prefix('/')?;
-    let docname = absolute.strip_suffix('/').unwrap_or(absolute);
-    if docname.is_empty() || docname.starts_with('/') {
+}
+
+/// The source root a `:doc:` target is read under and the suffix that root
+/// reads, where the construct is the role that names a docname at all.
+fn docname_root<'a>(
+    snapshot: &'a SnapshotDiscovery,
+    document: &RepoPath,
+    construct: Option<SourceConstruct>,
+) -> Option<(Vec<u8>, &'a str)> {
+    if construct != Some(SourceConstruct::RstDocRole) {
         return None;
     }
     let root = site_root(snapshot, document.as_bytes(), &SPHINX)?;
     let suffix = docname_suffix(snapshot, &root);
-    let spelled = if docname.ends_with(suffix) {
+    Some((root, suffix))
+}
+
+/// A docname a leading slash anchored at the source root.
+fn rooted_docname(root: Vec<u8>, absolute: &str, suffix: &str) -> Vec<(Vec<u8>, String)> {
+    if absolute.is_empty() || absolute.starts_with('/') {
+        return Vec::new();
+    }
+    vec![(root, docname_spelling(absolute, suffix))]
+}
+
+/// A docname read beside its own document, offered under the suffix its root
+/// reads and again as authored, so a name the tree spells either way still
+/// resolves. One already carrying a suffix was spelled by the adapter, which
+/// runs before any root is known, and is left the way it was spelled.
+fn docname_beside(document: &RepoPath, docname: &str, suffix: &str) -> Vec<(Vec<u8>, String)> {
+    if docname.ends_with(suffix) || docname.ends_with(DEFAULT_SOURCE_SUFFIX) {
+        return Vec::new();
+    }
+    let Some((beside, relative)) = beside_document(document, docname) else {
+        return Vec::new();
+    };
+    vec![
+        (beside.clone(), docname_spelling(&relative, suffix)),
+        (beside, relative),
+    ]
+}
+
+/// The directory a destination is read beside and the name with any trailing
+/// slash normalized away, where the destination is a relative path rather
+/// than a root, a scheme, or nothing at all.
+fn beside_document(document: &RepoPath, path_part: &str) -> Option<(Vec<u8>, String)> {
+    let name = path_part.strip_suffix('/').unwrap_or(path_part);
+    (!name.is_empty() && !name.starts_with('/') && scheme(name).is_none())
+        .then(|| (directory(document.as_bytes()).to_vec(), name.to_owned()))
+}
+
+/// A docname names a source file without its suffix, so the name takes the
+/// suffix its root reads and a dot inside the name stays part of the name.
+fn docname_spelling(docname: &str, suffix: &str) -> String {
+    if docname.ends_with(suffix) {
         docname.to_owned()
     } else {
         format!("{docname}{suffix}")
-    };
-    Some((root, spelled))
+    }
 }
 
 /// The nearest directory on the document's ancestor chain holding one of the
