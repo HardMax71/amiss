@@ -1046,6 +1046,43 @@ fn a_declared_base_reads_a_site_route_as_a_path_under_the_directory() {
     assert_eq!(outcomes(&chain), expected(want));
 }
 
+/// A site whose own configuration says where its pages sit and where it is
+/// served needs no declaration to say it again. `contentDir` and `baseURL`
+/// read `/handbook/guide/` as `site/content/en/guide.md`, from a page of any
+/// language of the site rather than only from one beneath that root, since a
+/// root belongs to its project. A route the tree answers with nothing keeps
+/// the boundary it had, and so does one outside the base. The indented
+/// `contentDir` belongs to a table, so `content/fr` is never a root here.
+#[test]
+fn a_configuration_that_names_its_own_content_root_reads_a_site_route() {
+    let chain = amiss_fixtures::configured_site().expect("the fixture stages");
+    let page = "site/content/en/page.md";
+    let guide = "site/content/en/guide.md";
+    let want: Vec<Outcome> = vec![
+        row(
+            page,
+            Some("site/content/en/guide"),
+            ResolutionTag::Resolved,
+            Some(guide),
+        ),
+        row(page, None, ResolutionTag::UnsupportedSemantics, None),
+        row(page, None, ResolutionTag::UnsupportedSemantics, None),
+        row(
+            page,
+            Some("site/content/en/guide"),
+            ResolutionTag::Missing,
+            None,
+        ),
+        row(
+            "site/content/fr/page.md",
+            Some("site/content/en/guide"),
+            ResolutionTag::Resolved,
+            Some(guide),
+        ),
+    ];
+    assert_eq!(outcomes(&chain), expected(want));
+}
+
 /// The page-URL reading answers to one name. `directory-pages` says the site
 /// publishes a page at a directory of its own name, whatever generator builds
 /// it, and the generator name that used to say it declares no rule, so the

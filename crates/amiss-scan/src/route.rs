@@ -219,6 +219,12 @@ const ANTORA_EXTENSIONS: &[u8] = b"ext:";
 /// reads, the parser name that means this engine's reStructuredText, and the
 /// suffix a source file carries where nothing declares another.
 const SOURCE_SUFFIX: &[u8] = b"source_suffix";
+
+/// The keys a Hugo configuration opens a line with to say where its content
+/// sits and where its site is served, and the root Hugo reads without them.
+const CONTENT_DIR: &[u8] = b"contentDir";
+const BASE_URL: &[u8] = b"baseURL";
+const DEFAULT_CONTENT_DIR: &str = "content";
 const RESTRUCTUREDTEXT: &str = "restructuredtext";
 pub const DEFAULT_SOURCE_SUFFIX: &str = ".rst";
 
@@ -412,12 +418,54 @@ fn declared_site_anchor(
     let route = path_part
         .strip_prefix('/')
         .filter(|route| !route.starts_with('/'))?;
-    let (root, base) = matches!(adapter, Adapter::Markdown | Adapter::Mdx)
-        .then(|| declared_base(snapshot, document.as_bytes()))
-        .flatten()?;
-    let page = under_base(&base, route).map(|under| under.strip_suffix('/').unwrap_or(under))?;
+    if !matches!(adapter, Adapter::Markdown | Adapter::Mdx) {
+        return None;
+    }
+    let raw = document.as_bytes();
+    declared_base(snapshot, raw)
+        .into_iter()
+        .chain(published_bases(snapshot, raw))
+        .find_map(|(root, base)| served_page(snapshot, root, &base, is_image, route))
+}
+
+/// The page one base serves a route from, where the tree holds it.
+fn served_page(
+    snapshot: &SnapshotDiscovery,
+    root: Vec<u8>,
+    base: &str,
+    is_image: bool,
+    route: &str,
+) -> Option<(Vec<u8>, String)> {
+    let page = under_base(base, route).map(|under| under.strip_suffix('/').unwrap_or(under))?;
     (!page.is_empty() && tracked_page(snapshot, &root, is_image, page))
         .then(|| (root, page.to_owned()))
+}
+
+/// Every content root the configuration of a site holding this document
+/// names, with the path each is served under and the longest base first. The
+/// configuration states where the pages are and what the site is rooted at,
+/// which is what a declaration states by hand, so a repository that already
+/// says it is not asked to say it twice. A root belongs to its whole project
+/// rather than to the pages beneath it, since one page of a site routes to
+/// another wherever either sits.
+fn published_bases(snapshot: &SnapshotDiscovery, document: &[u8]) -> Vec<(Vec<u8>, String)> {
+    let mut found: Vec<(Vec<u8>, String)> = snapshot
+        .published_roots
+        .iter()
+        .filter(|(project, _)| within(document, project))
+        .flat_map(|(_, roots)| roots.iter().cloned())
+        .collect();
+    found.sort_by_key(|(_, base)| std::cmp::Reverse(base.len()));
+    found
+}
+
+/// Whether a document sits inside one project, which the repository root
+/// holds every document of.
+fn within(document: &[u8], project: &[u8]) -> bool {
+    project.is_empty()
+        || document
+            .strip_prefix(project)
+            .is_some_and(|rest| rest.starts_with(b"/"))
 }
 
 /// What one route names under a declared base: the rest of it once the base
@@ -654,6 +702,54 @@ fn site_base(value: &str) -> Option<&str> {
     value
         .strip_prefix('/')
         .map(|path| path.trim_end_matches('/'))
+}
+
+/// The content root one Hugo configuration names and the path its site is
+/// served under. A key opens the line at the top level of the file, so an
+/// indented line and everything after the first table header belong to a
+/// table rather than to the project. Where the file names no root, Hugo
+/// reads `content`.
+#[must_use]
+pub(crate) fn hugo_project(source: &[u8]) -> (String, String) {
+    let project = project_lines(source);
+    let root = project
+        .iter()
+        .find_map(|line| configured(line, CONTENT_DIR));
+    let base = project.iter().find_map(|line| configured(line, BASE_URL));
+    (
+        root.map_or_else(|| DEFAULT_CONTENT_DIR.to_owned(), str::to_owned),
+        base.map(served_under).unwrap_or_default(),
+    )
+}
+
+/// The lines a configuration file binds at its own top level, where an
+/// indented line and everything after the first table header belong to a
+/// table rather than to the project.
+fn project_lines(source: &[u8]) -> Vec<&[u8]> {
+    amiss_md::lines::scan(source)
+        .map(|line| line.content(source))
+        .take_while(|content| !content.starts_with(b"["))
+        .filter(|content| !content.first().is_some_and(u8::is_ascii_whitespace))
+        .collect()
+}
+
+/// What one configuration binds to a key, spelled the way the file it sits
+/// in spells a binding: an equals sign in TOML and a colon in YAML.
+fn configured<'a>(line: &'a [u8], key: &[u8]) -> Option<&'a str> {
+    match assigned(line, key) {
+        Some(value) => scalar(value, b""),
+        None => scalar(line, &[key, b":"].concat()),
+    }
+}
+
+/// The path a site URL is served under, without the slashes bounding it: the
+/// authority is off, so a site at the root of its host declares nothing
+/// before the route, the way a base does.
+fn served_under(url: &str) -> String {
+    let path = url.split_once("://").map_or(url, |(_scheme, rest)| {
+        rest.split_once('/').map_or("", |(_host, path)| path)
+    });
+    path.trim_matches('/').to_owned()
 }
 
 /// Which suffixes one `conf.py` says Sphinx reads as reStructuredText. A
@@ -1470,7 +1566,7 @@ fn regular_file(snapshot: &SnapshotDiscovery, path: Vec<u8>) -> bool {
     })
 }
 
-fn join(directory: &[u8], name: &[u8]) -> Vec<u8> {
+pub(crate) fn join(directory: &[u8], name: &[u8]) -> Vec<u8> {
     if directory.is_empty() {
         return name.to_vec();
     }

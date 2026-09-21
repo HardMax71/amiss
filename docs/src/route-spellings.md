@@ -391,6 +391,27 @@ opens one, so the boundary answers the whole `docs/` tree instead and those 19 g
 Three of the four real breaks sit in `.github/`, outside the tree that file declares, and the
 fourth is the page source `docs/_docs/security.md` names.
 
+## What a build's own configuration says
+
+A declaration says two things: which directory holds the pages, and what path the site is
+served at. A Hugo configuration already says both, so a repository keeping one is not asked to
+write them again. `contentDir` names the directory, read against the directory the
+configuration sits in, and the path of `baseURL` is what every route opens with. Where the
+file names no directory, Hugo reads `content` and so does this.
+
+Only the project's own bindings are read. A line indented under a table, and everything after
+the first table header, belongs to that table rather than to the project, so a `contentDir`
+under `[languages.fr]` names no root here. A multilingual site answers the routes into the
+directory its project names and leaves the rest the site routes they were.
+
+A root belongs to its project rather than to the pages beneath it, since one page of a site
+routes to another wherever either sits. That is what lets a Japanese page on the Kubernetes
+website reach the English page its route names. Read whole on 2026-09-21 under the observe
+profile, its site routes fall from 28,075 to 13,626 and resolved references rise from 5,073
+to 18,584, with no missing path arriving. Nineteen claims arrive, every one an anchor on a
+page that only resolves now, and fifteen name a heading the page does not carry. The other
+four are headings written as a shortcode, which this reads no better than before.
+
 ## What a repository declares about its own build
 
 Every rule so far is selected by a file in the tree, so a repository that keeps no
@@ -562,12 +583,9 @@ serving a file, and the base is read whichever router the line above it names. S
 from 10,323 to 1,647 and resolved references rise from 3,470 to 12,133. Three claims arrive,
 each an anchor on a page that only resolves now, and no missing path arrives at all.
 
-Kubernetes serves its website out of `content/en`, so its page URLs drop that prefix the way
-Astro's drop theirs. Both lines go at `content/en/.amiss/router.yml`, this time with
-`router: directory-pages`, and resolved references rise from 5,073 to 11,050 without one
-missing path arriving. Its 89 claims are all anchors and every one of them stays; six more
-join them, two on reference pages a generator writes from OpenAPI. The router line on its
-own, with no base, resolves 153 references and moves no claim at all.
+Kubernetes serves its website out of `content/en` and its `hugo.toml` says so, which is why
+that repository is no longer an example here: the configuration is read where it sits, and a
+declaration staged beside it moves not one reference. The section below is what answers it.
 
 Jekyll's own repository is why the row is not named after Hugo. `docs/_config.yml` sets
 `permalink: "/:collection/:path/"`, which publishes every page at a directory of its own name,
