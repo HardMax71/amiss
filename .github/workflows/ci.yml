@@ -125,6 +125,12 @@ jobs:
           path: ${{ runner.temp }}/amiss-similarity/manifest
           key: similarity-v1-${{ steps.similarity.outputs.policy }}-${{ steps.similarity.outputs.base_tree }}
       - run: prek run --all-files
+      # prek runs zizmor offline; the audits that ask GitHub about a pin need a
+      # token, so they run here whenever the workflows themselves change.
+      - if: needs.changes.outputs.actions == 'true'
+        run: zizmor --min-severity low .github/
+        env:
+          GH_TOKEN: ${{ github.token }}
       # The suites belong to platform-tests, on every platform rather than this one.
       - if: needs.changes.outputs.code == 'true'
         run: prek run --all-files --hook-stage pre-push
