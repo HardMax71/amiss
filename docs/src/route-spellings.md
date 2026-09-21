@@ -399,18 +399,21 @@ write them again. `contentDir` names the directory, read against the directory t
 configuration sits in, and the path of `baseURL` is what every route opens with. Where the
 file names no directory, Hugo reads `content` and so does this.
 
-Only the project's own bindings are read. A line indented under a table, and everything after
-the first table header, belongs to that table rather than to the project, so a `contentDir`
-under `[languages.fr]` names no root here. A multilingual site answers the routes into the
-directory its project names and leaves the rest the site routes they were.
+A language table names a root of its own. `[languages.fr]` puts its pages under the
+`contentDir` it binds and serves them under `fr`, below whatever the site is rooted at,
+unless it is the language the file names as its default and that default is not itself in a
+subdirectory. So a route without a code is the default language's, and one with a code is
+that language's.
 
 A root belongs to its project rather than to the pages beneath it, since one page of a site
 routes to another wherever either sits. That is what lets a Japanese page on the Kubernetes
 website reach the English page its route names. Read whole on 2026-09-21 under the observe
-profile, its site routes fall from 28,075 to 13,626 and resolved references rise from 5,073
-to 18,584, with no missing path arriving. Nineteen claims arrive, every one an anchor on a
-page that only resolves now, and fifteen name a heading the page does not carry. The other
-four are headings written as a shortcode, which this reads no better than before.
+profile, its site routes fall from 28,075 to 4,272 and resolved references rise from 5,073
+to 27,063, with no missing path arriving. Sixty claims arrive, every one an anchor on a page
+that only resolves now. Most name a heading the page does not carry, and the rest divide
+between headings written as a shortcode and translated pages whose prose kept the English
+anchor while the heading above it was translated, which are breaks a translation workflow
+tolerates.
 
 ## What a repository declares about its own build
 

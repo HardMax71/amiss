@@ -424,9 +424,10 @@ const DECLARED_SITE_BASE: [(&str, Staged<'static>); 5] = [
 /// it is served: `contentDir` puts them under `site/content/en` and `baseURL`
 /// serves the site at `/handbook`. A page links one route that lands, one the
 /// tree holds nothing for, one outside the base, and one whose fragment the
-/// page it reaches does not publish. The indented `contentDir` belongs to a
-/// table rather than to the project, so the reading never takes it.
-const CONFIGURED_SITE: [(&str, Staged<'static>); 4] = [
+/// page it reaches does not publish. The language table names a second root,
+/// served under its own code, and the French page links both its own tree
+/// and the default one.
+const CONFIGURED_SITE: [(&str, Staged<'static>); 5] = [
     (
         "site/hugo.toml",
         Staged::File(
@@ -444,8 +445,9 @@ const CONFIGURED_SITE: [(&str, Staged<'static>); 4] = [
     ("site/content/en/guide.md", Staged::File(b"# Guide\n")),
     (
         "site/content/fr/page.md",
-        Staged::File(b"# Page\n\n[guide](/handbook/guide/)\n"),
+        Staged::File(b"# Page\n\n[guide](/handbook/guide/)\n[guide-fr](/handbook/fr/guide/)\n"),
     ),
+    ("site/content/fr/guide.md", Staged::File(b"# Guide\n")),
 ];
 
 /// Two mdBooks on one site: the outer book at the repository root and an
