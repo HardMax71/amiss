@@ -420,6 +420,34 @@ const DECLARED_SITE_BASE: [(&str, Staged<'static>); 5] = [
     ),
 ];
 
+/// A Hugo site whose own configuration names where its pages sit and where
+/// it is served: `contentDir` puts them under `site/content/en` and `baseURL`
+/// serves the site at `/handbook`. A page links one route that lands, one the
+/// tree holds nothing for, one outside the base, and one whose fragment the
+/// page it reaches does not publish. The indented `contentDir` belongs to a
+/// table rather than to the project, so the reading never takes it.
+const CONFIGURED_SITE: [(&str, Staged<'static>); 4] = [
+    (
+        "site/hugo.toml",
+        Staged::File(
+            b"baseURL = \"https://example.test/handbook/\"\ncontentDir = \"content/en\"\n\
+              [languages.fr]\n  contentDir = \"content/fr\"\n",
+        ),
+    ),
+    (
+        "site/content/en/page.md",
+        Staged::File(
+            b"# Page\n\n[guide](/handbook/guide/)\n[gone](/handbook/nothing/)\n\
+              [other](/blog/post/)\n[anchor](/handbook/guide/#missing)\n",
+        ),
+    ),
+    ("site/content/en/guide.md", Staged::File(b"# Guide\n")),
+    (
+        "site/content/fr/page.md",
+        Staged::File(b"# Page\n\n[guide](/handbook/guide/)\n"),
+    ),
+];
+
 /// Two mdBooks on one site: the outer book at the repository root and an
 /// archived one under `second/`, whose page climbs out of its own root the
 /// way the URL it is served at does. One climb reaches the outer book's
@@ -638,6 +666,13 @@ pub fn declared_router() -> std::io::Result<CommitChain> {
 /// Any filesystem failure.
 pub fn declared_site_base() -> std::io::Result<CommitChain> {
     staged_repository(&DECLARED_SITE_BASE)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn configured_site() -> std::io::Result<CommitChain> {
+    staged_repository(&CONFIGURED_SITE)
 }
 
 /// # Errors

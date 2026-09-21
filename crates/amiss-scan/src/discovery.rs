@@ -134,7 +134,7 @@ fn descriptors(
     Ok(declared)
 }
 
-/// Whether a path is one of the three files read for what it declares. A
+/// Whether a path is one of the four files read for what it declares. A
 /// Sphinx configuration under a tree the scan excludes belongs to a fixture
 /// rather than to a site the repository publishes, the same reading that keeps
 /// Sphinx's own 176 test roots from declaring anything.
@@ -143,11 +143,18 @@ fn declaring(path: &RepoPath) -> bool {
         .as_bytes()
         .strip_suffix(crate::route::ROUTER_DECLARATION.as_bytes())
         .is_some_and(|above| above.is_empty() || above.ends_with(b"/"));
-    router || crate::route::declares(&crate::route::ANTORA, path) || configures(path)
+    router
+        || crate::route::declares(&crate::route::ANTORA, path)
+        || configures(path)
+        || publishes(path)
 }
 
 fn configures(path: &RepoPath) -> bool {
     crate::route::declares(&crate::route::SPHINX, path) && !excluded_by_built_in(path.as_bytes())
+}
+
+fn publishes(path: &RepoPath) -> bool {
+    crate::route::declares(&crate::route::HUGO, path) && !excluded_by_built_in(path.as_bytes())
 }
 
 /// What one descriptor's own bytes say, under the reading its name selects.
@@ -163,6 +170,13 @@ fn record_declaration(declared: &mut Declared, path: RepoPath, body: &[u8]) {
                 .source_suffixes
                 .insert(crate::route::directory(path.as_bytes()).to_vec(), suffixes);
         }
+    } else if publishes(&path) {
+        let project = crate::route::directory(path.as_bytes());
+        let (root, base) = crate::route::hugo_project(body);
+        let root = crate::route::join(project, root.as_bytes());
+        declared
+            .published_roots
+            .insert(project.to_vec(), vec![(root, base)]);
     } else if let Some(router) = crate::route::declared_router(body) {
         declared.routers.insert(path, router);
     }
@@ -176,6 +190,7 @@ struct Declared {
     antora_components: BTreeMap<RepoPath, (String, bool)>,
     source_suffixes: BTreeMap<Vec<u8>, BTreeSet<String>>,
     routers: BTreeMap<RepoPath, (String, Option<String>)>,
+    published_roots: BTreeMap<Vec<u8>, Vec<(Vec<u8>, String)>>,
 }
 
 /// Every document a page of a Sphinx tree renders in place of an include, and
@@ -252,6 +267,9 @@ pub struct SnapshotDiscovery {
     /// Each router declaration the tree holds, by its own path, against the
     /// router it names for the directory it sits in.
     pub declared_routers: BTreeMap<RepoPath, (String, Option<String>)>,
+    /// Each content root a generator's own configuration names, and the path
+    /// its site is served under.
+    pub published_roots: BTreeMap<Vec<u8>, Vec<(Vec<u8>, String)>>,
 }
 
 /// What the snapshot's documents say about one `.. _name:` label: the one
@@ -354,6 +372,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         antora_components: BTreeMap::new(),
         source_suffixes: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
+        published_roots: BTreeMap::new(),
     }
 }
 
@@ -671,6 +690,7 @@ pub(crate) fn discover_walk(
         discovery.antora_components = declared.antora_components;
         discovery.source_suffixes = declared.source_suffixes;
         discovery.declared_routers = declared.routers;
+        discovery.published_roots = declared.published_roots;
         let context = DocumentContext {
             repo,
             includes,
@@ -737,6 +757,7 @@ pub fn discover_index(
     discovery.antora_components = declared.antora_components;
     discovery.source_suffixes = declared.source_suffixes;
     discovery.declared_routers = declared.routers;
+    discovery.published_roots = declared.published_roots;
     declared_documents(&context, git, scan, &mut discovery)?;
     (discovery.published_routes, discovery.redirect_routes) =
         crate::route::published_routes(&discovery);
