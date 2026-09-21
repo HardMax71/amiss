@@ -405,6 +405,12 @@ unless it is the language the file names as its default and that default is not 
 subdirectory. So a route without a code is the default language's, and one with a code is
 that language's.
 
+A configuration that mounts its content rather than naming a directory says the same thing
+another way, and the mount targeting the content directory is read where no key names one.
+Several such mounts are a site composed of parts this does not take apart, so none of them
+names a root then. Hugo's own documentation is the case: one mount reads its pages from
+`content/en`, and reading it takes that repository from 1,421 declined routes to 553.
+
 A root belongs to its project rather than to the pages beneath it, since one page of a site
 routes to another wherever either sits. That is what lets a Japanese page on the Kubernetes
 website reach the English page its route names. Read whole on 2026-09-21 under the observe

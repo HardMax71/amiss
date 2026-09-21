@@ -420,6 +420,25 @@ const DECLARED_SITE_BASE: [(&str, Staged<'static>); 5] = [
     ),
 ];
 
+/// A Hugo site that names its content with a module mount rather than a
+/// directory key: the one mount targeting the content directory reads from
+/// `site/pages`, and the mount beside it targets something else, so only the
+/// first names a root.
+const MOUNTED_SITE: [(&str, Staged<'static>); 3] = [
+    (
+        "site/hugo.toml",
+        Staged::File(
+            b"baseURL = \"https://example.test/\"\n[[module.mounts]]\n  source = \"assets\"\n\
+              target = \"assets\"\n[[module.mounts]]\n  source = \"pages\"\n  target = \"content\"\n",
+        ),
+    ),
+    (
+        "site/pages/page.md",
+        Staged::File(b"# Page\n\n[guide](/guide/)\n[gone](/nothing/)\n"),
+    ),
+    ("site/pages/guide.md", Staged::File(b"# Guide\n")),
+];
+
 /// A Hugo site whose own configuration names where its pages sit and where
 /// it is served: `contentDir` puts them under `site/content/en` and `baseURL`
 /// serves the site at `/handbook`. A page links one route that lands, one the
@@ -675,6 +694,13 @@ pub fn declared_site_base() -> std::io::Result<CommitChain> {
 /// Any filesystem failure.
 pub fn configured_site() -> std::io::Result<CommitChain> {
     staged_repository(&CONFIGURED_SITE)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn mounted_site() -> std::io::Result<CommitChain> {
+    staged_repository(&MOUNTED_SITE)
 }
 
 /// # Errors

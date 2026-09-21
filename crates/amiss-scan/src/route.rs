@@ -227,6 +227,9 @@ const BASE_URL: &[u8] = b"baseURL";
 const DEFAULT_LANGUAGE: &[u8] = b"defaultContentLanguage";
 const LANGUAGE_IN_SUBDIR: &[u8] = b"defaultContentLanguageInSubdir";
 const LANGUAGE_TABLE: &str = "languages.";
+const MOUNT_TABLE: &str = "[[module.mounts]]";
+const MOUNT_SOURCE: &[u8] = b"source";
+const MOUNT_TARGET: &[u8] = b"target";
 const DEFAULT_CONTENT_DIR: &str = "content";
 const RESTRUCTUREDTEXT: &str = "restructuredtext";
 pub const DEFAULT_SOURCE_SUFFIX: &str = ".rst";
@@ -716,7 +719,10 @@ pub(crate) fn hugo_project(source: &[u8]) -> BTreeMap<String, String> {
     let project = project_lines(source);
     let bound = |key| project.iter().find_map(|line| configured(line, key));
     let base = bound(BASE_URL).map(served_under).unwrap_or_default();
-    let root = bound(CONTENT_DIR).map_or_else(|| DEFAULT_CONTENT_DIR.to_owned(), str::to_owned);
+    let root = bound(CONTENT_DIR)
+        .map(str::to_owned)
+        .or_else(|| mounted_root(source))
+        .unwrap_or_else(|| DEFAULT_CONTENT_DIR.to_owned());
     let mut roots = BTreeMap::from([(root, base.clone())]);
     for (code, directory) in language_roots(source) {
         let subdir = code != bound(DEFAULT_LANGUAGE).unwrap_or_default()
@@ -739,6 +745,37 @@ fn under(base: &str, code: &str) -> String {
     } else {
         format!("{base}/{code}")
     }
+}
+
+/// The directory a module mount reads the content of a site from, where the
+/// configuration names exactly one. A mount binds a source to a target, and
+/// the one targeting the content directory is where the pages are. Several
+/// such mounts are a site composed of parts this does not take apart, so
+/// none of them names a root.
+fn mounted_root(source: &[u8]) -> Option<String> {
+    let mut mounts: Vec<(Option<String>, bool)> = Vec::new();
+    let mut inside = false;
+    for line in amiss_md::lines::scan(source) {
+        let content = line.content(source).trim_ascii_start();
+        if content.starts_with(b"[") {
+            inside = content.starts_with(MOUNT_TABLE.as_bytes());
+            if inside {
+                mounts.push((None, false));
+            }
+        } else if let Some(mount) = inside.then(|| mounts.last_mut()).flatten() {
+            if let Some(value) = configured(content, MOUNT_SOURCE) {
+                mount.0 = Some(value.to_owned());
+            } else if configured(content, MOUNT_TARGET) == Some(DEFAULT_CONTENT_DIR) {
+                mount.1 = true;
+            }
+        }
+    }
+    let mut roots: Vec<String> = mounts
+        .into_iter()
+        .filter(|(_, content)| *content)
+        .filter_map(|(source, _)| source)
+        .collect();
+    (roots.len() == 1).then(|| roots.remove(0))
 }
 
 /// The content root every language table names, paired with the code that
