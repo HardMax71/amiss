@@ -1050,9 +1050,11 @@ fn a_declared_base_reads_a_site_route_as_a_path_under_the_directory() {
 /// served needs no declaration to say it again. `contentDir` and `baseURL`
 /// read `/handbook/guide/` as `site/content/en/guide.md`, from a page of any
 /// language of the site rather than only from one beneath that root, since a
-/// root belongs to its project. A route the tree answers with nothing keeps
-/// the boundary it had, and so does one outside the base. The indented
-/// `contentDir` belongs to a table, so `content/fr` is never a root here.
+/// root belongs to its project. A language table names a root of its own,
+/// served under its code, so `/handbook/fr/guide/` is the French page and the
+/// route without that code stays the default language's. A route the tree
+/// answers with nothing keeps the boundary it had, and so does one outside
+/// the base.
 #[test]
 fn a_configuration_that_names_its_own_content_root_reads_a_site_route() {
     let chain = amiss_fixtures::configured_site().expect("the fixture stages");
@@ -1078,6 +1080,12 @@ fn a_configuration_that_names_its_own_content_root_reads_a_site_route() {
             Some("site/content/en/guide"),
             ResolutionTag::Resolved,
             Some(guide),
+        ),
+        row(
+            "site/content/fr/page.md",
+            Some("site/content/fr/guide"),
+            ResolutionTag::Resolved,
+            Some("site/content/fr/guide.md"),
         ),
     ];
     assert_eq!(outcomes(&chain), expected(want));

@@ -172,11 +172,11 @@ fn record_declaration(declared: &mut Declared, path: RepoPath, body: &[u8]) {
         }
     } else if publishes(&path) {
         let project = crate::route::directory(path.as_bytes());
-        let (root, base) = crate::route::hugo_project(body);
-        let root = crate::route::join(project, root.as_bytes());
-        declared
-            .published_roots
-            .insert(project.to_vec(), vec![(root, base)]);
+        let roots = crate::route::hugo_project(body)
+            .into_iter()
+            .map(|(root, base)| (crate::route::join(project, root.as_bytes()), base))
+            .collect();
+        declared.published_roots.insert(project.to_vec(), roots);
     } else if let Some(router) = crate::route::declared_router(body) {
         declared.routers.insert(path, router);
     }

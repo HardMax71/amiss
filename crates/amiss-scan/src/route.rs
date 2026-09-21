@@ -224,6 +224,9 @@ const SOURCE_SUFFIX: &[u8] = b"source_suffix";
 /// sits and where its site is served, and the root Hugo reads without them.
 const CONTENT_DIR: &[u8] = b"contentDir";
 const BASE_URL: &[u8] = b"baseURL";
+const DEFAULT_LANGUAGE: &[u8] = b"defaultContentLanguage";
+const LANGUAGE_IN_SUBDIR: &[u8] = b"defaultContentLanguageInSubdir";
+const LANGUAGE_TABLE: &str = "languages.";
 const DEFAULT_CONTENT_DIR: &str = "content";
 const RESTRUCTUREDTEXT: &str = "restructuredtext";
 pub const DEFAULT_SOURCE_SUFFIX: &str = ".rst";
@@ -704,22 +707,70 @@ fn site_base(value: &str) -> Option<&str> {
         .map(|path| path.trim_end_matches('/'))
 }
 
-/// The content root one Hugo configuration names and the path its site is
-/// served under. A key opens the line at the top level of the file, so an
-/// indented line and everything after the first table header belong to a
-/// table rather than to the project. Where the file names no root, Hugo
-/// reads `content`.
+/// Every content root one Hugo configuration names and the path each is
+/// served under: the project's own, where a key opens a line of the file
+/// itself, and one for every language table. Where the file names no root,
+/// Hugo reads `content`.
 #[must_use]
-pub(crate) fn hugo_project(source: &[u8]) -> (String, String) {
+pub(crate) fn hugo_project(source: &[u8]) -> BTreeMap<String, String> {
     let project = project_lines(source);
-    let root = project
-        .iter()
-        .find_map(|line| configured(line, CONTENT_DIR));
-    let base = project.iter().find_map(|line| configured(line, BASE_URL));
-    (
-        root.map_or_else(|| DEFAULT_CONTENT_DIR.to_owned(), str::to_owned),
-        base.map(served_under).unwrap_or_default(),
-    )
+    let bound = |key| project.iter().find_map(|line| configured(line, key));
+    let base = bound(BASE_URL).map(served_under).unwrap_or_default();
+    let root = bound(CONTENT_DIR).map_or_else(|| DEFAULT_CONTENT_DIR.to_owned(), str::to_owned);
+    let mut roots = BTreeMap::from([(root, base.clone())]);
+    for (code, directory) in language_roots(source) {
+        let subdir = code != bound(DEFAULT_LANGUAGE).unwrap_or_default()
+            || bound(LANGUAGE_IN_SUBDIR) == Some("true");
+        let served = if subdir {
+            under(&base, &code)
+        } else {
+            base.clone()
+        };
+        roots.insert(directory, served);
+    }
+    roots
+}
+
+/// Where one language of a site is served: under the site's own base, and
+/// under its code below that.
+fn under(base: &str, code: &str) -> String {
+    if base.is_empty() {
+        code.to_owned()
+    } else {
+        format!("{base}/{code}")
+    }
+}
+
+/// The content root every language table names, paired with the code that
+/// table is keyed by. A table header ends the table above it, so a key
+/// reaches only the language whose header opened it.
+fn language_roots(source: &[u8]) -> Vec<(String, String)> {
+    let mut found = Vec::new();
+    let mut current: Option<String> = None;
+    for line in amiss_md::lines::scan(source) {
+        let content = line.content(source).trim_ascii_start();
+        if content.starts_with(b"[") {
+            current = language_table(content);
+        } else if let (Some(code), Some(directory)) =
+            (current.as_ref(), configured(content, CONTENT_DIR))
+        {
+            found.push((code.clone(), directory.to_owned()));
+        }
+    }
+    found
+}
+
+/// The language one table header keys, where the header opens a table of the
+/// configuration's own language map and names exactly one language.
+fn language_table(header: &[u8]) -> Option<String> {
+    let inner = header
+        .strip_prefix(b"[")?
+        .split(|byte| *byte == b']')
+        .next()?;
+    let code = std::str::from_utf8(inner)
+        .ok()?
+        .strip_prefix(LANGUAGE_TABLE)?;
+    (!code.is_empty() && !code.contains('.')).then(|| code.to_owned())
 }
 
 /// The lines a configuration file binds at its own top level, where an
