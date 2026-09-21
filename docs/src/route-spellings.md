@@ -402,10 +402,10 @@ configuration is in a Docker image and a sibling repository, and Babel's site is
 `babel/website`.
 
 So the repository says it, since nothing in such a tree can. `.amiss/router.yml` names one
-router on a line of its own, `router: hugo-pages`, and the directory holding that file is the
-root the rule anchors at, where the configuration file would have been. The nearest declaration
-above the document answers and nothing else in the file is read, the way a component descriptor
-is read for its `name`.
+router on a line of its own, `router: directory-pages`, and the directory holding that file
+is the root the rule anchors at, where the configuration file would have been. The nearest
+declaration above the document answers and nothing else in the file is read, the way a
+component descriptor is read for its `name`.
 
 <!-- amiss-doc-contract:declarable-routers:start -->
 | Declared router | Turns on |
@@ -414,7 +414,7 @@ is read for its `name`.
 | `mkdocs` | `directory-url` |
 | `sphinx` | `source-root` |
 | `zola` | `content-root` |
-| `hugo-pages` | `page-url` |
+| `directory-pages` | `page-url` |
 <!-- amiss-doc-contract:declarable-routers:end -->
 
 A declaration turns on the spellings that resolve a destination and no others. `built-route`
@@ -426,36 +426,45 @@ cannot clear a destination the tree lacks, so declaring `hugo` or `jekyll` or `a
 no spelling at all. There is still no ignore file and no way to silence a finding. The `base`
 key below is the other half of the file and is read whichever router the line above it names.
 
-`page-url` is the row a declaration exists for. Hugo publishes a page at a directory of its own
-name and rewrites no destination, so a relative destination resolves against the page URL,
-one level deeper than the source file's directory, and a Markdown link is read that way as well
-as an `<a href>`. A page bundle is published at the directory holding it, so `_index.md` and
-`index.md` are the sources a destination naming that directory reaches. The reading from the
-document's own directory comes first, so a destination that already reached a file beside the
-source still reaches that file and still fixes the intent a finding names. The page URL is a
-candidate added, never one replacing another.
+`page-url` is the row a declaration exists for. A site of that shape publishes a page at a
+directory of its own name and rewrites no destination, so a relative destination resolves
+against the page URL, one level deeper than the source file's directory, and a Markdown link is
+read that way as well as an `<a href>`. A page bundle is published at the directory holding it,
+so `_index.md` and `index.md` are the sources a destination naming that directory reaches. The
+reading from the document's own directory comes first, so a destination that already reached a
+file beside the source still reaches that file and still fixes the intent a finding names. The
+page URL is a candidate added, never one replacing another.
+
+The row is named for the shape because no one generator owns it. Hugo builds it by default,
+Jekyll's `permalink: pretty` and its `/:collection/:path/` template produce it, and Eleventy
+and Astro build it unless asked for a file. It was called `hugo-pages` in the release before
+this one, so a Jekyll repository had to declare Hugo to describe its own site. A name for each
+generator would be one reading under four spellings, every one a row to keep and a row to test.
+mkdocs publishes this shape too and keeps its own row, since it rewrites a Markdown link back
+to the source path and leaves raw HTML alone, so only raw HTML is read against the page URL
+there.
 
 This is the one row a configuration file does not select, and Hugo's own documentation is why.
 `hugo.toml` says Hugo builds the tree and nothing about the URLs it serves: `uglyURLs` moves
 every page, a permalink template moves it again, and a `render-link.html` render hook rewrites
 the destination before any of that, which is what hugoDocs does to its own `[glob pattern](g)`.
-None of that is in the tree, so a tree carrying `hugo.toml` keeps the `built-route` boundary it
-had. The declaration is the repository's own word that its pages are published at a directory
-of their own name with nothing rewritten, which is Hugo's default and a claim only a person can
-make.
+Jekyll's `_config.yml` carries the same question in its `permalink` line, and neither answer is
+in the tree, so a tree carrying either file keeps the `built-route` boundary it had. The
+declaration is the repository's own word that its pages are published at a directory of their
+own name with nothing rewritten, which is a claim only a person can make.
 
 Grafana is the case it was built against. `docs/sources/setup-grafana/set-up-grafana-live.md`
 writes `[ha_engine_address](../configure-grafana/#ha_engine_address)`, and the page it reaches
 is `docs/sources/setup-grafana/configure-grafana/_index.md`, one directory deeper than the
 source-relative reading, which is why 544 missing targets were reported for a tree whose
-maintainers had not broken 544 links. With `router: hugo-pages` under `docs/sources` that count
-is 278. The 266 claims that went are one shape. A separate reading of the page URL was run over
-the references that resolve where they stood: 270 of 271 match it, and the one left over reached
-a file beside its own source once the trailing slash stopped naming a tree. Nothing moved into
-the undecided class, which stayed at 1,153 rows, and every one of the 52 anchor claims still
-reports. Another thirty-one joined them, since a path that resolves has its fragment read:
-`../../datasources/tempo/#span-filters` reaches the Tempo page, which publishes no such heading
-now that span filters are a page of their own.
+maintainers had not broken 544 links. With `router: directory-pages` under `docs/sources` that
+count is 278. The 266 claims that went are one shape. A separate reading of the page URL was
+run over the references that resolve where they stood: 270 of 271 match it, and the one left
+over reached a file beside its own source once the trailing slash stopped naming a tree.
+Nothing moved into the undecided class, which stayed at 1,153 rows, and every one of the 52
+anchor claims still reports. Another thirty-one joined them, since a path that resolves has
+its fragment read: `../../datasources/tempo/#span-filters` reaches the Tempo page, which
+publishes no such heading now that span filters are a page of their own.
 
 A page that moved leaves the URL it was served at behind, and that block is read under the same
 declaration. Hugo lists those URLs under `aliases` in front matter, serves a redirect at each
@@ -536,14 +545,72 @@ holds `guides`, and a fragment on a directory stays undecided the way it already
 else about the reading is new: the destination is a path under the declared directory, read by
 the spellings every other path is read by.
 
+Four repositories show what the file does, each read whole on 2026-09-20 under the observe
+profile, once as it stands and once with the file below staged.
+
+Astro's documentation keeps its pages under `src/content/docs` and serves that directory at
+the root of its site, so all 10,323 of its slash-rooted destinations are routes nothing in the
+tree answers. The file goes at `src/content/docs/.amiss/router.yml`:
+
+```yaml
+router: astro
+base: /
+```
+
+The router line turns on no spelling there, since `built-route` withholds an answer rather than
+serving a file, and the base is read whichever router the line above it names. Site routes fall
+from 10,323 to 1,647 and resolved references rise from 3,470 to 12,133. Three claims arrive,
+each an anchor on a page that only resolves now, and no missing path arrives at all.
+
+Kubernetes serves its website out of `content/en`, so its page URLs drop that prefix the way
+Astro's drop theirs. Both lines go at `content/en/.amiss/router.yml`, this time with
+`router: directory-pages`, and resolved references rise from 5,073 to 11,050 without one
+missing path arriving. Its 89 claims are all anchors and every one of them stays; six more
+join them, two on reference pages a generator writes from OpenAPI. The router line on its
+own, with no base, resolves 153 references and moves no claim at all.
+
+Jekyll's own repository is why the row is not named after Hugo. `docs/_config.yml` sets
+`permalink: "/:collection/:path/"`, which publishes every page at a directory of its own name,
+and one line at `docs/.amiss/router.yml` says so:
+
+```yaml
+router: directory-pages
+```
+
+That resolves 19 references, 76 becoming 95, and moves no claim: the four that are missing sit
+in `.github/`, outside the tree the file covers, and stay missing. It is the smallest useful
+declaration on this page and the whole of what a Jekyll repository writes.
+
+Grafana is the tree above, read again here on a newer clone than those paragraphs were written
+against. Both keys go at `docs/sources/.amiss/router.yml`:
+
+```yaml
+router: directory-pages
+base: /docs/grafana/latest/
+```
+
+Its claims fall from 546 to 153, and the 494 missing paths become 45. The 52 anchor claims
+become 108, since a path that resolves has its fragment read. Without the base line the count
+is 151 instead of 153, so the second key is worth two claims and 52 references on this tree,
+where on Astro's it is worth all 8,663.
+
 Nothing in the output suggests writing one, and nothing honestly could. A tree says whether a
 generator is configured inside it; it never says whether its documents are published at all. So
 one structural fact covers both a repository built elsewhere and a repository with no site,
 whose missing targets are simply broken. A note keyed to that fact would have reached the
 Kubernetes community repository's 254 missing targets, bat's 21 and vuejs-docs' one, none of
-which a declaration should touch. Declaring a router those trees do not use would not move them
-either: `router: hugo-pages` at the root of bat, helix, fastapi and the Kubernetes community
-repository left every one of their missing targets missing.
+which a declaration should touch.
+
+That repository is also the one to read before writing a base, because its slash-rooted
+destinations do not name one site. `communication/slack-moderation.md` writes
+`/docs/comms/slack/#reporting-a-problem` and means k8s.dev, other pages mean kubernetes.io, and
+`/sig-list.md` and `/CLA.md` mean the repository root, which no site serves them from.
+A `base: /` at its own root reads all of them against the tree, and 737 references resolve
+where 828 routes were declined. Its 106 missing paths do not move, since a base can no more
+invent a target than any other spelling can, but 50 of the newly resolved paths carry a
+fragment the page they now reach does not publish, so 254 claims become 304. The key is one
+claim about where one directory is served, and a tree whose links point at three sites has
+none to make.
 
 ## What this costs
 

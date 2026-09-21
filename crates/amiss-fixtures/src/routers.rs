@@ -362,7 +362,7 @@ const HUGO_SITE: [(&str, Staged<'static>); 4] = [
 const DECLARED_ROUTER: [(&str, Staged<'static>); 8] = [
     (
         "site/.amiss/router.yml",
-        Staged::File(b"router: hugo-pages\n"),
+        Staged::File(b"router: directory-pages\n"),
     ),
     (
         "site/setup/live.md",
@@ -468,8 +468,8 @@ const ZOLA_SITE: [(&str, Staged<'static>); 6] = [
     ),
 ];
 
-/// A declared `hugo-pages` tree where pages moved and left the URLs they were
-/// served at in their own frontmatter. `site/guide` claims the URL one reader
+/// A declared `directory-pages` tree where pages moved and left the URLs they
+/// were served at in their own frontmatter. `site/guide` claims the URL one reader
 /// writes and a second URL `site/other` claims as well, so that one is left
 /// out. The bundle reader's own URL is the directory holding it, so its climb
 /// is a URL and the block answers it; the leaf reader beside it writes the
@@ -480,7 +480,7 @@ const ZOLA_SITE: [(&str, Staged<'static>); 6] = [
 const PAGE_REDIRECTS: [(&str, Staged<'static>); 8] = [
     (
         "site/.amiss/router.yml",
-        Staged::File(b"router: hugo-pages\n"),
+        Staged::File(b"router: directory-pages\n"),
     ),
     (
         "site/guide/index.md",
@@ -518,11 +518,42 @@ const PAGE_REDIRECTS: [(&str, Staged<'static>); 8] = [
     ),
 ];
 
+/// Two trees writing the same destination under two declarations: the name
+/// the page-URL reading is served under, and the generator name that served it
+/// before and now names no rule at all.
+const DECLARED_PAGE_ROUTER: [(&str, Staged<'static>); 6] = [
+    (
+        "named/.amiss/router.yml",
+        Staged::File(b"router: directory-pages\n"),
+    ),
+    (
+        "named/setup/live.md",
+        Staged::File(b"# Live\n\n[guide](../guide/)\n"),
+    ),
+    ("named/setup/guide/index.md", Staged::File(b"# Guide\n")),
+    (
+        "retired/.amiss/router.yml",
+        Staged::File(b"router: hugo-pages\n"),
+    ),
+    (
+        "retired/setup/live.md",
+        Staged::File(b"# Live\n\n[guide](../guide/)\n"),
+    ),
+    ("retired/setup/guide/index.md", Staged::File(b"# Guide\n")),
+];
+
 /// # Errors
 ///
 /// Any filesystem failure.
 pub fn antora_component() -> std::io::Result<CommitChain> {
     staged_repository(&ANTORA_COMPONENT)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn declared_page_router() -> std::io::Result<CommitChain> {
+    staged_repository(&DECLARED_PAGE_ROUTER)
 }
 
 /// # Errors

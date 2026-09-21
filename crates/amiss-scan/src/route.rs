@@ -132,11 +132,14 @@ const JEKYLL: RouteRule = RouteRule {
     serves: &[Spelling::BuiltRoute],
 };
 
-/// Hugo's default publication, which no file in the tree shows. A tree
-/// carrying `hugo.toml` says Hugo builds it and nothing about the URLs that
-/// build serves, so this rule is selected by the declaration alone.
-pub(crate) const HUGO_PAGES: RouteRule = RouteRule {
-    name: "hugo-pages",
+/// A site publishing every page at a directory of its own name and rewriting
+/// no destination, which no file in the tree shows. Hugo builds it by default,
+/// Jekyll's pretty permalink produces it, and Eleventy and Astro build it
+/// unless asked for a file, while `hugo.toml` says which generator builds a
+/// tree and nothing about the URLs it serves. So this rule is selected by the
+/// declaration alone, under a name no one generator owns.
+pub(crate) const DIRECTORY_PAGES: RouteRule = RouteRule {
+    name: "directory-pages",
     declared_by: &[],
     serves: &[Spelling::PageUrl],
 };
@@ -173,7 +176,7 @@ pub const ROUTERS: [RouteRule; 14] = [
     ASTRO,
     ELEVENTY,
     HUGO,
-    HUGO_PAGES,
+    DIRECTORY_PAGES,
     JEKYLL,
 ];
 
@@ -936,7 +939,7 @@ pub(crate) fn published_routes(
     snapshot: &SnapshotDiscovery,
 ) -> (BTreeMap<RepoPath, RepoPath>, BTreeMap<RepoPath, RepoPath>) {
     let names = published_by(snapshot, &DOCUSAURUS);
-    let redirects = published_by(snapshot, &HUGO_PAGES);
+    let redirects = published_by(snapshot, &DIRECTORY_PAGES);
     let mut published: Vec<(RepoPath, RepoPath)> = Vec::new();
     let mut moved: Vec<(RepoPath, RepoPath)> = Vec::new();
     if !names && !redirects {
@@ -1021,7 +1024,7 @@ fn moved_from(
     document: &RepoPath,
     declared: &[String],
 ) -> Vec<RepoPath> {
-    if declared.is_empty() || site_root(snapshot, document.as_bytes(), &HUGO_PAGES).is_none() {
+    if declared.is_empty() || site_root(snapshot, document.as_bytes(), &DIRECTORY_PAGES).is_none() {
         return Vec::new();
     }
     let published = page_route(document.as_bytes(), true);
@@ -1264,10 +1267,10 @@ fn spelled(value: &str) -> Option<&str> {
 /// relative to the page's own URL and its trailing slash names that page
 /// rather than a tree. mkdocs rewrites a Markdown link and leaves raw HTML
 /// alone, so only raw HTML is read this way there, while a declared
-/// `hugo-pages` rewrites nothing and every destination is read this way. The
-/// document's own directory is tried first, so a destination that reached a
-/// file beside the source still reaches that file, and the page URL is the
-/// candidate added.
+/// `directory-pages` rewrites nothing and every destination is read this
+/// way. The document's own directory is tried first, so a destination that
+/// reached a file beside the source still reaches that file, and the page URL
+/// is the candidate added.
 fn published_anchors(
     snapshot: &SnapshotDiscovery,
     document: &RepoPath,
@@ -1281,7 +1284,7 @@ fn published_anchors(
     if path_part.is_empty() || path_part.starts_with('/') || scheme(path_part).is_some() {
         return out;
     }
-    if site_root(snapshot, raw, &HUGO_PAGES).is_some() {
+    if site_root(snapshot, raw, &DIRECTORY_PAGES).is_some() {
         let published = page_route(raw, true);
         out.push((beside.clone(), relative.clone()));
         out.extend(BUNDLE_INDEX.map(|index| (published.clone(), format!("{relative}/{index}"))));

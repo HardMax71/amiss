@@ -938,8 +938,8 @@ fn a_declaration_reaches_no_spelling_that_withholds_an_answer() {
 }
 
 /// A page that moved leaves the URL it was served at in its own frontmatter,
-/// and under a declared `hugo-pages` the destination a reader writes for that
-/// URL reaches the file holding the content now. The block reaches a file the
+/// and under a declared `directory-pages` the destination a reader writes for
+/// that URL reaches the file holding the content now. The block reaches a file the
 /// tree holds and nothing else: a URL two pages claim is decided between
 /// neither, a URL no page claims is missing where it always was, and a flow
 /// sequence is a shape this reader declines rather than guesses at. The
@@ -1029,9 +1029,33 @@ fn a_declared_base_reads_a_site_route_as_a_path_under_the_directory() {
     assert_eq!(outcomes(&chain), expected(want));
 }
 
+/// The page-URL reading answers to one name. `directory-pages` says the site
+/// publishes a page at a directory of its own name, whatever generator builds
+/// it, and the generator name that used to say it declares no rule, so the
+/// identical destination beside it stays the missing path the author wrote.
+#[test]
+fn the_page_url_reading_answers_to_the_behaviour_name_alone() {
+    let chain = amiss_fixtures::declared_page_router().expect("the fixture stages");
+    let want: Vec<Outcome> = vec![
+        row(
+            "named/setup/live.md",
+            Some("named/guide"),
+            ResolutionTag::Resolved,
+            Some("named/setup/guide/index.md"),
+        ),
+        row(
+            "retired/setup/live.md",
+            Some("retired/guide"),
+            ResolutionTag::Missing,
+            Some("retired/guide"),
+        ),
+    ];
+    assert_eq!(outcomes(&chain), expected(want));
+}
+
 /// A repository that declares its own router gets that router's resolving
 /// spellings where no configuration file names the generator. Under
-/// `hugo-pages` a page is published at a directory of its own name, so a
+/// `directory-pages` a page is published at a directory of its own name, so a
 /// relative destination is read from that URL as well as from the source
 /// directory: the climb out of `setup/live/` reaches the branch bundle and
 /// the leaf bundle, while the destination beside the source still answers and
