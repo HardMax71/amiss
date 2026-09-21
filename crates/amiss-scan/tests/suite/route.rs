@@ -1091,6 +1091,26 @@ fn a_configuration_that_names_its_own_content_root_reads_a_site_route() {
     assert_eq!(outcomes(&chain), expected(want));
 }
 
+/// A configuration that mounts its content rather than naming a directory
+/// still says where the pages are. The one mount targeting the content
+/// directory names the root, the mount beside it names nothing, and a route
+/// the tree answers with nothing keeps the boundary it had.
+#[test]
+fn a_module_mount_names_the_content_root_a_directory_key_would_have() {
+    let chain = amiss_fixtures::mounted_site().expect("the fixture stages");
+    let page = "site/pages/page.md";
+    let want: Vec<Outcome> = vec![
+        row(
+            page,
+            Some("site/pages/guide"),
+            ResolutionTag::Resolved,
+            Some("site/pages/guide.md"),
+        ),
+        row(page, None, ResolutionTag::UnsupportedSemantics, None),
+    ];
+    assert_eq!(outcomes(&chain), expected(want));
+}
+
 /// The page-URL reading answers to one name. `directory-pages` says the site
 /// publishes a page at a directory of its own name, whatever generator builds
 /// it, and the generator name that used to say it declares no rule, so the
