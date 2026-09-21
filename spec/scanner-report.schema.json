@@ -219,7 +219,7 @@
       ]
     },
     "UnsupportedReason": {
-      "description": "Why a discovered document was not scanned. Descriptive, so the set grows inside the major: this engine writes symlink-document, gitlink-document, lfs-pointer, unsupported-document-format, undecodable-document or resource-ceiling-crossed, and a consumer that meets another spelling keeps it and still reads the unsupported status beside it.",
+      "description": "Why a discovered document was not scanned. Descriptive, so the set grows inside the major: this engine writes symlink-document, gitlink-document, lfs-pointer, unsupported-document-format, undecodable-document, unparsable-document or resource-ceiling-crossed, and a consumer that meets another spelling keeps it and still reads the unsupported status beside it.",
       "type": "string",
       "minLength": 1
     },

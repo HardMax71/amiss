@@ -111,10 +111,12 @@ drive extraction, source hashing, candidate-only grouping, and report constructi
 including one refusal vector per clause of the value grammar.
 
 A file the engine tried to read and could not is unsupported too, and the run keeps going.
-Bytes that do not decode as the suffix promises, a tab-indented JSX block the MDX grammar
-rejects, a 45 KB link destination past `raw-link-destination-bytes`: the document is counted,
-its row carries `undecodable-document` or `resource-ceiling-crossed`, and every other
-document in the repository is still reported. Two undecodable translations used to cost a
+Bytes that do not decode as the suffix promises, a tab-indented JSX block or an HTML comment
+the MDX grammar rejects, a 45 KB link destination past `raw-link-destination-bytes`: the
+document is counted, its row carries `undecodable-document` for bytes, `unparsable-document`
+for markup the grammar refuses, or `resource-ceiling-crossed`, and every other document in
+the repository is still reported. The two are apart because the fix is: one is an encoding,
+the other is the source, and `<!-- -->` in an MDX document is `{/* */}` written wrong. Two undecodable translations used to cost a
 2,619-document site its whole report at exit 2, and that is the failure this class replaced.
 Nothing is skipped quietly: the human output names each such file, the
 `unsupported-document-format` finding records that its references went unchecked, and a

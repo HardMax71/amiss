@@ -88,6 +88,7 @@ fn a_snapshot_discovers_every_class_in_path_order() {
                 DocumentStatus::Unsupported(UnsupportedKind::LfsPointer) => "lfs-pointer",
                 DocumentStatus::Unsupported(UnsupportedKind::Format) => "unsupported-format",
                 DocumentStatus::Unsupported(UnsupportedKind::Undecodable) => "undecodable",
+                DocumentStatus::Unsupported(UnsupportedKind::Unparsable) => "unparsable",
                 DocumentStatus::Unsupported(UnsupportedKind::Ceiling) => "ceiling",
                 DocumentStatus::Failed(_) => "failed",
             };

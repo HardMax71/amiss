@@ -15,8 +15,9 @@ use crate::tree::{self, Node};
 ///
 /// # Errors
 ///
-/// `DocumentInvalid` when the bytes are not UTF-8 under a parsing adapter or
-/// the grammar rejects the source, and `ParserPanic` when the parser panics.
+/// `DocumentInvalid` when the bytes are not UTF-8 under a parsing adapter,
+/// `DocumentUnparsable` when the grammar rejects the source, and
+/// `ParserPanic` when the parser panics.
 pub fn charge(adapter: Adapter, source: &[u8]) -> Result<Work, AnalyzeError> {
     match parsed(adapter, source, u64::MAX)? {
         None => Ok(plain(source)),
@@ -87,7 +88,7 @@ pub(crate) fn parsed(
                         spent: meter.spent(),
                     }
                 } else {
-                    AnalyzeError::Fault(Fault::DocumentInvalid)
+                    AnalyzeError::Fault(Fault::DocumentUnparsable)
                 }
             })?;
             (tree::from_mdast(&mdast)?, meter.spent())

@@ -171,12 +171,22 @@ fn spent_embedded_code_bytes_are_deterministic_and_sufficient() {
     assert_eq!(markdown.embedded_code_bytes, 0);
 }
 
-/// An unmatched tag is a grammar rejection attributable to the source, which
-/// the contract calls `DOCUMENT_INVALID` rather than a parser failure.
+/// An unmatched tag and an HTML comment are grammar rejections attributable
+/// to the source, which the contract calls `DOCUMENT_UNPARSABLE` rather than
+/// a parser failure. Bytes that will not decode keep `DOCUMENT_INVALID`, so
+/// the two say apart what a reader has to do about them.
 #[test]
-fn an_unmatched_tag_is_an_invalid_document() {
+fn an_unmatched_tag_is_an_unparsable_document() {
     assert_eq!(
         charge(Adapter::Mdx, b"a <b> c"),
+        Err(AnalyzeError::Fault(Fault::DocumentUnparsable))
+    );
+    assert_eq!(
+        charge(Adapter::Mdx, b"# A\n\n<!-- a comment -->\n"),
+        Err(AnalyzeError::Fault(Fault::DocumentUnparsable))
+    );
+    assert_eq!(
+        charge(Adapter::Mdx, b"# A\n\n\xff\xfe not text\n"),
         Err(AnalyzeError::Fault(Fault::DocumentInvalid))
     );
     assert_eq!(

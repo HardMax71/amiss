@@ -78,6 +78,7 @@ pub enum UnsupportedReason {
     ResourceCeilingCrossed,
     SymlinkDocument,
     UndecodableDocument,
+    UnparsableDocument,
     UnsupportedDocumentFormat,
     #[strum(default, transparent)]
     Unrecognized(String),

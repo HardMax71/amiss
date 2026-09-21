@@ -148,11 +148,11 @@ and each ends the run at exit 2. A name that is merely not UTF-8 is not on that 
 an ordinary document whose path the report writes as hex. The alternative in every one of
 these cases is a report that looks complete and is not.
 
-One file is not the run. A document whose bytes will not decode as its format requires, and
-a document that crosses one of the five per-document ceilings, say nothing about the rest of
-the tree, so neither ends the run. Such a document is unsupported: it is counted in the
-summary, named in the human output, and its report row carries `undecodable-document` or
-`resource-ceiling-crossed`. An `unsupported-document-format` finding records that its
+One file is not the run. A document whose bytes will not decode as its format requires, one
+whose markup its grammar rejects, and one that crosses one of the five per-document ceilings
+say nothing about the rest of the tree, so none of them ends the run. Such a document is
+unsupported: it is counted in the summary, named in the human output, and its report row
+carries `undecodable-document`, `unparsable-document` or `resource-ceiling-crossed`. An `unsupported-document-format` finding records that its
 references went unchecked. What the old refusal protected still holds. The file is never
 quietly skipped, its references are never counted as checked, and a repository policy that
 protects that path fails the run through `coverage-reduced`.
