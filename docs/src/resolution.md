@@ -268,7 +268,10 @@ A reStructuredText heading anchor resolves through the Docutils rule in
 [What twelve renderers call a heading](anchor-rules.md), and the labels a document declares
 outright with `.. _name:` resolve as themselves. The two Sphinx roles are modelled by
 name, which is why the grammar profile says `docutils-rst-sphinx-refs`. A relative
-`:doc:` target takes the default `.rst` suffix and resolves like any repository path. A
+`:doc:` target resolves beside its document, read under the suffix its root reads and again
+as the author wrote it, so a docname carrying a dot of its own reaches the file that name
+takes the suffix of. One already spelled with a suffix keeps it, since that spelling was the
+adapter's and the adapter runs before any root is known. A
 source-root-absolute one resolves under the directory holding `conf.py` when that file sits
 above the document in the tree, under the suffix that `conf.py` declares, and stays a declared
 site route when nothing names the Sphinx root. A `:ref:` resolves against the snapshot's label table, built after

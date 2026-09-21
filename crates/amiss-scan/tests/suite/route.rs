@@ -700,7 +700,11 @@ fn an_asciidoc_document_publishes_the_identities_a_cross_reference_names() {
 
 /// Under `conf.py`, a source-root-absolute `:doc:` target is the docname
 /// under that directory with the source suffix, from any depth, while a
-/// relative target keeps resolving beside its document. A document with no
+/// relative target resolves beside its document. A dot inside a relative
+/// docname is part of the name, so `arrays.scalars` reaches the file that
+/// name takes the suffix of, and the one the tree does not hold is reported
+/// under that same spelling. A target opening with another project's name is
+/// an intersphinx inventory rather than a path here. A document with no
 /// `conf.py` above it is answered by the one source directory the tree
 /// declares, which is the docname the author wrote it for.
 #[test]
@@ -713,6 +717,19 @@ fn a_sphinx_source_directory_anchors_absolute_doc_roles_at_its_conf() {
             ResolutionTag::Resolved,
             Some("docs/testing.rst"),
         ),
+        row(
+            "docs/index.rst",
+            Some("docs/arrays.scalars.rst"),
+            ResolutionTag::Resolved,
+            Some("docs/arrays.scalars.rst"),
+        ),
+        row(
+            "docs/index.rst",
+            Some("docs/arrays.absent.rst"),
+            ResolutionTag::Missing,
+            Some("docs/arrays.absent.rst"),
+        ),
+        row("docs/index.rst", None, ResolutionTag::External, None),
         row(
             "docs/index.rst",
             Some("docs/absent.rst"),
