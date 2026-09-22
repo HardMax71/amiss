@@ -285,12 +285,10 @@ fn keyed(side: &LocaleSide, documents: &[String], path: &str) -> Option<String> 
             .strip_suffix(locale.as_str())
             .and_then(|head| head.strip_suffix('.'))
             .map(|head| format!("{head}{document}")),
-        None => (!basename(stem).contains('.')).then(|| relative.to_owned()),
+        None => {
+            (!stem.rsplit('/').next().unwrap_or(stem).contains('.')).then(|| relative.to_owned())
+        }
     }
-}
-
-fn basename(path: &str) -> &str {
-    path.rsplit('/').next().unwrap_or(path)
 }
 
 fn validate(context: &LocaleTreeContext, plan: &LocaleCoveragePlan) -> Result<(), InventoryError> {

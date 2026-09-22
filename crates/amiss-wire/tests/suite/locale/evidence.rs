@@ -11,6 +11,7 @@ use std::{fs, path::Path};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::envelope::Payload as _;
+use amiss_wire::model::ArtifactId;
 
 use amiss_wire::locale::{
     EVIDENCE_PAYLOAD_SCHEMA, EvidencePayloadSchema, LocaleCoverageEvidence, LocaleCoveragePlan,
@@ -49,7 +50,7 @@ pub(super) fn fallback_page(
     class: &str,
     source_digit: char,
 ) -> LocaleTargetPage {
-    let class = super::identity(class);
+    let class = ArtifactId::try_from(class.to_owned()).unwrap();
     let source_resource_digest = digest(source_digit);
     LocaleTargetPage {
         key: key.to_owned(),

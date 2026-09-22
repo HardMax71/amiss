@@ -9,7 +9,7 @@ use crate::file_ledger::FileLedgerError;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "retention", rename_all = "kebab-case", deny_unknown_fields)]
-pub(in crate::file_ledger::format) enum StoredReplayKeep {
+pub(in crate::file_ledger) enum StoredReplayKeep {
     Permanent,
     KeepThrough { unix_millis: i64 },
 }
@@ -30,7 +30,7 @@ impl StoredReplayKeep {
         }
     }
 
-    pub(in crate::file_ledger::format) const fn expired_at(&self, now: i64) -> bool {
+    pub(in crate::file_ledger) const fn expired_at(&self, now: i64) -> bool {
         match self {
             Self::Permanent => false,
             Self::KeepThrough { unix_millis } => now > *unix_millis,

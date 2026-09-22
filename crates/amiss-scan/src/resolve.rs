@@ -120,7 +120,7 @@ impl<'a> Resolver<'a> {
         cache: &'a mut TargetCache,
         snapshot: &'a SnapshotDiscovery,
     ) -> Self {
-        cache.bind(scan.cache_scope());
+        cache.bind(&scan.cache_scope);
         Self {
             repo,
             git,
@@ -615,12 +615,6 @@ fn declares(
     Ok(answer)
 }
 
-/// A located directory. A tree target has no content to read, which lets an
-/// index answer for one without a tree identity.
-fn tree_target(path: &RepoPath) -> Target<RepoPath> {
-    Target::Tree { path: path.clone() }
-}
-
 /// A located regular file, with its content read and digested under the caps.
 fn blob_target(
     resolver: &mut Resolver<'_>,
@@ -668,7 +662,7 @@ pub(super) fn lookup(
             }));
         }
         Some(Located::ImpliedTree | Located::Entry(GitMode::Tree, _)) => {
-            (GitMode::Tree, tree_target(path))
+            (GitMode::Tree, Target::Tree { path: path.clone() })
         }
         Some(Located::Entry(mode @ (GitMode::RegularFile | GitMode::ExecutableFile), oid)) => {
             let oid = oid.clone();

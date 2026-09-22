@@ -1,13 +1,9 @@
 use sha2::Digest as _;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::corpus_support as corpus;
 use crate::fixtures::harvest;
-
-fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
 
 /// The corpus identity. Regenerating with `AMISS_CORPUS_BLESS=1` rewrites the
 /// manifest; this constant must then be updated by hand, so no golden can move
@@ -47,7 +43,8 @@ fn manifest_reproduces() {
             .0,
     )
     .to_string();
-    let path = root().join("corpus/parser-profile-corpus.json");
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/parser-profile-corpus.json");
 
     if std::env::var_os("AMISS_CORPUS_BLESS").is_some() {
         fs::write(&path, &wire).unwrap();

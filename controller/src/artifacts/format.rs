@@ -29,8 +29,8 @@ use crate::{ControllerEvaluationId, ExternalTally};
 
 pub(super) const ROOT_SCHEMA: RootSchema = RootSchema::Current;
 const RECORD_SCHEMA: RecordSchema = RecordSchema::Current;
-const ROOT_DOMAIN: &str = "amiss/controller-artifact-root-payload-v1";
-const RECORD_DOMAIN: &str = "amiss/controller-artifact-record-payload-v1";
+pub(super) const ROOT_DOMAIN: &str = "amiss/controller-artifact-root-payload-v1";
+pub(super) const RECORD_DOMAIN: &str = "amiss/controller-artifact-record-payload-v1";
 const ID_DOMAIN: &str = "amiss/controller-artifact-identity-v1";
 
 pub(super) const MAX_ROOT_BYTES: u64 = 8_192;
@@ -361,23 +361,11 @@ struct Envelope<T> {
     payload_digest: Digest,
 }
 
-pub(super) fn encode_root(root: &Root) -> Result<Vec<u8>, ArtifactError> {
-    encode(root, ROOT_DOMAIN, MAX_ROOT_BYTES)
-}
-
-pub(super) fn decode_root(bytes: &[u8]) -> Result<Root, ArtifactError> {
-    decode(bytes, ROOT_DOMAIN, MAX_ROOT_BYTES)
-}
-
-pub(super) fn encode_record(record: &Record) -> Result<Vec<u8>, ArtifactError> {
-    encode(record, RECORD_DOMAIN, MAX_RECORD_METADATA_BYTES)
-}
-
-pub(super) fn decode_record(bytes: &[u8]) -> Result<Record, ArtifactError> {
-    decode(bytes, RECORD_DOMAIN, MAX_RECORD_METADATA_BYTES)
-}
-
-fn encode<T: Serialize>(value: &T, domain: &str, maximum: u64) -> Result<Vec<u8>, ArtifactError> {
+pub(super) fn encode<T: Serialize>(
+    value: &T,
+    domain: &str,
+    maximum: u64,
+) -> Result<Vec<u8>, ArtifactError> {
     let payload = serde_json::to_vec(value).map_err(|_defect| ArtifactError::Corrupt)?;
     let envelope = Envelope {
         payload: value,
@@ -397,7 +385,7 @@ fn encode<T: Serialize>(value: &T, domain: &str, maximum: u64) -> Result<Vec<u8>
     .ok_or(ArtifactError::Corrupt)
 }
 
-fn decode<T>(bytes: &[u8], domain: &str, maximum: u64) -> Result<T, ArtifactError>
+pub(super) fn decode<T>(bytes: &[u8], domain: &str, maximum: u64) -> Result<T, ArtifactError>
 where
     T: DeserializeOwned + Serialize,
 {

@@ -72,11 +72,6 @@ impl Profile {
     }
 
     #[must_use]
-    pub const fn introduced_only(self) -> bool {
-        matches!(self, Self::EnforceIntroduced)
-    }
-
-    #[must_use]
     pub const fn policy_defaults(self) -> Self {
         match self {
             Self::Observe => Self::Observe,

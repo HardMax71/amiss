@@ -214,14 +214,10 @@ pub(super) fn snapshot(
             trees,
         )
         .unwrap(),
-        gate_commit: oid('e'),
+        gate_commit: Oid::new(ObjectFormat::Sha1, "e".repeat(40)).unwrap(),
     }
 }
 
 fn branch(name: &str) -> BranchRef {
     BranchRef::try_from(format!("refs/heads/{name}")).unwrap()
-}
-
-fn oid(value: char) -> Oid {
-    Oid::new(ObjectFormat::Sha1, value.to_string().repeat(40)).unwrap()
 }

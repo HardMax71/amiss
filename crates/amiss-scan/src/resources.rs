@@ -116,7 +116,7 @@ pub(crate) struct ScanMemo {
 /// the aggregate.
 #[derive(Debug)]
 pub struct ScanResources {
-    cache_scope: Arc<()>,
+    pub(crate) cache_scope: Arc<()>,
     pub(crate) scans: BTreeMap<ScanIdentity, ScanMemo>,
     limits: ScanLimits,
     documents: u64,
@@ -246,10 +246,6 @@ impl ScanResources {
     #[must_use]
     pub const fn limits(&self) -> &ScanLimits {
         &self.limits
-    }
-
-    pub(crate) const fn cache_scope(&self) -> &Arc<()> {
-        &self.cache_scope
     }
 
     pub(crate) fn charge_historical_tree_entries(

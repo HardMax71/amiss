@@ -261,14 +261,10 @@ fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
     assert_eq!(payload["controls"]["sandbox"]["assurance"], "self-asserted");
 }
 
-fn id(value: &str) -> ArtifactId {
-    ArtifactId::try_from(value.to_owned()).unwrap()
-}
-
 fn sphinx_label(inventory: &str, name: &str, destination: &str) -> Observation {
     Observation::Sphinx(SphinxLabelObservation {
         kind: SphinxLabelKind::Current,
-        inventory: id(inventory),
+        inventory: ArtifactId::try_from(inventory.to_owned()).unwrap(),
         name: name.to_owned(),
         destination: destination.to_owned(),
     })

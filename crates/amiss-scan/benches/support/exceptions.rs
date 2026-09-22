@@ -63,11 +63,13 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
                 .as_ref()
                 .map_or_else(|| panic!("benchmark candidate fact"), |fact| fact.digest);
             DebtItem {
-                debt_id: artifact_id(format!("bench/debt-{index:05}")),
+                debt_id: ArtifactId::try_from(format!("bench/debt-{index:05}"))
+                    .unwrap_or_else(|_defect| panic!("benchmark artifact id")),
                 finding_key: finding.finding_key,
                 accepted_fact,
                 accepted_fact_digest,
-                owner: owner_id("team:benchmark"),
+                owner: OwnerId::new("team:benchmark".to_owned())
+                    .unwrap_or_else(|| panic!("benchmark owner")),
                 reason: "Exception target lookup benchmark.".to_owned(),
                 created_at: instant("2026-07-01T00:00:00Z"),
                 expires_at: instant("2026-08-01T00:00:00Z"),
@@ -239,14 +241,6 @@ fn repo_path(raw: String) -> RepoPath {
 
 fn repo_path_text(raw: String) -> RepoPathText {
     RepoPathText::try_from(raw).unwrap_or_else(|_defect| panic!("benchmark text repository path"))
-}
-
-fn artifact_id(raw: String) -> ArtifactId {
-    ArtifactId::try_from(raw).unwrap_or_else(|_defect| panic!("benchmark artifact id"))
-}
-
-fn owner_id(raw: &str) -> OwnerId {
-    OwnerId::new(raw.to_owned()).unwrap_or_else(|| panic!("benchmark owner"))
 }
 
 fn instant(raw: &str) -> UtcInstant {

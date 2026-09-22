@@ -126,7 +126,11 @@ fn scan(
                 return Err(ArtifactError::Corrupt);
             }
             let bytes = read_bounded(&entry.path(), format::MAX_RECORD_METADATA_BYTES)?;
-            let record = format::decode_record(&bytes)?;
+            let record: Record = format::decode(
+                &bytes,
+                format::RECORD_DOMAIN,
+                format::MAX_RECORD_METADATA_BYTES,
+            )?;
             record.validate(config.retention)?;
             if record.id != id {
                 return Err(ArtifactError::Corrupt);
@@ -204,7 +208,7 @@ fn load_or_create_root(
 ) -> Result<Root, ArtifactError> {
     let path = root.join(ROOT_STATE);
     match read_bounded(&path, format::MAX_ROOT_BYTES) {
-        Ok(bytes) => format::decode_root(&bytes),
+        Ok(bytes) => format::decode(&bytes, format::ROOT_DOMAIN, format::MAX_ROOT_BYTES),
         Err(ArtifactError::Io(error)) if error.kind() == io::ErrorKind::NotFound => {
             prepare_new_root(root)?;
             let state = Root {
@@ -246,7 +250,10 @@ fn prepare_new_root(root: &Path) -> Result<(), ArtifactError> {
 }
 
 pub(super) fn save_root(root: &Path, state: &Root) -> Result<(), ArtifactError> {
-    atomic_write(&root.join(ROOT_STATE), &format::encode_root(state)?)
+    atomic_write(
+        &root.join(ROOT_STATE),
+        &format::encode(state, format::ROOT_DOMAIN, format::MAX_ROOT_BYTES)?,
+    )
 }
 
 pub(super) fn remove_record(root: &Path, record: &Record) -> Result<(), ArtifactError> {

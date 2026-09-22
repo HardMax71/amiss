@@ -13,7 +13,7 @@ use amiss_controller_gitea::{
 };
 pub use amiss_controller_service::ConfigError;
 use amiss_controller_service::{
-    AcquiringWorkerSettings, ArtifactFiles, CheckPlanFiles, HttpLimits, QueuedLaneSetupInput,
+    AcquiringWorkerSettings, ArtifactFiles, CheckPlanFiles, QueuedLaneSetupInput,
     QueuedServiceSettings, ServiceLimits, ServicePaths, WebhookKeyFile, framed_route_id,
     load_artifact_service, load_limits, load_paths, load_plan, load_webhook_keyring, read_regular,
 };
@@ -129,8 +129,10 @@ impl RawConfig {
             )
             .ok_or(ConfigError::invalid(INVALID_GIT_CREDENTIAL))?,
         );
-        let api_timeouts = GiteaTimeouts::new(limits.http.connect, operation_timeout(limits.http))
-            .ok_or(ConfigError::invalid(INVALID_API_TIMEOUTS))?;
+        let http = &limits.http;
+        let api_timeouts =
+            GiteaTimeouts::new(http.connect, http.read.min(http.write).min(http.request))
+                .ok_or(ConfigError::invalid(INVALID_API_TIMEOUTS))?;
         validate_client(
             &provider,
             &reviewer,
@@ -328,10 +330,6 @@ fn validate_client(
     )
     .map(|_client| ())
     .map_err(|defect| ConfigError::caused_by("Gitea-family API configuration is invalid", defect))
-}
-
-fn operation_timeout(limits: HttpLimits) -> Duration {
-    limits.read.min(limits.write).min(limits.request)
 }
 
 fn positive(raw: u64) -> Result<u64, ConfigError> {

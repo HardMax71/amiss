@@ -93,10 +93,10 @@ pub(crate) fn project(findings: &[Finding], comparisons: &[Comparison]) -> Feedb
                     .max(finding.effective_disposition);
                 if action == FeedbackAction::Fix
                     && let Some(candidate) = candidate_annotation(finding)
-                    && group
-                        .annotation
-                        .as_ref()
-                        .is_none_or(|current| annotation_precedes(&candidate, current))
+                    && group.annotation.as_ref().is_none_or(|current| {
+                        (&candidate.path, candidate.span, candidate.tie)
+                            < (&current.path, current.span, current.tie)
+                    })
                 {
                     group.annotation = Some(candidate);
                 }
@@ -232,8 +232,4 @@ fn candidate_annotation(finding: &Finding) -> Option<Annotation> {
         display: finding.location.display?,
         tie: finding.finding_key,
     })
-}
-
-fn annotation_precedes(left: &Annotation, right: &Annotation) -> bool {
-    (&left.path, left.span, left.tie) < (&right.path, right.span, right.tie)
 }

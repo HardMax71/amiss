@@ -34,14 +34,6 @@ fn artifact(raw: &str) -> ArtifactId {
     ArtifactId::try_from(raw.to_owned()).expect("fixed artifact identity")
 }
 
-fn path(raw: &str) -> RepoPathText {
-    RepoPathText::try_from(raw.to_owned()).expect("fixed repository path")
-}
-
-fn repository(name: &str) -> RepositoryIdentity {
-    RepositoryIdentity::github("acme".to_owned(), name.to_owned()).expect("fixed repository")
-}
-
 fn subject(role: &str, repository_name: &str, source_path: &str) -> RelationSubject {
     RelationSubject {
         role: artifact(role),
@@ -52,14 +44,15 @@ fn subject(role: &str, repository_name: &str, source_path: &str) -> RelationSubj
             },
             integration: IntegrationId::try_from(format!("installation/{repository_name}"))
                 .expect("integration"),
-            repository: repository(repository_name),
+            repository: RepositoryIdentity::github("acme".to_owned(), repository_name.to_owned())
+                .expect("fixed repository"),
         },
         target: branch_ref!("refs/heads/main"),
         object_format: ObjectFormat::Sha1,
         credential: OpaqueId::try_from(format!("credential/{repository_name}"))
             .expect("credential"),
         source: ProjectionSource::BlobLines(BlobLineSelection {
-            path: path(source_path),
+            path: RepoPathText::try_from(source_path.to_owned()).expect("fixed repository path"),
             first_line: 1,
             last_line: 1,
         }),

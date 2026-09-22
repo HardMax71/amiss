@@ -679,7 +679,8 @@ fn a_mkdocs_site_reads_a_raw_html_destination_from_the_published_directory() {
 /// never read at all.
 #[test]
 fn an_asciidoc_document_publishes_the_identities_a_cross_reference_names() {
-    let chain = amiss_fixtures::asciidoc_identities().expect("the fixture stages");
+    let chain = amiss_fixtures::staged_repository(&amiss_fixtures::ASCIIDOC_IDENTITIES)
+        .expect("the fixture stages");
     let inline = "docs/inline.adoc";
     let literal = "docs/literal.adoc";
     let title = "docs/title.adoc";

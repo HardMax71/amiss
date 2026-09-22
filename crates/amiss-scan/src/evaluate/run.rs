@@ -153,7 +153,7 @@ pub(crate) fn evaluate_with_site(
             .map_or(finding.configured_disposition, |step| step.after);
         finding.effective_disposition = finding.configured_disposition;
     }
-    if profile.introduced_only() {
+    if profile == Profile::EnforceIntroduced {
         for finding in &mut findings {
             if finding.effective_disposition == Disposition::Fail
                 && finding.attribution == Attribution::PreExisting

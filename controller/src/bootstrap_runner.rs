@@ -109,7 +109,10 @@ pub fn run_bootstrap(
     let (result, report) = match termination {
         BootstrapTermination::Exited(_code) => match read_result(&mut prepared.result.file) {
             Ok(None) => (None, Vec::new()),
-            Ok(Some(result)) => match read_report(&mut prepared.report.file) {
+            Ok(Some(result)) => match read_output(
+                &mut prepared.report.file,
+                MACHINE_JSON_BYTES.saturating_add(1),
+            ) {
                 Ok(report) => (Some(result), report),
                 Err(_defect) => return RunnerOutcome::Unavailable,
             },
@@ -351,10 +354,6 @@ fn process_outcome(outcome: processkit::Outcome) -> BootstrapTermination {
 fn read_result(file: &mut File) -> std::io::Result<Option<Vec<u8>>> {
     let bytes = read_output(file, RESULT_BYTES.saturating_add(1))?;
     Ok((!bytes.is_empty()).then_some(bytes))
-}
-
-fn read_report(file: &mut File) -> std::io::Result<Vec<u8>> {
-    read_output(file, MACHINE_JSON_BYTES.saturating_add(1))
 }
 
 fn read_output(file: &mut File, limit: u64) -> std::io::Result<Vec<u8>> {

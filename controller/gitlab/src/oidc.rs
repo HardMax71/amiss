@@ -6,7 +6,7 @@ use std::fmt;
 
 use amiss_controller::{
     IngressCheck, ProviderError, ProviderIdentity, ReplayIdentity, SignedRequestProof,
-    SignedTimePolicy, TrustAnchorId, TrustSetId, VerifiedDelivery,
+    SignedTimePolicy, TrustSetId, VerifiedDelivery,
 };
 use jsonwebtoken::{Algorithm, Validation, decode, decode_header};
 
@@ -122,7 +122,7 @@ impl GitLabOidc {
             now_seconds,
             self.clock_skew_seconds,
         )?;
-        let proof = signed_request_proof(
+        let proof = SignedRequestProof::verified(
             check,
             self.trust_set.clone(),
             key.anchor.clone(),
@@ -145,14 +145,4 @@ fn bearer_token<'a>(headers: &'a [amiss_controller::DeliveryHeader<'a>]) -> Opti
         && token.len() <= MAX_TOKEN_BYTES
         && !token.bytes().any(|byte| byte.is_ascii_whitespace()))
     .then_some(token)
-}
-
-fn signed_request_proof(
-    check: IngressCheck<'_>,
-    trust_set: TrustSetId,
-    anchor: TrustAnchorId,
-    replay: ReplayIdentity,
-    issued_at_unix_millis: Option<i64>,
-) -> SignedRequestProof {
-    SignedRequestProof::verified(check, trust_set, anchor, replay, issued_at_unix_millis)
 }

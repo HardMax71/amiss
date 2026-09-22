@@ -94,7 +94,7 @@ impl Row {
     pub(super) fn save_new(&self, record: &Record) -> Result<(), FileLedgerError> {
         let admission = open_lock(&self.root.join(ADMISSION_LOCK))?;
         admission.lock()?;
-        let capacity = load_capacity(&self.root)?;
+        let capacity = load_optional_capacity(&self.root)?.ok_or(FileLedgerError::Corrupt)?;
         if capacity.max_records != self.config.max_records() {
             return Err(FileLedgerError::Corrupt);
         }
@@ -189,10 +189,6 @@ fn load_metadata(root: &Path) -> Result<RootMetadata, FileLedgerError> {
         metadata::StoredMetadata::Current(metadata) => Ok(metadata),
         metadata::StoredMetadata::Legacy(_) => Err(FileLedgerError::Corrupt),
     }
-}
-
-fn load_capacity(root: &Path) -> Result<capacity::Capacity, FileLedgerError> {
-    load_optional_capacity(root)?.ok_or(FileLedgerError::Corrupt)
 }
 
 fn load_optional_capacity(root: &Path) -> Result<Option<capacity::Capacity>, FileLedgerError> {

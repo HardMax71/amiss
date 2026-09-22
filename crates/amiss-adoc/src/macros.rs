@@ -240,14 +240,6 @@ pub fn title(line: &str, at: usize) -> Option<Title> {
     })
 }
 
-/// Whether a natural cross reference can name this title. Asciidoctor looks a
-/// target up by its reference text only where the target carries a space or a
-/// capital, and a section's reference text is its own title.
-#[must_use]
-pub fn named_by_reference_text(text: &str) -> bool {
-    text.contains(' ') || text.chars().any(char::is_uppercase)
-}
-
 /// Every identity one line declares: the anchor a line carries alone, in
 /// either spelling, or each anchor written in the flow of its text.
 #[must_use]

@@ -179,7 +179,9 @@ impl RootEntries {
         let state_keys = self
             .states
             .iter()
-            .filter(|&(_, (_, record))| record.is_done_and_expired(now))
+            .filter(|&(_, (_, record))| {
+                matches!(record.state, State::Done { .. }) && record.replay_keep.expired_at(now)
+            })
             .map(|(key, _)| key.clone())
             .collect::<Vec<_>>();
         let removed_records = if state_keys.is_empty() {

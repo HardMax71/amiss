@@ -113,7 +113,8 @@ fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str)
             continue;
         }
         if let Some(title) = macros::title(line, at) {
-            if macros::named_by_reference_text(&title.text) {
+            // Asciidoctor names a title by its text only when it holds a space or a capital.
+            if title.text.contains(' ') || title.text.chars().any(char::is_uppercase) {
                 extraction.anchors.push(title.text.clone());
             }
             extraction.titles.push(title);

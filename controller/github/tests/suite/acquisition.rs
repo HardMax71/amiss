@@ -90,15 +90,15 @@ fn rejects_wrong_host_identity_change_and_object_format() {
     );
 
     let mut wrong_action_host = request();
-    replace_action_repository(
-        &mut wrong_action_host,
-        RepositoryIdentity::new(
-            "other.example".to_owned(),
-            "hardmax71".to_owned(),
-            "amiss".to_owned(),
-        )
-        .unwrap(),
-    );
+    let other_host = RepositoryIdentity::new(
+        "other.example".to_owned(),
+        "hardmax71".to_owned(),
+        "amiss".to_owned(),
+    )
+    .unwrap();
+    Arc::make_mut(&mut wrong_action_host.plan)
+        .execution
+        .action_repository = other_host;
     assert_eq!(
         github_fetch_plan(&wrong_action_host),
         Err(GitHubAcquireError::InvalidRequest)
@@ -326,10 +326,6 @@ fn execution() -> ExecutionConstraintDescriptor {
     descriptor.action_commit_oid = oid('e');
     descriptor.action_tree_oid = oid('f');
     descriptor
-}
-
-fn replace_action_repository(request: &mut RunRequest, repository: RepositoryIdentity) {
-    Arc::make_mut(&mut request.plan).execution.action_repository = repository;
 }
 
 fn provider_run(

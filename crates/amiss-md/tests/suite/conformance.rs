@@ -208,7 +208,7 @@ fn reproduces_gfm_0_29_extensions() {
         let (Some(_tag), Expect::Html(want)) = (case.tag.as_deref(), &case.expect) else {
             continue;
         };
-        if !case.executable() {
+        if case.tag.as_deref() == Some("disabled") {
             skipped = skipped.saturating_add(1);
             continue;
         }

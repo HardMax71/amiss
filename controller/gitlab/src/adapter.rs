@@ -219,7 +219,8 @@ fn refresh_query(
     };
     let expected_repository = repository_identity(provider.instance.as_str(), &policy.project_path)
         .ok_or(ProviderError::InvalidResponse)?;
-    let exact_gate = exact_oid(delivery.provider_run.candidate_commit.as_str())?;
+    let exact_gate = exact_sha1(delivery.provider_run.candidate_commit.as_str())
+        .ok_or(ProviderError::InvalidResponse)?;
     let valid = delivery.identity.provider == *provider
         && delivery.change.provider == *provider
         && delivery.identity.integration == policy.integration
@@ -238,8 +239,4 @@ fn refresh_query(
             gate_commit: exact_gate,
         })
         .ok_or(ProviderError::InvalidResponse)
-}
-
-fn exact_oid(raw: &str) -> Result<amiss_wire::model::Oid, ProviderError> {
-    exact_sha1(raw).ok_or(ProviderError::InvalidResponse)
 }

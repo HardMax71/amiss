@@ -27,10 +27,6 @@ fn artifact(raw: &str) -> ArtifactId {
     ArtifactId::try_from(raw.to_owned()).expect("fixed artifact identity")
 }
 
-fn opaque(raw: &str) -> OpaqueId {
-    OpaqueId::try_from(raw.to_owned()).expect("fixed opaque identity")
-}
-
 fn subject(role: &str, repository: &str) -> RelationSubject {
     RelationSubject {
         role: artifact(role),
@@ -46,7 +42,8 @@ fn subject(role: &str, repository: &str) -> RelationSubject {
         },
         target: branch_ref!("refs/heads/main"),
         object_format: ObjectFormat::Sha1,
-        credential: opaque(&format!("credential/{repository}")),
+        credential: OpaqueId::try_from(format!("credential/{repository}"))
+            .expect("fixed opaque identity"),
         source: ProjectionSource::RecordSet(RecordSetSelection {
             set: artifact_id!("public/api"),
         }),

@@ -171,7 +171,7 @@ fn slug(rule: &AnchorRule, text: &str) -> String {
         } else if is_kept(rule.keep, ch) {
             match rule.case {
                 Case::FullBeforeFilter => retained.push(ch),
-                Case::SimpleAfterFilter => retained.push(simple_lower(ch)),
+                Case::SimpleAfterFilter => retained.push(ch.to_lowercase().next().unwrap_or(ch)),
             }
         }
     }
@@ -242,10 +242,6 @@ fn smart(text: &str) -> String {
 fn split_first(text: &str) -> Option<(char, &str)> {
     let first = text.chars().next()?;
     Some((first, text.get(first.len_utf8()..)?))
-}
-
-fn simple_lower(ch: char) -> char {
-    ch.to_lowercase().next().unwrap_or(ch)
 }
 
 fn is_separator(separators: Separators, ch: char) -> bool {

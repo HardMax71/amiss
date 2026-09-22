@@ -1,7 +1,6 @@
 mod tests;
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use amiss_controller::{DeliveryRoute, FileLedgerConfig, SignedTimePolicy, TrustSetId};
 use amiss_controller_git::GitFetchBounds;
@@ -65,9 +64,10 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
         )
         .ok_or(ConfigError::invalid("GitLab Git credential is invalid"))?,
     );
+    let http = &limits.http;
     let timeouts = GitLabTimeouts::new(
-        limits.http.connect,
-        operation_timeout(limits.http),
+        http.connect,
+        http.read.min(http.write).min(http.request),
         PROVIDER_RESPONSE_BYTES,
     )
     .ok_or(ConfigError::invalid("GitLab API timeouts are invalid"))?;
@@ -150,10 +150,6 @@ fn policy_job_endpoint(
 fn clone_secret(secret: &SecretString) -> SecretString {
     use secrecy::ExposeSecret as _;
     SecretString::from(secret.expose_secret().to_owned())
-}
-
-fn operation_timeout(limits: amiss_controller_service::HttpLimits) -> Duration {
-    limits.read.min(limits.write).min(limits.request)
 }
 
 fn validate_action(

@@ -76,7 +76,10 @@ pub fn load_artifact_service(
         .ok_or(ConfigError::invalid("artifact base URL is invalid"))?;
     let token = read_regular(&files.bearer_token_file, TOKEN_BYTES)?;
     if !(32..=usize::try_from(TOKEN_BYTES).unwrap_or(usize::MAX)).contains(&token.len())
-        || !token.iter().all(|byte| bearer_byte(*byte))
+        || !token.iter().all(|&byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'+' | b'/' | b'=')
+        })
     {
         return Err(ConfigError::invalid("artifact bearer token is invalid"));
     }
@@ -242,8 +245,4 @@ fn authorized(headers: &HeaderMap, authorization: &Authorization) -> bool {
     };
     verifier.update(AUTH_DOMAIN);
     verifier.verify_slice(&authorization.0).is_ok()
-}
-
-const fn bearer_byte(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'+' | b'/' | b'=')
 }

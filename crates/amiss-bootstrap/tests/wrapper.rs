@@ -64,9 +64,9 @@ fn main() -> ExitCode {
     identity_absent(&refused);
     invalid_supplied_controls(&staged);
     semantic::capture(&staged);
-    wrong_result_name(&refused);
+    invalid_invocation_writes_nothing(&refused, "result2", false, "wrong result name");
     #[cfg(unix)]
-    symlinked_scratch(&refused);
+    invalid_invocation_writes_nothing(&refused, "result", true, "symlinked scratch");
     request_ceiling(&staged);
     unread_requests(&staged);
     println!("wrapper: every scenario held");
@@ -565,15 +565,6 @@ fn invalid_invocation_writes_nothing(
         fs::read(&invocation.report).unwrap().is_empty(),
         "{scenario}"
     );
-}
-
-fn wrong_result_name(staged: &Release) {
-    invalid_invocation_writes_nothing(staged, "result2", false, "wrong result name");
-}
-
-#[cfg(unix)]
-fn symlinked_scratch(staged: &Release) {
-    invalid_invocation_writes_nothing(staged, "result", true, "symlinked scratch");
 }
 
 /// Grows valid protected paths until the canonical request is exactly `target` bytes long.

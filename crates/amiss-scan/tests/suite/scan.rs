@@ -142,16 +142,11 @@ fn an_empty_destination_hashes_zero_bytes() {
 fn plain_advisory_charges_work_and_extracts_nothing() {
     let mut resources = contract();
     let got = scan_document(&mut resources, Adapter::PlainAdvisory, b"a\n\nb\n")
-        .unwrap_or_else(|_defect| unreachable_scan());
+        .unwrap_or_else(|_defect| panic!("plain advisory cannot fail"));
     assert_eq!(got.occurrences, Vec::new());
     assert_eq!(got.work.nodes, 3);
     assert_eq!(resources.nodes(), 3);
     assert_eq!(resources.documents(), 1);
-}
-
-#[expect(clippy::panic, reason = "test fixture helper")]
-fn unreachable_scan() -> amiss_scan::Scanned {
-    panic!("plain advisory cannot fail")
 }
 
 #[test]

@@ -1,9 +1,9 @@
 use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId, DeliveryClaim};
 
 use super::make_lease;
-use crate::file_ledger::format::{Record, State};
+use crate::file_ledger::format::{self, Record, State};
 use crate::file_ledger::store::Row;
-use crate::file_ledger::{FileLedger, FileLedgerError};
+use crate::file_ledger::{FileLedger, FileLedgerError, random_id};
 
 impl FileLedger {
     pub(super) fn claim_new(
@@ -13,7 +13,7 @@ impl FileLedger {
         check: &CheckBinding,
     ) -> Result<DeliveryClaim, FileLedgerError> {
         let now = self.now(row, None)?;
-        let evaluation_id = Self::new_evaluation_id(&delivery.delivery().identity)?;
+        let evaluation_id = format::evaluation_id(&delivery.delivery().identity, &random_id()?)?;
         let expires_at_unix_millis = self.deadline(now)?;
         let record = Record::running(
             delivery,

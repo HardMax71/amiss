@@ -428,7 +428,9 @@ fn mdx_declarations(sweep: &mut Sweep<'_>, root: &Node) {
 /// whether anything under it is the document's own to read.
 fn mdx_declaration(sweep: &mut Sweep<'_>, node: &Node) -> bool {
     match &node.kind {
-        Kind::MdxEsm(source) => default_imports(source, &mut sweep.imports),
+        Kind::MdxEsm(source) => sweep
+            .imports
+            .extend(source.lines().filter_map(default_import)),
         Kind::MdxElement { name, id, .. } if plain_element(name.as_deref()) => {
             sweep.declared.extend(id.clone());
         }
@@ -477,13 +479,9 @@ fn element_tags(node: &Node) -> Vec<(usize, usize)> {
         .collect()
 }
 
-/// The partials one module imports: a default import of a relative Markdown
+/// A partial one module imports: a default import of a relative Markdown
 /// document, which is the only specifier that can name a file this tree holds.
 /// A package, an alias, or a stylesheet is not a document and declares no edge.
-fn default_imports(source: &str, out: &mut Vec<(String, String)>) {
-    out.extend(source.lines().filter_map(default_import));
-}
-
 fn default_import(line: &str) -> Option<(String, String)> {
     let (binding, rest) = line.trim().strip_prefix("import ")?.split_once(" from ")?;
     let binding = binding.trim();
