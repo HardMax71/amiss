@@ -435,7 +435,7 @@ jobs:
         run: |
           cargo metadata --locked --format-version 1 --no-deps --offline |
             jq -er '"nextest=\(.metadata.tools.prebuilt["cargo-nextest"])"' >> "$GITHUB_OUTPUT"
-      - uses: taiki-e/install-action@c3ec0de9ae7f1019cea21aa96aa0a895b9552063 # v2.87.9
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2.87.13
         with:
           tool: cargo-nextest@${{ steps.bench.outputs.nextest }}
           fallback: none
