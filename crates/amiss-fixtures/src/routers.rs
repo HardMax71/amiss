@@ -420,6 +420,31 @@ const DECLARED_SITE_BASE: [(&str, Staged<'static>); 5] = [
     ),
 ];
 
+/// Two Docusaurus sites and a tree neither holds, each with an MDX page whose
+/// licence header is an HTML comment. Docusaurus reads that comment and MDX
+/// alone refuses it, so the page under `site/` is read and the one under
+/// `plain/` is not. Two sites leave no single site to govern the whole tree.
+pub const DOCUSAURUS_COMMENTS: [(&str, Staged<'static>); 6] = [
+    (
+        "site/docusaurus.config.js",
+        Staged::File(b"export default {};\n"),
+    ),
+    (
+        "site/docs/page.mdx",
+        Staged::File(b"# Page\n\n<!-- licence [x](gone.md) -->\n\nSee [guide](guide.md).\n"),
+    ),
+    ("site/docs/guide.md", Staged::File(b"# Guide\n")),
+    (
+        "other/docusaurus.config.ts",
+        Staged::File(b"export default {};\n"),
+    ),
+    (
+        "plain/page.mdx",
+        Staged::File(b"# Page\n\n<!-- licence -->\n\nSee [guide](guide.md).\n"),
+    ),
+    ("plain/guide.md", Staged::File(b"# Guide\n")),
+];
+
 /// A Hugo site that names its content with a module mount rather than a
 /// directory key: the one mount targeting the content directory reads from
 /// `site/pages`, and the mount beside it targets something else, so only the

@@ -1,5 +1,5 @@
 use amiss_md::profile::mdx_options;
-use amiss_md::{AnalyzeError, Fault, Work, analyze, charge};
+use amiss_md::{AnalyzeError, Fault, Work, analyze, charge, comments_read};
 use amiss_wire::model::Adapter;
 use markdown::mdast::Node;
 use markdown::to_mdast;
@@ -196,4 +196,39 @@ fn an_unmatched_tag_is_an_unparsable_document() {
             nesting: 3
         })
     );
+}
+
+/// Docusaurus reads an HTML comment MDX refuses, so the comment the parser
+/// rejected is blanked and every other byte keeps its place. A comment inside
+/// code never reaches the grammar and stays as written, an unclosed one and a
+/// rejection that is not a comment leave the source refused, and a source
+/// that parses already needs no reading.
+#[test]
+fn a_comment_the_grammar_refused_is_read_the_way_docusaurus_reads_it() {
+    let source = b"# A\n\n<!--\n  [x](gone.md)\n-->\n\n```html\n<!-- kept\n```\n";
+    let read = comments_read(source).expect("the comment is read");
+    assert_eq!(
+        read.len(),
+        source.len(),
+        "blanking keeps every byte's place"
+    );
+    assert!(
+        source
+            .iter()
+            .zip(&read)
+            .all(|(was, is)| (*was == b'\n') == (*is == b'\n')),
+        "every newline stays where it was, so every line keeps its number"
+    );
+    let text = String::from_utf8(read).expect("blanked source is text");
+    assert!(
+        !text.contains("gone.md"),
+        "a link inside the comment is not read"
+    );
+    assert!(
+        text.contains("<!-- kept"),
+        "a comment inside code stays as written"
+    );
+    assert_eq!(comments_read(b"# A\n\n<!-- never closed\n"), None);
+    assert_eq!(comments_read(b"a <b> c"), None);
+    assert_eq!(comments_read(b"# A\n\nplain\n"), None);
 }

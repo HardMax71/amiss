@@ -116,7 +116,12 @@ the MDX grammar rejects, a 45 KB link destination past `raw-link-destination-byt
 document is counted, its row carries `undecodable-document` for bytes, `unparsable-document`
 for markup the grammar refuses, or `resource-ceiling-crossed`, and every other document in
 the repository is still reported. The two are apart because the fix is: one is an encoding,
-the other is the source, and `<!-- -->` in an MDX document is `{/* */}` written wrong. Two undecodable translations used to cost a
+the other is the source, and `<!-- -->` in an MDX document is `{/* */}` written wrong. The
+exception is a page a Docusaurus site holds, since Docusaurus reads that comment by default
+where MDX alone refuses it. There the comment the grammar rejected is read as a comment, every
+other byte keeping its line and column, and a link written inside it is not read. Superset's
+documentation is the case: 129 pages open with a licence header in one, and all of them are
+read. Two undecodable translations used to cost a
 2,619-document site its whole report at exit 2, and that is the failure this class replaced.
 Nothing is skipped quietly: the human output names each such file, the
 `unsupported-document-format` finding records that its references went unchecked, and a

@@ -68,6 +68,9 @@ pub struct Scanned {
     pub declared_name: Option<String>,
     pub declared_redirects: Vec<String>,
     pub anchor_source: Option<AnchorSource>,
+    /// Read only once the HTML comments the MDX grammar refused were read as
+    /// comments, which a Docusaurus site does and MDX alone does not.
+    pub commented: bool,
 }
 
 /// The raw anchor inputs a scanned document retains so the resolve lane never
@@ -150,6 +153,7 @@ pub fn scan_bytes(
             declared_anchors: Vec::new(),
             declared_name,
             declared_redirects,
+            commented: false,
             anchor_source: None,
         });
     };
@@ -211,6 +215,7 @@ pub fn scan_bytes(
         declared_anchors: extraction.declared_anchors,
         declared_name,
         declared_redirects,
+        commented: false,
         anchor_source: Some(AnchorSource {
             headings: extraction.headings,
             html_anchors: extraction.html_anchors,
