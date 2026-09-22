@@ -61,6 +61,7 @@ struct Args {
     action: String,
 }
 
+#[expect(clippy::print_stdout, reason = "the release pipeline reads this value")]
 fn run(args: Args) -> Result<(), String> {
     let lock_bytes: Vec<(&str, Vec<u8>)> = args
         .locks
@@ -123,13 +124,8 @@ fn run(args: Args) -> Result<(), String> {
         format!("{digest}\n"),
     )
     .map_err(|defect| format!("{}: {defect}", RELEASE_MANIFEST_DIGEST_PATH.as_str()))?;
-    print_digest(digest.to_string().as_str());
-    Ok(())
-}
-
-#[expect(clippy::print_stdout, reason = "the release pipeline reads this value")]
-fn print_digest(digest: &str) {
     println!("{digest}");
+    Ok(())
 }
 
 fn read_at(tree: &Path, path: &str) -> Result<Vec<u8>, String> {

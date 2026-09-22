@@ -187,14 +187,6 @@ impl Transport {
         required_value(self.request(url, budget, false)?)
     }
 
-    pub(super) fn get_optional<T: DeserializeOwned>(
-        &self,
-        url: Url,
-        budget: Budget,
-    ) -> Result<(Option<T>, Budget), ProviderError> {
-        self.request(url, budget, true)
-    }
-
     /// A verification GET whose negative answers are facts: the absence or
     /// refusal of what the route names, distinct from a failed call.
     pub(super) fn get_fact<T: DeserializeOwned>(
@@ -239,7 +231,7 @@ impl Transport {
             .map_err(|error| map_error(&error))
     }
 
-    fn request<T: DeserializeOwned>(
+    pub(super) fn request<T: DeserializeOwned>(
         &self,
         url: Url,
         budget: Budget,

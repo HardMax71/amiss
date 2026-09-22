@@ -533,7 +533,7 @@ fn tracked_page(
 pub fn unplaced(snapshot: &SnapshotDiscovery, document: &RepoPath, missing: &RepoPath) -> bool {
     let raw = missing.as_bytes();
     let page = output_extension(raw).is_some();
-    (!page_source(raw)
+    (!PAGE_SUFFIXES.iter().any(|suffix| raw.ends_with(suffix))
         && ROUTERS.iter().any(|rule| {
             (rule.serves(Spelling::BuiltRoute) || (page && rule.serves(Spelling::BuiltPage)))
                 && site_root(snapshot, document.as_bytes(), rule).is_some()
@@ -1739,12 +1739,6 @@ const PAGE_SUFFIXES: [&[u8]; 3] = [b".md", b".mdx", b".markdown"];
 fn output_extension(raw: &[u8]) -> Option<Vec<u8>> {
     let stem = raw.strip_suffix(b".html")?;
     (!stem.is_empty()).then(|| [stem, b".md"].concat())
-}
-
-/// Whether a destination names a page's own source. `output_extension` reads
-/// the other end of that pair, which is the page a build serves for it.
-fn page_source(raw: &[u8]) -> bool {
-    PAGE_SUFFIXES.iter().any(|suffix| raw.ends_with(suffix))
 }
 
 fn extensionless(raw: &[u8], suffix: &[u8]) -> Option<Vec<u8>> {

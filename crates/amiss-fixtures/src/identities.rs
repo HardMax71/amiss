@@ -1,4 +1,4 @@
-use crate::{CommitChain, Staged, staged_repository};
+use crate::Staged;
 
 /// Three `AsciiDoc` documents, one per identity an internal cross reference
 /// can name. `title.adoc` names a section by its own title and then names a
@@ -6,7 +6,7 @@ use crate::{CommitChain, Staged, staged_repository};
 /// flow of a list item and then one nothing declares; `literal.adoc` names its
 /// own section and writes a second reference inside an indented paragraph,
 /// where the text is literal and no reference is read at all.
-const ASCIIDOC_IDENTITIES: [(&str, Staged<'static>); 3] = [
+pub const ASCIIDOC_IDENTITIES: [(&str, Staged<'static>); 3] = [
     (
         "docs/title.adoc",
         Staged::File(
@@ -28,10 +28,3 @@ const ASCIIDOC_IDENTITIES: [(&str, Staged<'static>); 3] = [
         ),
     ),
 ];
-
-/// # Errors
-///
-/// Any filesystem failure.
-pub fn asciidoc_identities() -> std::io::Result<CommitChain> {
-    staged_repository(&ASCIIDOC_IDENTITIES)
-}

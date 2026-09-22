@@ -115,7 +115,7 @@ impl Store {
         old_bytes: u64,
     ) -> Result<(), InboxError> {
         validate_key(key)?;
-        let bytes = encode_record(record)?;
+        let bytes = frame::encode::<_, InboxError>(RECORD_FRAME, record, |_record| Ok(()))?;
         let encoded_bytes = u64::try_from(bytes.len()).map_err(|_defect| InboxError::Full)?;
         let record_reservation = self
             .limits
@@ -145,10 +145,6 @@ impl Store {
             .map(|_bytes| ())
             .ok_or(InboxError::Full)
     }
-}
-
-pub(crate) fn encode_record(record: &Record) -> Result<Vec<u8>, InboxError> {
-    frame::encode(RECORD_FRAME, record, |_record| Ok(()))
 }
 
 pub(crate) fn decode_record(bytes: &[u8]) -> Result<Record, InboxError> {

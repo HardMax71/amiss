@@ -15,7 +15,7 @@ pub use anchors::{
     sphinx_myst,
 };
 pub use external::{external_facts, external_plan, external_report};
-pub use identities::asciidoc_identities;
+pub use identities::ASCIIDOC_IDENTITIES;
 pub use locale::{LocaleAuditFixture, locale_audit};
 pub use publication::{PublicationAuditFixture, publication_audit};
 pub use routers::{
@@ -727,7 +727,7 @@ fn commit_state(
     message: &str,
 ) -> std::io::Result<(String, String)> {
     for (path, body) in files {
-        write_file(root, path, body)?;
+        write_bytes(root, path, body.as_bytes())?;
         staged.insert(
             (*path).to_owned(),
             (
@@ -780,10 +780,6 @@ fn tree_from(root: &Path, files: &Entries) -> std::io::Result<String> {
             .map(|(name, oid)| ("40000", name.as_bytes(), oid.as_str())),
     );
     tree_object(root, &entries)
-}
-
-fn write_file(root: &Path, path: &str, body: &str) -> std::io::Result<()> {
-    write_bytes(root, path, body.as_bytes())
 }
 
 fn write_bytes(root: &Path, path: &str, body: &[u8]) -> std::io::Result<()> {

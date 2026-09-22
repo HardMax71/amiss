@@ -120,11 +120,8 @@ fn valid_layout(args: &RunnerArgs) -> bool {
         && input(&args.controls, directory, "controls.json")
         && output(&args.report, directory, "report")
         && output(&args.result, directory, "result")
-        && env::current_dir().is_ok_and(|current| same_directory(&current, directory))
-}
-
-fn same_directory(left: &Path, right: &Path) -> bool {
-    same_file::is_same_file(left, right).unwrap_or(false)
+        && env::current_dir()
+            .is_ok_and(|current| same_file::is_same_file(current, directory).unwrap_or(false))
 }
 
 fn regular_directory(path: &Path) -> bool {
@@ -182,7 +179,7 @@ fn run(mode: Mode, args: &RunnerArgs) -> ExitCode {
         Mode::MissingResult => ExitCode::SUCCESS,
         Mode::OversizedOutput => oversized(&args.report, &args.result),
         Mode::Timeout => timeout(args),
-        Mode::ClearedEnvironment if cleared_environment() => complete(
+        Mode::ClearedEnvironment if env::var_os("PATH").is_none() => complete(
             &args.report,
             &args.result,
             BootstrapResult::Pass,
@@ -202,10 +199,6 @@ fn run(mode: Mode, args: &RunnerArgs) -> ExitCode {
             malformed(&args.result)
         }
     }
-}
-
-fn cleared_environment() -> bool {
-    env::var_os("PATH").is_none()
 }
 
 fn renewal_gate(args: &RunnerArgs) -> bool {

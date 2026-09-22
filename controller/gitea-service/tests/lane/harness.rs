@@ -269,7 +269,7 @@ fn provider_setup(
         repositories.trees.clone(),
     );
     if settings.wrong_tree {
-        current.run.trees.candidate = oid('f');
+        current.run.trees.candidate = Oid::new(ObjectFormat::Sha1, "f".repeat(40)).unwrap();
     }
     let refreshes = settings.refresh_failure.map_or_else(
         || vec![Ok(current.clone()), Ok(current)],
@@ -357,8 +357,4 @@ fn inbox_limits() -> InboxLimits {
         max_route_bytes: 128,
         max_source_id_bytes: 128,
     }
-}
-
-fn oid(value: char) -> Oid {
-    Oid::new(ObjectFormat::Sha1, value.to_string().repeat(40)).unwrap()
 }

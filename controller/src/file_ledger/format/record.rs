@@ -22,7 +22,7 @@ pub(in crate::file_ledger) struct Record {
     pub(in crate::file_ledger) generation: u64,
     pub(in crate::file_ledger) last_seen_unix_millis: i64,
     binding: StoredDelivery,
-    replay_keep: StoredReplayKeep,
+    pub(in crate::file_ledger) replay_keep: StoredReplayKeep,
     check: CheckBinding,
     evaluation_id: ControllerEvaluationId,
     pub(in crate::file_ledger) state: State,
@@ -115,10 +115,6 @@ impl Record {
             }
         }
         Ok(())
-    }
-
-    pub(in crate::file_ledger) const fn is_done_and_expired(&self, now: i64) -> bool {
-        matches!(self.state, State::Done { .. }) && self.replay_keep.expired_at(now)
     }
 }
 

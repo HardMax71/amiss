@@ -264,7 +264,12 @@ fn protection_authorizes(
     let forgejo_shape = protection.overrides.block_admin_merge_override.is_none()
         && protection.overrides.apply_to_admins == Some(true)
         && repository.allow_manual_merge.is_none()
-        && forgejo_extensions_absent(&protection.force, &protection.bypass);
+        && extensions_satisfy(
+            &protection.force,
+            &protection.bypass,
+            absent_flag,
+            absent_allowlist,
+        );
     branch.name == pull_request.base.branch
         && branch.protected
         && branch.required_approvals == 1
@@ -302,13 +307,6 @@ fn gitea_extensions_closed(
         |value| value == Some(false),
         |value| value.is_some_and(<[String]>::is_empty),
     )
-}
-
-fn forgejo_extensions_absent(
-    force: &super::model::ForceProtection,
-    bypass: &super::model::BypassProtection,
-) -> bool {
-    extensions_satisfy(force, bypass, absent_flag, absent_allowlist)
 }
 
 fn absent_flag(value: Option<bool>) -> bool {

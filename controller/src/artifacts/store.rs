@@ -262,7 +262,11 @@ impl FileArtifactStore {
         if state.records.contains_key(&record.id) {
             return Err(ArtifactError::Conflict);
         }
-        let metadata_bytes = super::format::encode_record(&record)?;
+        let metadata_bytes = super::format::encode(
+            &record,
+            super::format::RECORD_DOMAIN,
+            super::format::MAX_RECORD_METADATA_BYTES,
+        )?;
         let record_bytes = record.blobs().try_fold(
             u64::try_from(metadata_bytes.len()).map_err(|_defect| ArtifactError::TooLarge)?,
             |total, (_component, blob)| {

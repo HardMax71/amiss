@@ -232,7 +232,8 @@ impl RepositoryIdentity {
                 .as_bytes()
                 .split(|&byte| byte == b'/')
                 .all(identity_segment);
-        host_valid(host) && owner_ok && name_valid(name)
+        // The host is an opaque claim the engine never normalizes; a slash would make it ambiguous.
+        (1..=255).contains(&host.len()) && !host.contains('/') && owner_ok && name_valid(name)
     }
 
     /// Convenience constructor for GitHub's fixed host and single-segment
@@ -274,13 +275,6 @@ fn name_valid(name: &str) -> bool {
         && name.bytes().all(identity_byte)
         && name != "."
         && name != ".."
-}
-
-/// The host is an opaque claim the engine never resolves or normalizes;
-/// the caller owns its spelling. A slash would make the identity triple
-/// ambiguous, and the cap bounds it like every other wire string.
-fn host_valid(host: &str) -> bool {
-    (1..=255).contains(&host.len()) && !host.contains('/')
 }
 
 fn identity_byte(byte: u8) -> bool {

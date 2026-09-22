@@ -10,10 +10,7 @@ use std::time::Duration;
 use format::Record;
 use store::{Row, Store};
 
-use crate::{
-    AcceptedDelivery, ControllerClock, ControllerEvaluationId, DeliveryIdentity, ReplayWindow,
-    SystemClock,
-};
+use crate::{AcceptedDelivery, ControllerClock, ReplayWindow, SystemClock};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FileLedgerError {
@@ -201,12 +198,6 @@ impl FileLedger {
             .ok_or(FileLedgerError::Clock)?;
         let now = row.observe_clock(now)?;
         Ok(record.map_or(now, |record| now.max(record.last_seen_unix_millis)))
-    }
-
-    fn new_evaluation_id(
-        identity: &DeliveryIdentity,
-    ) -> Result<ControllerEvaluationId, FileLedgerError> {
-        format::evaluation_id(identity, &random_id()?)
     }
 
     fn deadline(&self, now: i64) -> Result<i64, FileLedgerError> {

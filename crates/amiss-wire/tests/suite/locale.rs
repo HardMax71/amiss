@@ -15,7 +15,6 @@ use amiss_wire::locale::{
     LocaleFallbackRule, LocalePageRequirement, PAGE_KEY_BYTES, PLAN_PAYLOAD_SCHEMA,
     PlanPayloadSchema,
 };
-use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{DocsCandidate, PublicationProducer, PublicationResource};
@@ -346,8 +345,4 @@ fn all_source_policies_reject_unknown_members_with_a_matching_received_digest() 
     let error = LocaleCoveragePlan::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.kind, ErrorKind::UnknownField);
     assert_eq!(error.path, "$.payload.policy.required.keys");
-}
-
-fn identity(value: &str) -> ArtifactId {
-    ArtifactId::try_from(value.to_owned()).unwrap()
 }

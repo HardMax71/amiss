@@ -30,7 +30,7 @@ impl TestClock {
     #[must_use]
     pub fn untrusted() -> Arc<Self> {
         let clock = Self::at(Self::DEFAULT);
-        clock.distrust();
+        clock.trusted.store(false, Ordering::SeqCst);
         clock
     }
 
@@ -40,10 +40,6 @@ impl TestClock {
 
     pub fn advance(&self, millis: i64) {
         self.millis.fetch_add(millis, Ordering::SeqCst);
-    }
-
-    pub fn distrust(&self) {
-        self.trusted.store(false, Ordering::SeqCst);
     }
 
     #[must_use]

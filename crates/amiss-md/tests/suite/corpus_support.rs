@@ -74,12 +74,6 @@ impl Case {
     pub(crate) fn case_id(&self) -> String {
         format!("{}/{}", self.family, self.number)
     }
-
-    /// Upstream executes an example unless it marked it `disabled`.
-    #[must_use]
-    pub(crate) fn executable(&self) -> bool {
-        self.tag.as_deref() != Some("disabled")
-    }
 }
 
 #[derive(serde::Deserialize)]

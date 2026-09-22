@@ -67,7 +67,7 @@ impl GitLabClient {
         merge_request_iid: u64,
         budget: Budget,
     ) -> Result<(Option<GitLabTrainCar>, Budget), ProviderError> {
-        let (train, budget) = self.transport.get_optional::<TrainResponse>(
+        let (train, budget) = self.transport.request::<TrainResponse>(
             self.endpoint(
                 project_id,
                 [
@@ -77,6 +77,7 @@ impl GitLabClient {
                 ],
             )?,
             budget,
+            true,
         )?;
         Ok((train.map(model::train).transpose()?, budget))
     }

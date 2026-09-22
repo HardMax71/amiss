@@ -262,7 +262,7 @@ fn provider_setup(
         .unwrap();
     }
     if matches!(case, LaneCase::WrongTree) {
-        current.run.trees.candidate = oid('f');
+        current.run.trees.candidate = Oid::new(ObjectFormat::Sha1, "f".repeat(40)).unwrap();
     }
     let api = FakeGitHub::new([Ok(current.clone()), Ok(current)]);
     let adapter: Arc<dyn ProviderAdapter> = Arc::new(GitHubPullRequestAdapter::from_source(
@@ -379,8 +379,4 @@ fn inbox_limits() -> InboxLimits {
         max_route_bytes: 128,
         max_source_id_bytes: 128,
     }
-}
-
-fn oid(value: char) -> Oid {
-    Oid::new(ObjectFormat::Sha1, value.to_string().repeat(40)).unwrap()
 }

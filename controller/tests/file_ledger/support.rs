@@ -74,10 +74,6 @@ fn provider() -> ProviderIdentity {
     provider_in("gitea")
 }
 
-fn gitlab_provider() -> ProviderIdentity {
-    provider_in("gitlab")
-}
-
 fn provider_in(namespace: &str) -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from(namespace.to_owned()).unwrap(),
@@ -103,7 +99,7 @@ pub(super) fn bounded_delivery_at(
     number: u64,
     issued_at: i64,
 ) -> AcceptedDelivery {
-    let provider = gitlab_provider();
+    let provider = provider_in("gitlab");
     let trust_set = opaque_id!("webhooks-main");
     let route = DeliveryRoute {
         provider: provider.clone(),

@@ -13,7 +13,7 @@ use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
     AdmissionRejection, EndpointConfig, Operations, check_lane, evaluation_router_with_clock,
 };
-use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::RepositoryIdentity;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
@@ -343,8 +343,4 @@ fn directory(root: &TempDir, name: &str) -> PathBuf {
     let path = root.path().join(name);
     std::fs::create_dir(&path).unwrap();
     path
-}
-
-fn _exact_oid(value: char) -> Oid {
-    Oid::new(ObjectFormat::Sha1, value.to_string().repeat(40)).unwrap()
 }

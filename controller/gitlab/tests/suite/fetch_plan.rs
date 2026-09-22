@@ -89,7 +89,9 @@ fn host_change_run_delivery_and_format_substitutions_are_rejected() {
     let mut wrong_instance = request.clone();
     wrong_instance.delivery.provider.instance = opaque_id!("other.example");
     let mut wrong_action = request;
-    replace_action_repository(&mut wrong_action, repository("other.example", "hardmax71"));
+    Arc::make_mut(&mut wrong_action.plan)
+        .execution
+        .action_repository = repository("other.example", "hardmax71");
 
     for changed in [
         wrong_host,
@@ -107,13 +109,6 @@ fn host_change_run_delivery_and_format_substitutions_are_rejected() {
 
 fn repository(host: &str, owner: &str) -> RepositoryIdentity {
     RepositoryIdentity::new(host.to_owned(), owner.to_owned(), "widget".to_owned()).unwrap()
-}
-
-fn replace_action_repository(
-    request: &mut amiss_controller::RunRequest,
-    repository: RepositoryIdentity,
-) {
-    Arc::make_mut(&mut request.plan).execution.action_repository = repository;
 }
 
 /// The binding is three clauses over the same run: a first attempt, a
