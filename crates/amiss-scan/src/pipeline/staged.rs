@@ -456,7 +456,7 @@ fn staged_index_result(
             routes: None,
         },
         &includes,
-        Some(&candidate_discovery.declared_routers),
+        Some(&candidate_discovery),
         base_tree,
         None,
     )

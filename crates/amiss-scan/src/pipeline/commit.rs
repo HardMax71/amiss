@@ -330,7 +330,7 @@ fn evaluated_pair(
         candidate
             .as_ref()
             .ok()
-            .map(|(evaluated, _)| &evaluated.discovery.declared_routers),
+            .map(|(evaluated, _)| &evaluated.discovery),
         base_tree,
         None,
     );
