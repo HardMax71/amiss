@@ -186,7 +186,7 @@ declare_taxonomy! {
             metadata: &UNSUPPORTED_OBSERVATION,
         },
         UnsupportedDocumentFormat => {
-            meaning: "a document this run discovered was not scanned: no parser for its markup, a policy include with no grammar bound, bytes that do not decode as the format requires, or a per-document ceiling crossed; the document row's reason says which, and the file's references are never checked",
+            meaning: "a document this run discovered was not scanned: no parser for its markup, a policy include with no grammar bound, bytes that do not decode as the format requires, markup its grammar refuses, or a per-document ceiling crossed; the document row's reason says which, and the file's references are never checked",
             metadata: &UNSUPPORTED_DOCUMENT,
         },
         UnsupportedTargetKind => {

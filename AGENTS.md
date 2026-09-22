@@ -28,6 +28,8 @@ relevant checks without unrelated Rust builds. Unknown paths take the full code 
   wildcard matches.
 - Comments are rare: one short line for a constraint the code cannot show, never a
   restatement of the code.
+- A function whose body is one line is only a name for one call, so it is not written: the
+  call goes where it is used, and whatever it wrapped is made visible to that caller instead.
 - Serialization belongs to Serde derives and library adapters. Handwritten Serde
   implementations, visitors, field codecs, JSON parsers, and forwarding encode/decode
   helpers are forbidden, including macro-generated substitutes. So are handwritten

@@ -1289,11 +1289,11 @@ pub(crate) fn sole_sites(snapshot: &SnapshotDiscovery) -> BTreeMap<&'static str,
 /// answers for the build rather than for the tree, so widening one would
 /// withhold an answer for a document no site publishes, and those keep the
 /// ancestor walk. The rest can only reach a file the tree already holds.
-fn site_root(snapshot: &SnapshotDiscovery, document: &[u8], rule: &RouteRule) -> Option<Vec<u8>> {
+pub fn site_root(snapshot: &SnapshotDiscovery, path: &[u8], rule: &RouteRule) -> Option<Vec<u8>> {
     let widens = !rule.serves(Spelling::BuiltRoute) && !rule.serves(Spelling::BuiltPage);
     let tree = snapshot.sole_sites.get(rule.name).filter(|_| widens);
-    declared_root(snapshot, document, rule.declared_by)
-        .or_else(|| declared_site(snapshot, document, rule))
+    declared_root(snapshot, path, rule.declared_by)
+        .or_else(|| declared_site(snapshot, path, rule))
         .or_else(|| tree.cloned())
 }
 
