@@ -97,3 +97,16 @@ cargo run -p amiss -- check --repo . --object-format sha1 \
 Exit 0 passes, 1 blocks, 2 means the run could not be trusted. Use `--format json` for
 detail; every finding and error row carries a `description` saying what it means and
 what to do.
+
+A change to discovery, a parser, or the route table also runs the corpus, 56 public
+repositories pinned in `scripts/corpus.tsv`. It clones about 5 GB into the work directory
+and takes a few minutes:
+
+```sh
+cargo build --release -p amiss --locked
+scripts/corpus.sh target/release/amiss ../amiss-corpus
+```
+
+It fails when any repository's counts differ from `scripts/corpus-tripwires.tsv`. A change
+that moves them on purpose reruns it with `--update` and commits the new file, so the moved
+rows are read in review. The weekly `corpus` workflow runs the same check on `main`.
