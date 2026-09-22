@@ -131,7 +131,7 @@ fn descriptors(
             continue;
         };
         scan.charge_document_bytes(u64::try_from(object.body.len()).unwrap_or(u64::MAX))?;
-        record_declaration(&mut declared, path, &object.body);
+        record_declaration(discovery, &mut declared, path, &object.body);
     }
     Ok(declared)
 }
@@ -200,7 +200,12 @@ fn publishes(path: &RepoPath) -> bool {
 }
 
 /// What one descriptor's own bytes say, under the reading its name selects.
-fn record_declaration(declared: &mut Declared, path: RepoPath, body: &[u8]) {
+fn record_declaration(
+    discovery: &SnapshotDiscovery,
+    declared: &mut Declared,
+    path: RepoPath,
+    body: &[u8],
+) {
     if crate::route::declares(&crate::route::ANTORA, &path) {
         if let Some(component) = crate::route::antora_descriptor(body) {
             declared.antora_components.insert(path, component);
@@ -213,14 +218,66 @@ fn record_declaration(declared: &mut Declared, path: RepoPath, body: &[u8]) {
                 .insert(crate::route::directory(path.as_bytes()).to_vec(), suffixes);
         }
     } else if publishes(&path) {
-        let project = crate::route::directory(path.as_bytes());
-        let roots = crate::route::hugo_project(body)
-            .into_iter()
-            .map(|(root, base)| (crate::route::join(project, root.as_bytes()), base))
-            .collect();
-        declared.published_roots.insert(project.to_vec(), roots);
+        record_publication(discovery, declared, path, body);
     } else if let Some(router) = crate::route::declared_router(body) {
         declared.routers.insert(path, router);
+    }
+}
+
+/// What one generator configuration says. A name several generators share
+/// belongs to the rule its bindings select, and to none where they select
+/// nothing. Hugo's rule withholds answers rather than adding them, so under a
+/// shared name it also needs the content directory the file names to sit
+/// beside it, the way Zola's reading needs its own. A Hugo configuration names
+/// the content roots of the project it declares, which is the directory its
+/// name is read against.
+fn record_publication(
+    discovery: &SnapshotDiscovery,
+    declared: &mut Declared,
+    path: RepoPath,
+    body: &[u8],
+) {
+    let Some(name) = crate::route::HUGO
+        .declared_by
+        .iter()
+        .filter(|name| crate::route::declaring_directory(path.as_bytes(), name).is_some())
+        .max_by_key(|name| name.len())
+    else {
+        return;
+    };
+    let shared = crate::route::SHARED_CONFIGS.contains(name);
+    let rule = if shared {
+        crate::route::addressed_rule(body)
+    } else {
+        Some(&crate::route::HUGO)
+    };
+    let Some(rule) = rule else {
+        return;
+    };
+    let project = crate::route::declaring_directory(path.as_bytes(), name)
+        .unwrap_or_default()
+        .to_vec();
+    let roots: Vec<(Vec<u8>, String)> = crate::route::hugo_project(body)
+        .into_iter()
+        .map(|(root, base)| (crate::route::join(&project, root.as_bytes()), base))
+        .collect();
+    let hugo = rule.name == crate::route::HUGO.name;
+    let content = roots.iter().any(|(root, _)| {
+        RepoPath::from_bytes(root.clone()).is_some_and(|root| {
+            matches!(
+                discovery.locate(&root),
+                Some(Located::ImpliedTree | Located::Entry(GitMode::Tree, _))
+            )
+        })
+    });
+    if shared && hugo && !content {
+        return;
+    }
+    if shared {
+        declared.bound_configs.insert(path, rule.declared_by);
+    }
+    if hugo {
+        declared.published_roots.insert(project, roots);
     }
 }
 
@@ -233,6 +290,7 @@ struct Declared {
     source_suffixes: BTreeMap<Vec<u8>, BTreeSet<String>>,
     routers: BTreeMap<RepoPath, (String, Option<String>)>,
     published_roots: BTreeMap<Vec<u8>, Vec<(Vec<u8>, String)>>,
+    bound_configs: BTreeMap<RepoPath, &'static [&'static str]>,
 }
 
 /// Every document a page of a Sphinx tree renders in place of an include, and
@@ -312,6 +370,8 @@ pub struct SnapshotDiscovery {
     /// Each content root a generator's own configuration names, and the path
     /// its site is served under.
     pub published_roots: BTreeMap<Vec<u8>, Vec<(Vec<u8>, String)>>,
+    /// The names of the rule each configuration under a shared name selects.
+    pub bound_configs: BTreeMap<RepoPath, &'static [&'static str]>,
 }
 
 /// What the snapshot's documents say about one `.. _name:` label: the one
@@ -415,6 +475,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         source_suffixes: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
         published_roots: BTreeMap::new(),
+        bound_configs: BTreeMap::new(),
     }
 }
 
@@ -733,6 +794,7 @@ pub(crate) fn discover_walk(
         discovery.source_suffixes = declared.source_suffixes;
         discovery.declared_routers = declared.routers;
         discovery.published_roots = declared.published_roots;
+        discovery.bound_configs = declared.bound_configs;
         let context = DocumentContext {
             repo,
             includes,
@@ -801,6 +863,7 @@ pub fn discover_index(
     discovery.source_suffixes = declared.source_suffixes;
     discovery.declared_routers = declared.routers;
     discovery.published_roots = declared.published_roots;
+    discovery.bound_configs = declared.bound_configs;
     declared_documents(&context, git, scan, &mut discovery)?;
     settle_comments(&mut discovery);
     (discovery.published_routes, discovery.redirect_routes) =

@@ -1127,6 +1127,44 @@ fn a_docusaurus_site_reads_the_comment_mdx_refuses() {
     assert_eq!(outcomes(&chain), expected(want));
 }
 
+/// A configuration file under a name Hugo shares is Hugo's where it binds
+/// `baseURL` beside the content it reads, and a file under `config/_default`
+/// is Hugo's by where it sits. There a relative link only a built page answers
+/// is the build's to answer. A `baseURL` with no content beside it, and a
+/// file binding no address, configure no site, so the same link is missing.
+#[test]
+fn a_shared_configuration_name_is_hugo_only_where_its_bindings_say_so() {
+    let chain = amiss_fixtures::staged_repository(&amiss_fixtures::HUGO_CONFIG_SPELLINGS)
+        .expect("the fixture stages");
+    let want: Vec<Outcome> = vec![
+        row(
+            "site/content/docs/page.md",
+            Some("site/content/b"),
+            ResolutionTag::UnsupportedSemantics,
+            None,
+        ),
+        row(
+            "nested/content/docs/page.md",
+            Some("nested/content/b"),
+            ResolutionTag::UnsupportedSemantics,
+            None,
+        ),
+        row(
+            "tool/docs/page.md",
+            Some("tool/b"),
+            ResolutionTag::Missing,
+            Some("tool/b"),
+        ),
+        row(
+            "plain/content/docs/page.md",
+            Some("plain/content/b"),
+            ResolutionTag::Missing,
+            Some("plain/content/b"),
+        ),
+    ];
+    assert_eq!(outcomes(&chain), expected(want));
+}
+
 /// The page-URL reading answers to one name. `directory-pages` says the site
 /// publishes a page at a directory of its own name, whatever generator builds
 /// it, and the generator name that used to say it declares no rule, so the

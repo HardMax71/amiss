@@ -548,6 +548,7 @@ fn bound_adapter_answers_only_policy_included_rows() {
         source_suffixes: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
         published_roots: BTreeMap::new(),
+        bound_configs: BTreeMap::new(),
     };
     assert_eq!(
         snapshot.bound_adapter(&path("man/g.txt")),

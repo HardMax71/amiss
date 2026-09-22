@@ -122,9 +122,26 @@ const ELEVENTY: RouteRule = RouteRule {
 
 pub(crate) const HUGO: RouteRule = RouteRule {
     name: "hugo",
-    declared_by: &["hugo.toml", "hugo.yaml"],
+    declared_by: &[
+        "hugo.toml",
+        "hugo.yaml",
+        "hugo.json",
+        "config.toml",
+        "config.yaml",
+        "config.json",
+        "config/_default/hugo.toml",
+        "config/_default/hugo.yaml",
+        "config/_default/hugo.json",
+        "config/_default/config.toml",
+        "config/_default/config.yaml",
+        "config/_default/config.json",
+    ],
     serves: &[Spelling::BuiltRoute],
 };
+
+/// The names more than one generator is configured under, which select a rule
+/// only where what the file binds says whose it is.
+pub(crate) const SHARED_CONFIGS: [&str; 3] = ["config.toml", "config.yaml", "config.json"];
 
 const JEKYLL: RouteRule = RouteRule {
     name: "jekyll",
@@ -1249,9 +1266,22 @@ fn declaring_directories(snapshot: &SnapshotDiscovery, rule: &RouteRule) -> BTre
         .filter(|(path, (mode, _))| {
             matches!(mode, GitMode::RegularFile | GitMode::ExecutableFile)
                 && !excluded_by_built_in(path.as_bytes())
-                && declares(rule, path)
         })
-        .map(|(path, _)| directory(path.as_bytes()).to_vec())
+        .filter_map(|(path, _)| {
+            let name = rule
+                .declared_by
+                .iter()
+                .filter(|name| declaring_directory(path.as_bytes(), name).is_some())
+                .max_by_key(|name| name.len())?;
+            let bound = !SHARED_CONFIGS.contains(name)
+                || snapshot
+                    .bound_configs
+                    .get(path)
+                    .is_some_and(|owner| *owner == rule.declared_by);
+            declaring_directory(path.as_bytes(), name)
+                .filter(|_| bound)
+                .map(<[u8]>::to_vec)
+        })
         .collect()
 }
 
@@ -1351,7 +1381,42 @@ pub fn declarable(rule: &RouteRule) -> bool {
 pub(crate) fn declares(rule: &RouteRule, path: &RepoPath) -> bool {
     rule.declared_by
         .iter()
-        .any(|name| path.as_bytes().rsplit(|byte| *byte == b'/').next() == Some(name.as_bytes()))
+        .any(|name| declaring_directory(path.as_bytes(), name).is_some())
+}
+
+/// The directory a file declares its rule from, where its path spells one of
+/// the rule's names: the name is read against that directory, so a file under
+/// `config/_default` declares the project two levels above it.
+pub(crate) fn declaring_directory<'a>(path: &'a [u8], name: &str) -> Option<&'a [u8]> {
+    let above = path.strip_suffix(name.as_bytes())?;
+    if above.is_empty() {
+        Some(above)
+    } else {
+        above.strip_suffix(b"/")
+    }
+}
+
+/// The rule a configuration under a shared name belongs to, by the key it
+/// binds for its site's address: Hugo reads `baseURL` in any case, and Zola
+/// reads `base_url`. A file binding neither configures no site.
+#[must_use]
+pub(crate) fn addressed_rule(source: &[u8]) -> Option<&'static RouteRule> {
+    let project = project_lines(source);
+    let binds = |key: &[u8]| {
+        project.iter().any(|line| {
+            let rest = line.get(key.len()..).map(<[u8]>::trim_ascii_start);
+            line.get(..key.len())
+                .is_some_and(|head| head.eq_ignore_ascii_case(key))
+                && matches!(rest.and_then(<[u8]>::first), Some(b'=' | b':'))
+        })
+    };
+    if binds(b"base_url") {
+        Some(&ZOLA)
+    } else if binds(b"baseurl") {
+        Some(&HUGO)
+    } else {
+        None
+    }
 }
 
 /// What a document declares about its own publication in frontmatter: the
@@ -1622,9 +1687,14 @@ pub(crate) fn declared_root(
     declared_by: &[&str],
 ) -> Option<Vec<u8>> {
     ancestor_root(document, &|directory| {
-        declared_by
-            .iter()
-            .any(|name| regular_file(snapshot, join(directory, name.as_bytes())))
+        declared_by.iter().any(|name| {
+            let path = join(directory, name.as_bytes());
+            let bound = !SHARED_CONFIGS.contains(name)
+                || RepoPath::from_bytes(path.clone())
+                    .and_then(|path| snapshot.bound_configs.get(&path))
+                    .is_some_and(|owner| *owner == declared_by);
+            bound && regular_file(snapshot, path)
+        })
     })
 }
 

@@ -65,7 +65,7 @@ wherever their profile is.
 | `mkdocs-directive` | a `:::` line naming what a generator renders, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `mkdocs-shortcode` | an HTML comment naming a hook's shortcode, `<!-- md:name -->` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `mkdocs-content-tab` | a content tab opening a quoted title, `=== "Title"` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
-| `hugo-shortcode` | a shortcode call alone on its line, `{{% name %}}` or `{{< name >}}` | `markdown` | `hugo.toml`, `hugo.yaml` |
+| `hugo-shortcode` | a shortcode call alone on its line, `{{% name %}}` or `{{< name >}}` | `markdown` | `hugo.toml`, `hugo.yaml`, `hugo.json`, `config.toml`, `config.yaml`, `config.json`, `config/_default/hugo.toml`, `config/_default/hugo.yaml`, `config/_default/hugo.json`, `config/_default/config.toml`, `config/_default/config.yaml`, `config/_default/config.json` |
 | `myst-target` | a target alone on its line, `(name)=` | `markdown` | any tree |
 | `myst-directive-name` | a directive's `:name:` option, or a `figure-md` opener's argument | `markdown`, `rst` | any tree |
 | `myst-glossary` | a term of a definition list opening with `{.glossary}` | `markdown` | any tree |
@@ -226,8 +226,8 @@ renders inside that sentence and can open neither a heading nor a term. Both mar
 the `{{% %}}` form whose output is rendered as Markdown and the `{{< >}}` form whose output
 is raw HTML, because a heading can arrive through either. That tree does not separate the
 two readings: none of the eighteen pages whose only call is inline is anchored into at all,
-so the narrow rule is the smaller claim rather than the measured one. Without `hugo.toml` or
-`hugo.yaml` above the document a pair of braces is a pair of braces.
+so the narrow rule is the smaller claim rather than the measured one. Without a Hugo
+configuration above the document a pair of braces is a pair of braces.
 
 `myst-target` and `myst-role` are the two MyST spellings, which is how a Sphinx project
 writes its pages in Markdown. `(name)=` alone on its line is the target: the renderer writes

@@ -8,15 +8,19 @@ babel	pass	186	0	143	42	349
 bat	pass	17	0	92	0	21
 biome	pass	115	3	240	102	100
 click	pass	53	0	45	957	0
+cncf-glossary	pass	963	0	2239	419	4
 comprehensive-rust	pass	584	0	700	0	7
+containerd.io	pass	9	0	7	3	1
 content	incomplete:OUTPUT_LIMIT_EXCEEDED	0	0	0	0	0
 django	pass	686	0	2347	10	31
 docsify	pass	29	0	105	5	10
 docusaurus	pass	1545	0	5914	852	33
 eleventy-site	pass	231	0	185	922	25
+etcd-website	pass	730	0	658	20	0
 fastapi	pass	1665	0	1808	1633	40
 flask	pass	85	0	160	0	0
 grafana	pass	1164	0	2200	2774	564
+grpc.io	pass	188	0	81	193	0
 helix	pass	51	0	211	2	10
 httpx	pass	29	0	41	0	7
 hugoDocs	pass	1006	0	3209	591	0
@@ -32,6 +36,7 @@ myst-parser	pass	32	0	196	29	3
 nextra	pass	243	2	20	224	5
 numpy	pass	627	0	722	7	16
 ohmyzsh	pass	387	7	155	0	7
+opentelemetry.io	pass	2019	5	3095	7274	16
 prettier	pass	147	0	180	18	1
 pydantic	pass	99	1	502	0	1
 pydantic-settings	pass	2	0	11	0	10

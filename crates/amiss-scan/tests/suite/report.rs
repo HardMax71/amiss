@@ -674,6 +674,7 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
         source_suffixes: std::collections::BTreeMap::new(),
         declared_routers: std::collections::BTreeMap::new(),
         published_roots: std::collections::BTreeMap::new(),
+        bound_configs: std::collections::BTreeMap::new(),
         documents: paths
             .iter()
             .map(|path| DocumentRecord {

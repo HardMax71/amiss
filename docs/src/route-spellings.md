@@ -95,7 +95,7 @@ is how sphinx's own repository carries 176 `conf.py` and declares one site.
 | `zola` | `config.toml` | `content-root` |
 | `astro` | `astro.config.ts`, `astro.config.mts`, `astro.config.js`, `astro.config.mjs`, `astro.config.cjs` | `built-route` |
 | `eleventy` | `eleventy.config.ts`, `eleventy.config.js`, `eleventy.config.mjs`, `eleventy.config.cjs`, `.eleventy.js` | `built-route` |
-| `hugo` | `hugo.toml`, `hugo.yaml` | `built-route` |
+| `hugo` | `hugo.toml`, `hugo.yaml`, `hugo.json`, `config.toml`, `config.yaml`, `config.json`, `config/_default/hugo.toml`, `config/_default/hugo.yaml`, `config/_default/hugo.json`, `config/_default/config.toml`, `config/_default/config.yaml`, `config/_default/config.json` | `built-route` |
 | `jekyll` | `_config.yml` | `built-route` |
 <!-- amiss-doc-contract:declared-routers:end -->
 
@@ -374,14 +374,23 @@ in a crate README.
 Zola is modelled through the one prefix it spells. `@/` opens a path from the `content`
 directory beside `config.toml`, so `@/documentation/page.md` in Zola's own repository is
 `docs/content/documentation/page.md`, and 59 of its 80 missing targets resolve that way while
-the other 21 stay the dangling theme files they are. That directory is also how a Zola
-configuration is told from a Hugo one: both may be called `config.toml` and the name says
-nothing, so Hugo is read from `hugo.toml` or `hugo.yaml`, the spelling it has preferred since
-0.110, and a bare `config.toml` is read as Zola's only when a `content` directory sits beside
-it. A Rust workspace's `.cargo/config.toml` has no content directory beside it, so it anchors
-nothing and ripgrep, bat and helix keep every claim they had. Where a tree spells only
-`config.toml`, the Zola reading wins, since it can add an answer and can never take a claim
-away.
+the other 21 stay the dangling theme files they are.
+
+A `config.toml` may be Zola's or Hugo's, and a `config.yaml` or `config.json` may be Hugo's or
+any other tool's, so the name says nothing and the file's own bindings decide. Zola requires
+`base_url` and Hugo reads `baseURL` in any case, so a file binding the first is Zola's and one
+binding the second is Hugo's. A Rust workspace's `.cargo/config.toml` binds neither, so it
+configures nothing and ripgrep, bat and helix keep every claim they had. Hugo's rule withholds
+answers rather than adding them, so under a shared name it also needs the content directory
+the file names, `content` where it names none, to sit beside it, the way the Zola reading
+needs its own. A file under `config/_default` is Hugo's by where it sits, and it declares the
+project two directories above it.
+
+Those older spellings are common. Of eight Hugo sites checked on 2026-09-22 only three used
+`hugo.toml` or `hugo.yaml`: etcd.io and grpc.io configure in `config.yaml`, the CNCF glossary
+and containerd.io in `config.toml`, and opentelemetry.io in `config/_default`. Read as the Hugo
+sites they are, those five go from 3,373 claims to 21, most of them relative links that work
+because Hugo serves every page at a directory of its own, and etcd's 945 fall to none.
 
 Jekyll's permalink template is what this leaves undone. `docs/_config.yml` in Jekyll's own
 repository sets `permalink: "/:collection/:path/"`, every page URL then ends in a slash, and a
