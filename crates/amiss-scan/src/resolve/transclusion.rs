@@ -178,31 +178,43 @@ impl Expansion<'_, '_> {
 fn followed(transclusions: &[Transclusion]) -> Vec<&Transclusion> {
     transclusions
         .iter()
-        .filter(|entry| entry.kind != Err(TransclusionRefusal::Template))
+        .filter(|entry| {
+            !matches!(
+                entry.kind,
+                Err(TransclusionRefusal::Template | TransclusionRefusal::Liquid)
+            )
+        })
         .collect()
 }
 
 /// Whether a template writes part of this document. A Hugo shortcode is
 /// answered by a layout rather than by a file, so a page that calls one holds
 /// headings and terms this engine cannot see, and its identity set is as far
-/// from enumerable as a generator directive leaves one. Outside a tree that
-/// declares Hugo the same line is the text it looks like.
+/// from enumerable as a generator directive leaves one. Eleventy's Liquid in a
+/// heading is the same case. Outside a tree that declares the generator the
+/// same spelling is the text it looks like.
 pub(super) fn templated(
     snapshot: &SnapshotDiscovery,
     adapter: Adapter,
     document: &RepoPath,
     transclusions: &[Transclusion],
 ) -> bool {
-    crate::anchor::HUGO_SHORTCODE.adapters.contains(&adapter)
-        && transclusions
-            .iter()
-            .any(|entry| entry.kind == Err(TransclusionRefusal::Template))
-        && crate::route::declared_root(
-            snapshot,
-            document.as_bytes(),
-            crate::route::HUGO.declared_by,
-        )
-        .is_some()
+    [
+        (crate::anchor::HUGO_SHORTCODE, TransclusionRefusal::Template),
+        (
+            crate::anchor::ELEVENTY_TEMPLATE,
+            TransclusionRefusal::Liquid,
+        ),
+    ]
+    .iter()
+    .any(|(rule, refusal)| {
+        rule.adapters.contains(&adapter)
+            && transclusions
+                .iter()
+                .any(|entry| entry.kind == Err(*refusal))
+            && crate::route::declared_root(snapshot, document.as_bytes(), rule.declared_by)
+                .is_some()
+    })
 }
 
 /// The documents one document renders in place of its own includes, which is

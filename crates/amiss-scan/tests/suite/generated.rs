@@ -148,7 +148,9 @@ fn a_declared_plugin_leaves_the_identity_set_incomplete() {
 /// wherever the link sits. The page keeps every heading it writes itself, a
 /// page under the same site that calls nothing still proves absence, a call in
 /// the flow of a sentence leaves the set enumerable, and the same page outside
-/// the site is read as the text it looks like.
+/// the site is read as the text it looks like. A call inside a heading writes
+/// that heading's text, unless the heading sets its own id, and Eleventy's
+/// Liquid in a heading is read the same way under its own configuration only.
 #[test]
 fn a_hugo_shortcode_leaves_the_identity_set_incomplete() {
     let rows = answers(&amiss_fixtures::hugo_shortcodes().expect("the fixture stages"));
@@ -170,6 +172,11 @@ fn a_hugo_shortcode_leaves_the_identity_set_incomplete() {
         (("README.md".to_owned(), 5), absent),
         (("README.md".to_owned(), 7), absent),
         (("README.md".to_owned(), 9), absent),
+        (("README.md".to_owned(), 11), boundary),
+        (("README.md".to_owned(), 13), absent),
+        (("README.md".to_owned(), 15), published),
+        (("README.md".to_owned(), 17), boundary),
+        (("README.md".to_owned(), 19), absent),
         ((store.to_owned(), 3), boundary),
         (("outside/Store.md".to_owned(), 3), absent),
     ]);

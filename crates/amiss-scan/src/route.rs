@@ -108,7 +108,7 @@ const ASTRO: RouteRule = RouteRule {
     serves: &[Spelling::BuiltRoute],
 };
 
-const ELEVENTY: RouteRule = RouteRule {
+pub(crate) const ELEVENTY: RouteRule = RouteRule {
     name: "eleventy",
     declared_by: &[
         "eleventy.config.ts",

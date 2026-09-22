@@ -140,14 +140,17 @@ const MKDOCS_GENERATED: [(&str, Staged<'static>); 9] = [
 /// own; `Get.md` writes the same call in the flow of a sentence; `guide.md`
 /// calls nothing. `README.md` links each of those and the same `Store.md`
 /// copied to `outside/`, where no `hugo.toml` governs the spelling.
-const HUGO_SHORTCODES: [(&str, Staged<'static>); 6] = [
+const HUGO_SHORTCODES: [(&str, Staged<'static>); 11] = [
     (
         "README.md",
         Staged::File(
             b"[a](site/content/methods/Store.md#scope)\n\n\
               [b](site/content/methods/Store.md#determinate-values)\n\n\
               [c](site/content/guide.md#absent)\n\n[d](outside/Store.md#scope)\n\n\
-              [e](site/content/methods/Get.md#absent)\n",
+              [e](site/content/methods/Get.md#absent)\n\n\
+              [f](site/content/cli/kubelet.md#options)\n\n\
+              [g](site/content/cli/flags.md#absent)\n\n[h](site/content/cli/flags.md#flags)\n\n\
+              [i](eleventy/docs/copy.md#copy-a-file)\n\n[j](outside/copy.md#copy-a-file)\n",
         ),
     ),
     (
@@ -161,7 +164,25 @@ const HUGO_SHORTCODES: [(&str, Staged<'static>); 6] = [
     ),
     ("site/content/guide.md", Staged::File(b"# Guide\n")),
     ("outside/Store.md", Staged::File(STORE)),
+    (
+        "site/content/cli/kubelet.md",
+        Staged::File(b"# kubelet\n\n## {{% heading \"options\" %}}\n\nText.\n"),
+    ),
+    (
+        "site/content/cli/flags.md",
+        Staged::File(b"# Flags\n\n## {{% heading \"options\" %}} {#flags}\n\nText.\n"),
+    ),
+    (
+        "eleventy/eleventy.config.js",
+        Staged::File(b"export default function () {}\n"),
+    ),
+    ("eleventy/docs/copy.md", Staged::File(COPY)),
+    ("outside/copy.md", Staged::File(COPY)),
 ];
+
+/// A heading a Liquid tag finishes, written under an Eleventy tree and outside
+/// one.
+const COPY: &[u8] = b"# Copy\n\n## Copy a file {% addedin \"3.1.0\" %}\n\nText.\n";
 
 /// One page written twice, once under the site and once outside it, so the
 /// only thing between the two readings is the declaration above the document.
