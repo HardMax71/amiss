@@ -12,8 +12,8 @@ test = false
 
 [dependencies]
 sha2.workspace = true
-amiss-git = { path = "../amiss-git", version = "0.32.4" }
-amiss-wire = { path = "../amiss-wire", version = "0.32.4" }
+amiss-git = { path = "../amiss-git", version = "0.33.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.33.0" }
 serde_json_canonicalizer.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true

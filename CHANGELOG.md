@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0](https://github.com/HardMax71/amiss/compare/v0.32.4...v0.33.0) - 2026-09-22
+
+### Changes
+
+- read the HTML comment Docusaurus reads
+- say when a document's markup will not parse, not that it will not decode
+- read the content root a module mount names
+- read the content root each language table names
+- read the content root and base a site's own configuration names
+- read a dotted relative docname as the docname it is
+- read JSX text as prose, not as JavaScript
+
 ## [0.32.4](https://github.com/HardMax71/amiss/compare/v0.32.3...v0.32.4) - 2026-09-21
 
 ### Changes
