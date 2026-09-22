@@ -1111,6 +1111,22 @@ fn a_module_mount_names_the_content_root_a_directory_key_would_have() {
     assert_eq!(outcomes(&chain), expected(want));
 }
 
+/// A Docusaurus site reads an HTML comment the MDX grammar refuses, so the
+/// page it holds is read and a link inside the comment is not. The same page
+/// in a tree no site holds stays refused and contributes nothing.
+#[test]
+fn a_docusaurus_site_reads_the_comment_mdx_refuses() {
+    let chain = amiss_fixtures::staged_repository(&amiss_fixtures::DOCUSAURUS_COMMENTS)
+        .expect("the fixture stages");
+    let want: Vec<Outcome> = vec![row(
+        "site/docs/page.mdx",
+        Some("site/docs/guide.md"),
+        ResolutionTag::Resolved,
+        Some("site/docs/guide.md"),
+    )];
+    assert_eq!(outcomes(&chain), expected(want));
+}
+
 /// The page-URL reading answers to one name. `directory-pages` says the site
 /// publishes a page at a directory of its own name, whatever generator builds
 /// it, and the generator name that used to say it declares no rule, so the

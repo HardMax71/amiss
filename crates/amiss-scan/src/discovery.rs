@@ -10,6 +10,7 @@ use amiss_wire::model::{Adapter, Oid, RepoPath};
 use crate::document::{Classification, classify, excluded_by_built_in, native_adapter};
 use crate::policy::Includes;
 use crate::resources::{ScanIdentity, ScanMemo, ScanResources, crossing};
+use crate::route::DOCUSAURUS;
 use crate::scan::{Scanned, ScannedOccurrence, replay_scan_charges, scan_bytes};
 use crate::{Error, GitDefect, lfs};
 
@@ -133,6 +134,46 @@ fn descriptors(
         record_declaration(&mut declared, path, &object.body);
     }
     Ok(declared)
+}
+
+/// A scan the MDX grammar refused, tried again with each HTML comment it
+/// rejected read as a comment, which is how a Docusaurus site reads it. The
+/// result is marked, since only a site that reads comments keeps it once the
+/// sites are known. Any other defect, and a source still refused, stands.
+fn commented(
+    scan: &mut ScanResources,
+    adapter: Adapter,
+    source: &[u8],
+    defect: Error,
+) -> Result<Scanned, Error> {
+    let refused = adapter == Adapter::Mdx && defect == Error::Parse(Fault::DocumentUnparsable);
+    let Some(read) = refused.then(|| amiss_md::comments_read(source)).flatten() else {
+        return Err(defect);
+    };
+    let mut scanned = scan_bytes(scan, adapter, &read)?;
+    scanned.commented = true;
+    Ok(scanned)
+}
+
+/// A document only its HTML comments made readable stays read where a
+/// Docusaurus site holds it and is refused anywhere else. The walk that read
+/// it could not yet ask which site holds it.
+fn settle_comments(discovery: &mut SnapshotDiscovery) {
+    let refused: Vec<usize> = discovery
+        .documents
+        .iter()
+        .enumerate()
+        .filter(|(_, record)| {
+            matches!(&record.status, DocumentStatus::Scanned(scanned) if scanned.commented)
+                && crate::route::site_root(discovery, record.path.as_bytes(), &DOCUSAURUS).is_none()
+        })
+        .map(|(index, _)| index)
+        .collect();
+    for index in refused {
+        if let Some(record) = discovery.documents.get_mut(index) {
+            record.status = DocumentStatus::Unsupported(UnsupportedKind::Unparsable);
+        }
+    }
 }
 
 /// Whether a path is one of the four files read for what it declares. A
@@ -698,6 +739,7 @@ pub(crate) fn discover_walk(
             scope: *scope,
         };
         declared_documents(&context, git, scan, &mut discovery)?;
+        settle_comments(&mut discovery);
     }
     (discovery.published_routes, discovery.redirect_routes) =
         crate::route::published_routes(&discovery);
@@ -760,6 +802,7 @@ pub fn discover_index(
     discovery.declared_routers = declared.routers;
     discovery.published_roots = declared.published_roots;
     declared_documents(&context, git, scan, &mut discovery)?;
+    settle_comments(&mut discovery);
     (discovery.published_routes, discovery.redirect_routes) =
         crate::route::published_routes(&discovery);
     settle_roles(scan, &mut discovery)?;
@@ -876,6 +919,7 @@ fn side_status(
             ));
         };
         let scanned = scan_bytes(scan, identity.adapter, &object.body)
+            .or_else(|defect| commented(scan, identity.adapter, &object.body, defect))
             .map(Arc::new)
             .inspect(|scanned| {
                 scan.scans.insert(

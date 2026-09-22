@@ -6,7 +6,7 @@ pub mod lines;
 pub mod profile;
 mod tree;
 
-pub use accounting::charge;
+pub use accounting::{charge, comments_read};
 pub use amiss_wire::extraction::{
     Analysis, AnalyzeError, BlockKind, Extraction, Fault, GovernedDefinition, Heading,
     HeadingAttribute, HeadingSource, Occurrence, Opaque, Transclusion, TransclusionKind,

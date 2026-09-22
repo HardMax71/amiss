@@ -101,6 +101,54 @@ pub(crate) fn parsed(
     Ok(Some((tree, suffix_offset, suffix, spent)))
 }
 
+/// The source Docusaurus hands its MDX compiler, which reads an HTML comment
+/// the MDX grammar refuses. The parser names the byte it rejected, and only a
+/// comment opening there is blanked, so a comment inside code, which never
+/// reaches the grammar, stays as written. Blanking keeps every newline, so
+/// each other byte keeps its line and column. `None` when nothing needed
+/// reading or the source still does not parse once its comments are read.
+#[must_use]
+pub fn comments_read(source: &[u8]) -> Option<Vec<u8>> {
+    let suffix_offset = frontmatter::recognize(source).map_or(0, |region| region.suffix_offset);
+    let mut read = source.to_vec();
+    let mut blanked = false;
+    loop {
+        let text = str::from_utf8(read.get(suffix_offset..)?).ok()?;
+        let (options, _meter) = mdx_options(u64::MAX);
+        let Err(rejected) = guarded(|| to_mdast(text, &options)).ok()? else {
+            return blanked.then_some(read);
+        };
+        let open = rejected_at(&rejected)?
+            .checked_add(suffix_offset)?
+            .checked_sub(1)?;
+        let comment = read.get(open..)?;
+        if !comment.starts_with(COMMENT_OPEN) {
+            return None;
+        }
+        let close = comment
+            .windows(COMMENT_CLOSE.len())
+            .position(|window| window == COMMENT_CLOSE)?
+            .checked_add(COMMENT_CLOSE.len())?;
+        for byte in read.get_mut(open..open.checked_add(close)?)? {
+            if !matches!(*byte, b'\n' | b'\r') {
+                *byte = b' ';
+            }
+        }
+        blanked = true;
+    }
+}
+
+const COMMENT_OPEN: &[u8] = b"<!--";
+const COMMENT_CLOSE: &[u8] = b"-->";
+
+/// The byte a rejection names, which for a comment is the `!` after its `<`.
+fn rejected_at(rejected: &markdown::message::Message) -> Option<usize> {
+    match rejected.place.as_deref()? {
+        markdown::message::Place::Point(point) => Some(point.offset),
+        markdown::message::Place::Position(position) => Some(position.start.offset),
+    }
+}
+
 fn guarded<T>(parse: impl FnOnce() -> T) -> Result<T, Fault> {
     catch_unwind(AssertUnwindSafe(parse)).map_err(|_panic| Fault::ParserPanic)
 }

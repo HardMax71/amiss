@@ -148,6 +148,7 @@ fn construct_reports(bencher: Bencher<'_, '_>, case: (ReportShape, usize)) {
                 declared_anchors: Vec::new(),
                 declared_name: None,
                 declared_redirects: Vec::new(),
+                commented: false,
                 anchor_source: None,
             });
             (
