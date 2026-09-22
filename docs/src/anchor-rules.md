@@ -48,10 +48,10 @@ carried rather than one being chosen for the reader.
 An identity can also be written down rather than left to a heading's slug, and then it
 belongs to the author or to a construct no heading rule reads. Each of these spellings
 joins the union for every renderer, because accepting an identity a given renderer would
-not publish can only leave a finding unreported, never invent one. Six of the rows write
+not publish can only leave a finding unreported, never invent one. Seven of the rows write
 down no identity: they are the spellings a declared generator, hook, extension or layout
-owns, four saying the page's identities are built elsewhere and two naming a reference.
-Seven rows are gated on a file in the tree, the way the route rules are; the rest are read
+owns, five saying the page's identities are built elsewhere and two naming a reference.
+Eight rows are gated on a file in the tree, the way the route rules are; the rest are read
 wherever their profile is.
 
 <!-- amiss-doc-contract:declared-identities:start -->
@@ -65,7 +65,8 @@ wherever their profile is.
 | `mkdocs-directive` | a `:::` line naming what a generator renders, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `mkdocs-shortcode` | an HTML comment naming a hook's shortcode, `<!-- md:name -->` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `mkdocs-content-tab` | a content tab opening a quoted title, `=== "Title"` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
-| `hugo-shortcode` | a shortcode call alone on its line, `{{% name %}}` or `{{< name >}}` | `markdown` | `hugo.toml`, `hugo.yaml`, `hugo.json`, `config.toml`, `config.yaml`, `config.json`, `config/_default/hugo.toml`, `config/_default/hugo.yaml`, `config/_default/hugo.json`, `config/_default/config.toml`, `config/_default/config.yaml`, `config/_default/config.json` |
+| `hugo-shortcode` | a shortcode call alone on its line or anywhere in a heading, `{{% name %}}` or `{{< name >}}` | `markdown` | `hugo.toml`, `hugo.yaml`, `hugo.json`, `config.toml`, `config.yaml`, `config.json`, `config/_default/hugo.toml`, `config/_default/hugo.yaml`, `config/_default/hugo.json`, `config/_default/config.toml`, `config/_default/config.yaml`, `config/_default/config.json` |
+| `eleventy-template` | a Liquid tag or output anywhere in a heading, `{% name %}` or `{{ name }}` | `markdown` | `eleventy.config.ts`, `eleventy.config.js`, `eleventy.config.mjs`, `eleventy.config.cjs`, `.eleventy.js` |
 | `myst-target` | a target alone on its line, `(name)=` | `markdown` | any tree |
 | `myst-directive-name` | a directive's `:name:` option, or a `figure-md` opener's argument | `markdown`, `rst` | any tree |
 | `myst-glossary` | a term of a definition list opening with `{.glossary}` | `markdown` | any tree |
@@ -228,6 +229,22 @@ is raw HTML, because a heading can arrive through either. That tree does not sep
 two readings: none of the eighteen pages whose only call is inline is anchored into at all,
 so the narrow rule is the smaller claim rather than the measured one. Without a Hugo
 configuration above the document a pair of braces is a pair of braces.
+
+A call inside a heading is the exception to the block rule, because it writes part of that
+heading's text, and a renderer slugs the identity from the text it was given. The Kubernetes
+website titles its closing sections `## {{% heading "whatsnext" %}}`, which the site renders
+in each page's own language, so no spelling in the tree names what that heading publishes.
+Reading it moves 38 of that site's claims to undecided. Seventeen named the templated headings
+themselves and were wrong. The other 21 name headings a translation never wrote, so they are
+almost certainly broken, and they go undecided with the rest of the page, the same price the
+block rule pays. A heading that sets its own id with `{#id}` keeps that id and says nothing
+about the rest.
+`eleventy-template` is the same reading for Eleventy, which renders a Markdown page through
+Liquid before Markdown sees it: `## Passthrough File Copy {% addedin "0.2.14" %}` and a `## {{ t }}`
+a loop repeats are headings a template finishes, and all seven claims the rule moves on the
+Eleventy site were wrong. Liquid is read only under an Eleventy
+configuration and a shortcode only under a Hugo one, so a brace in a heading anywhere else
+is part of the text it slugs.
 
 `myst-target` and `myst-role` are the two MyST spellings, which is how a Sphinx project
 writes its pages in Markdown. `(name)=` alone on its line is the target: the renderer writes
