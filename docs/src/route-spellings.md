@@ -430,6 +430,16 @@ between headings written as a shortcode and translated pages whose prose kept th
 anchor while the heading above it was translated, which are breaks a translation workflow
 tolerates.
 
+A comparison reads this configuration the way it reads a declaration, with one difference.
+A site the candidate newly configures is lent to the base, so the commit that first binds
+`baseURL` is not charged with the anchors the binding makes readable: those links were broken
+before it and stay pre-existing. A site the base already configures keeps its own
+configuration on each side. Pointing `contentDir` at another directory changes what every
+route reaches, so a link that resolved before and misses now is introduced by the commit that
+moved it. A declaration can be read under the candidate's alone because dropping or replacing
+one is reported as a control finding of its own; a configuration file has no such report, so
+only what the candidate adds is shared.
+
 ## What a repository declares about its own build
 
 Every rule so far is selected by a file in the tree, so a repository that keeps no

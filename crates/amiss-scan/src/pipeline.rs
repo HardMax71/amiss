@@ -625,7 +625,7 @@ fn evaluate_tree(
     forge: Option<&ForgeContext>,
     semantic: crate::semantic::View<'_>,
     includes: &crate::policy::Includes,
-    declared: Option<&BTreeMap<RepoPath, (String, Option<String>)>>,
+    declared: Option<&SnapshotDiscovery>,
     tree: (Oid, SnapshotIdentity),
     candidate: Option<CandidateEvaluation<'_>>,
 ) -> Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail> {
