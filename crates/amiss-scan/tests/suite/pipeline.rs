@@ -2555,6 +2555,89 @@ fn adopting_a_router_declaration_introduces_nothing() {
     }
 }
 
+/// A Hugo configuration is the same declaration written where the generator
+/// reads it. A candidate that newly binds one lends it to the base, so the
+/// anchor it makes readable on an untouched page is pre-existing. A candidate
+/// that points an existing site at another content directory changes what the
+/// link reaches, so each side answers under its own configuration and the
+/// edit is charged with the break it makes.
+#[test]
+fn a_site_configuration_is_lent_only_where_the_base_configures_none() {
+    let cases = [
+        (
+            "title: Site\n",
+            "title: Site\nbaseURL: https://example.org/\n",
+            "site/config.yaml",
+            "#absent",
+            "pre-existing",
+        ),
+        (
+            "baseURL = 'https://example.org/'\n",
+            "baseURL = 'https://example.org/'\ncontentDir = 'pages'\n",
+            "site/hugo.toml",
+            "#setup",
+            "introduced",
+        ),
+    ];
+    for (before, after, config, fragment, attribution) in cases {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        git(root, &["init", "-q"]);
+        for directory in ["content", "pages"] {
+            fs::create_dir_all(root.join("site").join(directory)).unwrap();
+        }
+        fs::write(root.join("site/content/guide.md"), "# Guide\n\n## Setup\n").unwrap();
+        fs::write(root.join("site/pages/guide.md"), "# Guide\n").unwrap();
+        fs::write(
+            root.join("site/README.md"),
+            format!("# Site\n\n[setup](/guide/{fragment})\n"),
+        )
+        .unwrap();
+        fs::write(root.join(config), before).unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "base"]);
+        let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+        fs::write(root.join(config), after).unwrap();
+        git(root, &["add", "-A"]);
+        let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+        let staged = payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap());
+        git(root, &["commit", "-qm", "candidate"]);
+        let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        let committed = payload(
+            &commit_pair(
+                &repo,
+                &engine(),
+                None,
+                &shell(),
+                &oid(&base),
+                &oid(&candidate),
+            )
+            .unwrap(),
+        );
+        for report in [&staged, &committed] {
+            let rows: Vec<(&str, &str)> = report["findings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|row| row["kind"] == "explicit-target-missing")
+                .filter_map(|row| {
+                    Some((
+                        row["attribution"].as_str()?,
+                        row["location"]["path"].as_str()?,
+                    ))
+                })
+                .collect();
+            assert_eq!(
+                rows,
+                [(attribution, "site/README.md")],
+                "{config}: {}",
+                report["findings"]
+            );
+        }
+    }
+}
+
 /// Dropping the declaration is that rule read backwards, and it says so. Both
 /// sides read the candidate's declarations, so the fragment the resolved path
 /// exposed is not asked any more and no attribution records that it went. The

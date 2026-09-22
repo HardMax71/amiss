@@ -491,9 +491,20 @@ const MKDOCS_CONTENT_TAB: DeclarationRule = DeclarationRule {
 /// Hugo.
 pub(crate) const HUGO_SHORTCODE: DeclarationRule = DeclarationRule {
     name: "hugo-shortcode",
-    spelling: "a shortcode call alone on its line, `{{% name %}}` or `{{< name >}}`",
+    spelling: "a shortcode call alone on its line or anywhere in a heading, `{{% name %}}` or \
+               `{{< name >}}`",
     adapters: &[Adapter::Markdown],
     declared_by: crate::route::HUGO.declared_by,
+};
+
+/// The Liquid an Eleventy page is rendered through before Markdown reads it,
+/// read the way a shortcode in a heading is and only under the file that
+/// declares Eleventy.
+pub(crate) const ELEVENTY_TEMPLATE: DeclarationRule = DeclarationRule {
+    name: "eleventy-template",
+    spelling: "a Liquid tag or output anywhere in a heading, `{% name %}` or `{{ name }}`",
+    adapters: &[Adapter::Markdown],
+    declared_by: crate::route::ELEVENTY.declared_by,
 };
 
 const SPHINX_DECLARED_BY: &[&str] = crate::route::SPHINX.declared_by;
@@ -512,7 +523,7 @@ pub(crate) const MYST_LINK: DeclarationRule = DeclarationRule {
 /// renderer's slug, plus the spellings a declared generator owns, grouped
 /// by the profile that reads each one. An identity rule joins the union beside
 /// the renderer rules, so it can only grow the set an anchor may match.
-pub const DECLARATIONS: [DeclarationRule; 23] = [
+pub const DECLARATIONS: [DeclarationRule; 24] = [
     DeclarationRule {
         name: "html-id",
         spelling: "an `id` or `name` attribute on a raw HTML element, or on one written \
@@ -544,6 +555,7 @@ pub const DECLARATIONS: [DeclarationRule; 23] = [
     MKDOCS_SHORTCODE,
     MKDOCS_CONTENT_TAB,
     HUGO_SHORTCODE,
+    ELEVENTY_TEMPLATE,
     DeclarationRule {
         name: "myst-target",
         spelling: "a target alone on its line, `(name)=`",

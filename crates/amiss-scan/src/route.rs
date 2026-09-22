@@ -108,7 +108,7 @@ const ASTRO: RouteRule = RouteRule {
     serves: &[Spelling::BuiltRoute],
 };
 
-const ELEVENTY: RouteRule = RouteRule {
+pub(crate) const ELEVENTY: RouteRule = RouteRule {
     name: "eleventy",
     declared_by: &[
         "eleventy.config.ts",
@@ -1116,14 +1116,33 @@ fn zola_content(snapshot: &SnapshotDiscovery, document: &RepoPath) -> Option<Vec
 /// candidate that writes one would otherwise be measured against a base
 /// nothing declares, and every destination the declaration moves would answer
 /// differently on the two sides and change the identity of whatever finding it
-/// carried. The routes a document publishes are read from the same
-/// declarations, so they are read again whenever these differ.
+/// carried. A generator's own configuration is borrowed only where the snapshot
+/// configures nothing of its own, since a site the candidate newly configures
+/// is the same question, while one it reconfigures changes what its links
+/// reach and is answered on each side as that side configures it. The routes a
+/// document publishes are read from the same declarations, so they are read
+/// again whenever these differ.
 pub(crate) fn read_as_declared(
     snapshot: &mut SnapshotDiscovery,
-    declared: &BTreeMap<RepoPath, (String, Option<String>)>,
+    candidate: &SnapshotDiscovery,
 ) -> BTreeMap<RepoPath, (String, Option<String>)> {
-    let held = std::mem::replace(&mut snapshot.declared_routers, declared.clone());
-    if held != snapshot.declared_routers {
+    let held = std::mem::replace(
+        &mut snapshot.declared_routers,
+        candidate.declared_routers.clone(),
+    );
+    let configured = (snapshot.bound_configs.len(), snapshot.published_roots.len());
+    for (path, rule) in &candidate.bound_configs {
+        snapshot.bound_configs.entry(path.clone()).or_insert(*rule);
+    }
+    for (project, roots) in &candidate.published_roots {
+        snapshot
+            .published_roots
+            .entry(project.clone())
+            .or_insert_with(|| roots.clone());
+    }
+    if held != snapshot.declared_routers
+        || configured != (snapshot.bound_configs.len(), snapshot.published_roots.len())
+    {
         (snapshot.published_routes, snapshot.redirect_routes) = published_routes(snapshot);
     }
     held
