@@ -287,7 +287,7 @@ impl Sweep<'_> {
                     );
                 }
             }
-            Kind::Heading => self.headings.push(heading::markdown_heading(node)),
+            Kind::Heading => heading_entry(self, node),
             Kind::ListItem => owners.list_item = Some(span),
             Kind::TableCell => owners.cell = Some(span),
             Kind::Paragraph => {
@@ -611,6 +611,32 @@ fn shortcode_call(line: &str, span: (usize, usize)) -> Option<Transclusion> {
         (!body.contains(close)).then_some(body)
     });
     generated(called, span, TransclusionRefusal::Template)
+}
+
+/// The pair of markers a Liquid tag and a Liquid output open and close with,
+/// which Eleventy renders a Markdown page through before Markdown reads it.
+const LIQUID_MARKERS: [(&str, &str); 2] = [("{%", "%}"), ("{{", "}}")];
+
+/// A heading, with a template call anywhere in it once per template language.
+/// The template writes part of the heading's text, and with it part of the
+/// identity a renderer slugs from that text, so a heading that sets no id of
+/// its own names a call rather than an identity the tree holds.
+fn heading_entry(sweep: &mut Sweep<'_>, node: &Node) {
+    let heading = heading::markdown_heading(node);
+    let source = sweep
+        .suffix
+        .get(node.span.0..node.span.1)
+        .filter(|_| heading.attribute.is_none());
+    for (markers, refusal) in [
+        (SHORTCODE_MARKERS, TransclusionRefusal::Template),
+        (LIQUID_MARKERS, TransclusionRefusal::Liquid),
+    ] {
+        let called = markers
+            .iter()
+            .find_map(|(open, close)| Some(source?.split_once(open)?.1.split_once(close)?.0));
+        sweep.snippets.extend(generated(called, node.span, refusal));
+    }
+    sweep.headings.push(heading);
 }
 
 /// The edge a spelling a program answers writes: it names what would arrive

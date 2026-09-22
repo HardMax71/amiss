@@ -95,6 +95,7 @@ pub enum TransclusionRefusal {
     DynamicTarget,
     Options,
     Template,
+    Liquid,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
