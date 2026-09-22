@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use amiss_wire::controls::Profile;
-use amiss_wire::model::Digest;
+use amiss_wire::model::{Digest, RepoPath};
 use amiss_wire::report::model::{DebtApplication, PolicySource, WaiverApplication};
-use amiss_wire::report::{Disposition, ErrorDetail, FindingKind};
+use amiss_wire::report::{Disposition, ErrorDetail, FindingKind, FindingScope};
 use amiss_wire::resolution::Resolution;
 
 use super::claims::{ClaimGroup, claim_finding};
@@ -17,7 +17,7 @@ use super::waiver::waiver_pass;
 use super::{
     Attribution, DocumentInput, Finding, Location, LocationSide, PolicyStep, resolution_kinds,
 };
-use crate::correlate::{Comparison, Outcome};
+use crate::correlate::{Comparison, Observation, Outcome};
 
 /// The attribution an invalid reference carries on its report row: introduced
 /// when the base held no equal invalid destination, pre-existing when it did,
@@ -381,6 +381,7 @@ fn ordinary(
     }
 
     let invalid = invalid_attributions(comparisons);
+    let mut folded: BTreeMap<(FindingKind, &RepoPath), Vec<&Observation>> = BTreeMap::new();
     for observation in comparisons.iter().flat_map(|comparison| {
         comparison
             .candidate
@@ -395,7 +396,23 @@ fn ordinary(
         } else {
             Attribution::NotApplicable
         };
-        let mut emit = |kind: FindingKind| -> Result<(), crate::Error> {
+        let kinds = resolution_kinds(&observation.resolution)
+            .boundary
+            .into_iter()
+            .chain(
+                observation
+                    .resolution
+                    .is_lfs_pointer()
+                    .then_some(FindingKind::UnsupportedTargetKind),
+            );
+        for kind in kinds {
+            if kind.metadata().scope == FindingScope::Document {
+                folded
+                    .entry((kind, &observation.document))
+                    .or_default()
+                    .push(observation);
+                continue;
+            }
             findings.push(simple(
                 kind,
                 super::FindingKeyScope::Observation {
@@ -406,14 +423,27 @@ fn ordinary(
                 observation_location(observation, LocationSide::Candidate),
                 profile,
             )?);
-            Ok(())
-        };
-        if let Some(kind) = resolution_kinds(&observation.resolution).boundary {
-            emit(kind)?;
         }
-        if observation.resolution.is_lfs_pointer() {
-            emit(FindingKind::UnsupportedTargetKind)?;
-        }
+    }
+    for ((kind, document), members) in folded {
+        let representative = members
+            .iter()
+            .min_by_key(|observation| (observation.span, observation.id))
+            .ok_or(crate::Error::Internal)?;
+        let mut ids: Vec<Digest> = members.iter().map(|observation| observation.id).collect();
+        ids.sort_unstable();
+        let mut finding = simple(
+            kind,
+            super::FindingKeyScope::Document {
+                document: document.clone(),
+            },
+            Attribution::NotApplicable,
+            ids,
+            observation_location(representative, LocationSide::Candidate),
+            profile,
+        )?;
+        finding.member_count = u64::try_from(members.len()).unwrap_or(u64::MAX);
+        findings.push(finding);
     }
 
     structural_findings(comparisons, profile, &mut findings)?;

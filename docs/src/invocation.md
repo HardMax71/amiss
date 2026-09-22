@@ -195,7 +195,8 @@ counts the rest, unless the report is replayed with `--full`. Then one fixed `no
 per finding kind the feedback carries, in the wording from
 [Profiles and findings](profiles.md), and one per error code, in the wording from
 [Analysis errors](errors.md). Three totals lines close the output, and a `records` line
-names the record-only kinds and their counts when the run has any. Pre-existing rows are the
+names the record-only kinds and their counts when the run has any, where a row folding several
+references counts each of them. Pre-existing rows are the
 backlog at warn or fail, and the backlog keeps its own window, so introduced volume cannot
 push it off the terminal. The full findings stay in JSON. `--explain-scope` adds six fixed
 scope lines to that human output, two naming this run's counts, and one row per reason a

@@ -82,7 +82,7 @@ fn human_output_projects_the_same_result() {
     for finding in &report(&json).payload.findings {
         if finding.effective_disposition == Disposition::Record {
             let count = recorded.entry(finding.kind).or_default();
-            *count = count.saturating_add(1);
+            *count = count.saturating_add(finding.aggregation.member_count);
         }
     }
     let listed: Vec<String> = recorded

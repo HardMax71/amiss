@@ -161,6 +161,15 @@ policy steps that set its final disposition, and the digests of the facts undern
 The `key_input` that produced the finding's identity is included too, so an external
 system can recompute any finding's identity from the report alone.
 
+A row is one finding key, and the key's scope decides how much one row covers. A missing or
+mistyped target keys on the document and the exact target, so a link a page repeats is one row.
+The four records that answer for a single reference, `target-declared-untracked`,
+`unsupported-reference-semantics`, `unsupported-target-kind`, and `unsupported-version-scope`,
+key on the document alone. That makes one row per document and kind: `aggregation.member_count`
+counts its references, `observation_ids` names each of them, and the location is the first.
+Each reference keeps its own resolution and reason on its observation row. An invalid
+reference keeps a row of its own, since it carries an attribution.
+
 `feedback` is the smaller review surface derived by the engine from those exact findings.
 Related introduced problems become one `fix` per target, changed targets under unchanged
 prose become one `check`, and pre-existing failures and warnings become one `existing` per
