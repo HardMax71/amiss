@@ -531,7 +531,7 @@ fn totals<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
     for finding in &payload.findings {
         if finding.effective_disposition == Disposition::Record {
             let count = records.entry(finding.kind).or_default();
-            *count = count.saturating_add(1);
+            *count = count.saturating_add(finding.aggregation.member_count);
         }
     }
     if !records.is_empty() {

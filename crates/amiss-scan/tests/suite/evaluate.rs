@@ -13,7 +13,7 @@ use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{Profile, SourceConstruct, TargetKind};
 use amiss_wire::envelope::document_digest;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
-use amiss_wire::report::model::ControlStateSource;
+use amiss_wire::report::model::{ControlStateSource, FindingKeyScope};
 use amiss_wire::report::{
     Disposition, EngineProvenance, FindingKind, IntentKind, adapter_contract,
 };
@@ -351,6 +351,64 @@ fn boundary_kinds_follow_the_mapping() {
         kinds(&findings),
         vec![FindingKind::UnsupportedTargetKind],
         "a compatible pointer emits the content boundary and nothing else"
+    );
+}
+
+#[test]
+fn record_boundaries_fold_to_one_row_per_document() {
+    let at = |document: &str, node: usize, resolution: Resolution| {
+        let mut row = spec(document, "t.md", resolution);
+        row.node_path = vec![node, 0];
+        observation(&row)
+    };
+    let route = Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute);
+    let traversal = Resolution::Invalid {
+        reason: InvalidReference::PathTraversal,
+    };
+    let findings = evaluate(
+        &[],
+        &comparisons(
+            Vec::new(),
+            vec![
+                at("d.md", 1, route.clone()),
+                at("d.md", 2, route.clone()),
+                at("e.md", 1, route),
+                at("d.md", 3, traversal.clone()),
+                at("d.md", 4, traversal),
+            ],
+        ),
+        Profile::Observe,
+    )
+    .expect("finding evaluation");
+    let mut declined: Vec<(Option<&str>, u64, usize)> = findings
+        .iter()
+        .filter(|finding| {
+            finding.key_input.finding_kind == FindingKind::UnsupportedReferenceSemantics
+        })
+        .map(|finding| {
+            assert!(
+                matches!(&finding.key_input.scope, FindingKeyScope::Document { document } if finding.location.path.as_ref() == Some(document)),
+                "a declined reference keys on its document: {:?}",
+                finding.key_input.scope
+            );
+            (
+                finding.location.path.as_ref().and_then(RepoPath::as_str),
+                finding.member_count,
+                finding.observation_ids.len(),
+            )
+        })
+        .collect();
+    declined.sort_unstable();
+    assert_eq!(declined, vec![(Some("d.md"), 2, 2), (Some("e.md"), 1, 1)]);
+    let invalid: Vec<u64> = findings
+        .iter()
+        .filter(|finding| finding.key_input.finding_kind == FindingKind::InvalidReference)
+        .map(|finding| finding.member_count)
+        .collect();
+    assert_eq!(
+        invalid,
+        vec![1, 1],
+        "an invalid reference keeps its own row"
     );
 }
 

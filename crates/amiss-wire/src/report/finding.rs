@@ -117,13 +117,6 @@ static COVERAGE_DOCUMENT: FindingMetadata = FindingMetadata {
     observe_disposition: Disposition::Record,
     enforce_disposition: Disposition::Record,
 };
-static UNSUPPORTED_OBSERVATION: FindingMetadata = FindingMetadata {
-    scope: FindingScope::Observation,
-    evidence_class: EvidenceClass::Unsupported,
-    invariant_class: InvariantClass::Advisory,
-    observe_disposition: Disposition::Record,
-    enforce_disposition: Disposition::Record,
-};
 static UNSUPPORTED_DOCUMENT: FindingMetadata = FindingMetadata {
     scope: FindingScope::Document,
     evidence_class: EvidenceClass::Unsupported,
@@ -179,11 +172,11 @@ declare_taxonomy! {
         },
         TargetDeclaredUntracked => {
             meaning: "a tracked ignore file says the repository does not keep the path this reference names, either by naming that path or by emptying the directory the file sits in, so no tree can answer for the link; the reference is recorded and counted, never cleared",
-            metadata: &COVERAGE_OBSERVATION,
+            metadata: &COVERAGE_DOCUMENT,
         },
         UnsupportedReferenceSemantics => {
             meaning: "the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string the selected grammar does not recognize, a destination that needs a document attribute this run does not evaluate, or a fragment on a target it cannot answer for; the unchecked part is declared instead of guessed",
-            metadata: &UNSUPPORTED_OBSERVATION,
+            metadata: &UNSUPPORTED_DOCUMENT,
         },
         UnsupportedDocumentFormat => {
             meaning: "a document this run discovered was not scanned: no parser for its markup, a policy include with no grammar bound, bytes that do not decode as the format requires, markup its grammar refuses, or a per-document ceiling crossed; the document row's reason says which, and the file's references are never checked",
@@ -191,11 +184,11 @@ declare_taxonomy! {
         },
         UnsupportedTargetKind => {
             meaning: "the reference resolves to a symlink or submodule, which Amiss does not follow; the boundary is declared instead of crossed",
-            metadata: &UNSUPPORTED_OBSERVATION,
+            metadata: &UNSUPPORTED_DOCUMENT,
         },
         UnsupportedVersionScope => {
             meaning: "a forge URL names this repository at another named version or an exact commit whose required objects are unavailable; use the candidate ref, or make the exact commit available",
-            metadata: &UNSUPPORTED_OBSERVATION,
+            metadata: &UNSUPPORTED_DOCUMENT,
         },
         UnsupportedCapability => {
             meaning: "a candidate document declares a reserved amiss: capability this engine does not implement; the run ends incomplete rather than guessing at the claim",

@@ -93,8 +93,10 @@ process.
 Raising it treated a symptom whose cause has since been removed. Ninety-one percent of
 fastapi's report was one finding per external URL, each carrying a verbatim copy of an
 observation row the report already held and already named by id. An external reference is now
-an observation and nothing else, so fastapi serializes 33 MB and Docusaurus 53 MB, both of
-which would have fitted the old reservation. What the reservation buys now is headroom rather
+an observation and nothing else. Declined references went the same way later: a row per declined
+reference, each with its own copy of that reference's observation, was 58% of MDN's content
+report, and those rows now fold to one per document and kind. fastapi serializes 29 MB and
+Docusaurus 41 MB, both of which would have fitted the old reservation. What the reservation buys now is headroom rather
 than admission. `complete-findings` allows 100,000 findings, and at the leanest finding this
 engine builds a hundred thousand of them fit under the reservation, so that counter is what
 stops a findings flood and the reservation backstops anything heavier.
@@ -106,10 +108,10 @@ in the allocator instead of naming the ceiling it crossed, and the document tota
 only counter that fired early enough to prevent that. The size check now counts the report
 as it is written to a sink, so an overrun ends the run at exit 2 with `OUTPUT_LIMIT_EXCEEDED`
 and the document budget is free to answer its own question. At 83,886,080 the Kubernetes
-website scans: 8,232 documents and 70,743,496 bytes of them, 68,408 references, a 232 MB
-report, and an 829 MB peak against the 1 GiB address space. MDN's content repository sits on
-the other side of the report ceiling at 333,847,393 bytes, and now says so at a 614 MB peak
-rather than aborting at 946 MB.
+website scans: 8,232 documents and 70,743,496 bytes of them, 68,408 references, a 139 MB
+report, and a 519 MB peak against the 1 GiB address space. MDN's content repository scans too,
+14,649 documents in a 182 MB report at a 631 MB peak. Before the fold it crossed the report
+ceiling at 333,847,393 bytes.
 
 The last two rows are sandbox-descriptor values rather than ordinary scanner counters.
 The CLI applies the managed-memory value as an address-space limit on Unix; the current
