@@ -127,6 +127,7 @@ fn late_case_neighbor_latency_and_memory() {
         source_suffixes: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
         published_roots: BTreeMap::new(),
+        bound_configs: BTreeMap::new(),
     };
     let document =
         RepoPath::new("README.md".to_owned()).unwrap_or_else(|| panic!("fixture document"));

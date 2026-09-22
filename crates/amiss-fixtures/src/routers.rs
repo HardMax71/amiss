@@ -445,6 +445,41 @@ pub const DOCUSAURUS_COMMENTS: [(&str, Staged<'static>); 6] = [
     ("plain/guide.md", Staged::File(b"# Guide\n")),
 ];
 
+/// Four trees whose configuration file carries a name Hugo shares. `site/`
+/// binds `baseURL` in `config.yaml` beside the `content` it reads, and
+/// `nested/` configures under `config/_default`, so both are Hugo sites and a
+/// relative link that only a built page answers stays the build's. `tool/`
+/// binds `baseURL` with no content directory beside it and `plain/` binds no
+/// address at all, so neither is a site and the same link is missing there.
+pub const HUGO_CONFIG_SPELLINGS: [(&str, Staged<'static>); 8] = [
+    (
+        "site/config.yaml",
+        Staged::File(b"baseURL: https://example.test/\ntitle: Site\n"),
+    ),
+    (
+        "site/content/docs/page.md",
+        Staged::File(b"# Page\n\n[b](../b/)\n"),
+    ),
+    (
+        "nested/config/_default/hugo.toml",
+        Staged::File(b"baseURL = \"https://example.test/\"\n"),
+    ),
+    (
+        "nested/content/docs/page.md",
+        Staged::File(b"# Page\n\n[b](../b/)\n"),
+    ),
+    (
+        "tool/config.yaml",
+        Staged::File(b"baseURL: https://api.example.test/\n"),
+    ),
+    ("tool/docs/page.md", Staged::File(b"# Page\n\n[b](../b/)\n")),
+    ("plain/config.yaml", Staged::File(b"name: plain\n")),
+    (
+        "plain/content/docs/page.md",
+        Staged::File(b"# Page\n\n[b](../b/)\n"),
+    ),
+];
+
 /// A Hugo site that names its content with a module mount rather than a
 /// directory key: the one mount targeting the content directory reads from
 /// `site/pages`, and the mount beside it targets something else, so only the

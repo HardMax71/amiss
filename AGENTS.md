@@ -98,7 +98,7 @@ Exit 0 passes, 1 blocks, 2 means the run could not be trusted. Use `--format jso
 detail; every finding and error row carries a `description` saying what it means and
 what to do.
 
-A change to discovery, a parser, or the route table also runs the corpus, 56 public
+A change to discovery, a parser, or the route table also runs the corpus, 61 public
 repositories pinned in `scripts/corpus.tsv`. It clones about 5 GB into the work directory
 and takes a few minutes:
 

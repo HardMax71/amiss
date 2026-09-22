@@ -8,15 +8,19 @@ babel	https://github.com/babel/babel	fd665901dece022a0eda2ae7adda03bc9baabd5e
 bat	https://github.com/sharkdp/bat	7323a7514f7601737640e7172be115127d6db08c
 biome	https://github.com/biomejs/biome	b436ba00de298d5002a3d3bb1fae1d2a882f6d58
 click	https://github.com/pallets/click	6aabf099bfdd4c1e75fe8d0e0d4241372b988ab1
+cncf-glossary	https://github.com/cncf/glossary	03032a83592cb068fc2d5d1823d8f58fd7599f37
 comprehensive-rust	https://github.com/google/comprehensive-rust	12877851717714a86db8520ad7e56081a3666bf1
+containerd.io	https://github.com/containerd/containerd.io	7342376db0d0ee98356735535eeba16df285d1ec
 content	https://github.com/mdn/content	5a81c288fb7213b2ca2180cda687500981ecf9e1
 django	https://github.com/django/django	862ade3409ceaa8ec5305e6f5aa26ee0e553cf02
 docsify	https://github.com/docsifyjs/docsify	a408e76cc9115ce40c54463acfb5f8b181f2f291
 docusaurus	https://github.com/facebook/docusaurus	5215a33e576f5e027736e4e740260ef470a4de8c
 eleventy-site	https://github.com/11ty/11ty-website	028e2555848ea8a08ece1ce268ee7d1335271427
+etcd-website	https://github.com/etcd-io/website	81403a3295cf7521e2357dbdb7266d20c661f54e
 fastapi	https://github.com/fastapi/fastapi	50113da16fec53b66b80d75e80a89296de4fa5a5
 flask	https://github.com/pallets/flask	d73fa1cdcbd8b1465c151db8924ba58b1dd14e35
 grafana	https://github.com/grafana/grafana	39703a2c01e37d6ef9f91147d1db29dd16c82611
+grpc.io	https://github.com/grpc/grpc.io	516c96d2c1c04a141a619b9ffa3c7573ebee4f72
 helix	https://github.com/helix-editor/helix	079a789e8cb08ead67f19e1971a1b7438b37354b
 httpx	https://github.com/encode/httpx	b5addb64f0161ff6bfe94c124ef76f6a1fba5254
 hugoDocs	https://github.com/gohugoio/hugoDocs	4558dd3c84b8775e3b9ea5ba143a08216646ccef
@@ -32,6 +36,7 @@ myst-parser	https://github.com/executablebooks/MyST-Parser	723cffcf84213f0cb5869
 nextra	https://github.com/shuding/nextra	d6e80e1dd627b781429a6ee989b15ebba688c8ea
 numpy	https://github.com/numpy/numpy	9b2580b71415826e05b05cc3ff87aa39bcff3833
 ohmyzsh	https://github.com/ohmyzsh/ohmyzsh	157eb033f2a527021aac18c1f5850bbe3e3d223c
+opentelemetry.io	https://github.com/open-telemetry/opentelemetry.io	0079d247461594393b512ec2af8c03e19080d216
 prettier	https://github.com/prettier/prettier	787b7162663ba440d42d115edaebc9304a957018
 pydantic	https://github.com/pydantic/pydantic	c124df7fb7348a3d6779c41fb5f4e5a73531e678
 pydantic-settings	https://github.com/pydantic/pydantic-settings	e4191877f2954d7b9857a407c8bacb3958940818

@@ -163,7 +163,7 @@ arrives when the site is built and this run cannot say which site would arrive.
 
 Other generators decide a page's URL in a configuration this engine never opens, and a
 relative destination is resolved against that URL rather than against the file. Under a
-`hugo.toml`, `hugo.yaml`, `_config.yml`, `eleventy.config.*`, `.eleventy.js` or
+Hugo configuration, a `_config.yml`, an `eleventy.config.*`, an `.eleventy.js` or an
 `astro.config.*` on the document's ancestor chain, a destination the tree does not hold takes
 `unsupported-reference-semantics` with `reason: unmodelled-route`, the answer a leading-slash
 site route already takes, instead of being claimed missing. A destination ending in `.md`,
