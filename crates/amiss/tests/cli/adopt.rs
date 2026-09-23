@@ -327,7 +327,7 @@ fn an_existing_output_path_refuses_the_mint() {
     let args = adopt_args(&minted, &path);
     let shown: Vec<&str> = args.iter().map(String::as_str).collect();
     let (code, stdout, _stderr) = amiss(&shown);
-    assert_eq!(code, 1, "{}", String::from_utf8(stdout.clone()).unwrap());
+    assert_eq!(code, 1, "{}", String::from_utf8(stdout).unwrap());
     assert!(
         String::from_utf8(stdout)
             .unwrap()

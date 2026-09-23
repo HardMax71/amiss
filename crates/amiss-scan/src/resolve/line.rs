@@ -182,7 +182,7 @@ impl Resolver<'_> {
         let expected = normalized
             .as_ref()
             .strip_suffix(b"\n")
-            .unwrap_or(normalized.as_ref());
+            .unwrap_or_else(|| normalized.as_ref());
         self.scan.charge(
             Aggregate::ProjectionProjectedBytes,
             u64::try_from(expected.len()).unwrap_or(u64::MAX),

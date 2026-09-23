@@ -182,7 +182,7 @@ fn commit_identity_construction_matches_the_published_preimage() {
         None,
         "identity construction validates commit formats without serializing the request"
     );
-    mismatched = evaluation.clone();
+    mismatched = evaluation;
     mismatched.target_ref = None;
     assert_eq!(
         commit_candidate_identity_digest(&mismatched, &oid('2'), &oid('4')),

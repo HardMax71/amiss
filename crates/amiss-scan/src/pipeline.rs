@@ -608,7 +608,7 @@ fn resolve_tree(
             commit_oid: commit_oid.clone(),
             kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
             object_format: repo.object_format(),
-            tree_oid: commit.tree.clone(),
+            tree_oid: commit.tree,
         },
     ))
 }

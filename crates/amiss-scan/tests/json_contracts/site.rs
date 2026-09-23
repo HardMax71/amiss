@@ -26,7 +26,7 @@ fn site_defect_identities_bind_the_exact_kind_and_route() {
     .unwrap();
     let repo = Repository::open(std::path::Path::new(&fixture.repo), ObjectFormat::Sha1).unwrap();
     let base = Oid::new(ObjectFormat::Sha1, fixture.base.clone()).unwrap();
-    let candidate = Oid::new(ObjectFormat::Sha1, fixture.candidate.clone()).unwrap();
+    let candidate = Oid::new(ObjectFormat::Sha1, fixture.candidate).unwrap();
     let engine = EngineProvenance {
         version: "test".to_owned(),
         digest: amiss_wire::model::Digest::from([22; 32]),

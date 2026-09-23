@@ -74,7 +74,7 @@ fn every_workflow_run_binding_clause_fails_closed() {
         );
     }
 
-    let mut numeric = expectation.clone();
+    let (_, mut numeric, _) = fixture();
     numeric.workflow_identity = opaque_id!("123");
     assert_eq!(
         select_workflow_run(&config, &numeric, &candidate, run_page(&candidate)).err(),

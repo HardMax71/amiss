@@ -34,8 +34,10 @@ pub(super) fn link_destination(
     let first = bytes.get(span.0).copied().ok_or(Fault::InvalidSourceSpan)?;
     match first {
         b'[' => {
-            let token_span =
-                inline_destination(bytes, children_end.unwrap_or(span.0.saturating_add(1)))?;
+            let token_span = inline_destination(
+                bytes,
+                children_end.unwrap_or_else(|| span.0.saturating_add(1)),
+            )?;
             Ok((SourceConstruct::InlineLink, token(suffix, token_span)?))
         }
         b'<' => {

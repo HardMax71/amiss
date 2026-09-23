@@ -191,7 +191,7 @@ fn enforces_pack_resource_caps() {
     let (dir, blob_v1, _) = packed_repo(&[]);
 
     let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
-    let oid = Oid::new(ObjectFormat::Sha1, blob_v1.clone()).unwrap();
+    let oid = Oid::new(ObjectFormat::Sha1, blob_v1).unwrap();
     let mut res = GitResources::new(GitLimits {
         pack_directory_entries: 1,
         ..GitLimits::CONTRACT

@@ -211,7 +211,7 @@ fn invalid_paths_and_limits_are_data_errors_not_panics() {
         amiss_controller_service::Inbox::open(directory.path(), inbox_limits()).unwrap(),
     ));
     let admission = Arc::new(TestAdmission::accepting());
-    let receiver_admission: Arc<dyn DeliveryAdmission> = admission.clone();
+    let receiver_admission: Arc<dyn DeliveryAdmission> = admission;
     for path in [
         "",
         "/",

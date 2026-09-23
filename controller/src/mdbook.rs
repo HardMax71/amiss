@@ -190,9 +190,11 @@ fn collect_pages(
             .map_err(MdBookEvidenceError::Output)?;
         remaining = remaining
             .checked_sub(u64::try_from(html.len()).unwrap_or(u64::MAX))
-            .ok_or(MdBookEvidenceError::Output(std::io::Error::other(
-                "aggregate HTML byte ceiling exceeded",
-            )))?;
+            .ok_or_else(|| {
+                MdBookEvidenceError::Output(std::io::Error::other(
+                    "aggregate HTML byte ceiling exceeded",
+                ))
+            })?;
         let (anchors, destinations) = page_facts(
             &html,
             route,

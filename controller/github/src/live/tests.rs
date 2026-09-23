@@ -123,7 +123,7 @@ fn refresh_rejects_wrong_ids_and_github_path_shapes() {
 
     let provider = provider();
     let nested = ChangeLocator {
-        provider: provider.clone(),
+        provider,
         repository: RepositoryIdentity::new(
             "github.com".to_owned(),
             "group/owner".to_owned(),

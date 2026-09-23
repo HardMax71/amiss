@@ -290,7 +290,7 @@ fn provider_setup(
         PlanScope {
             provider,
             integration: delivery.identity.integration.clone(),
-            repository: delivery.change.repository.clone(),
+            repository: delivery.change.repository,
         },
         plan,
     )

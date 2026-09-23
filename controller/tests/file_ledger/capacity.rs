@@ -633,7 +633,7 @@ fn the_root_scan_refuses_what_it_cannot_account_for() {
     drop(open_with_max(legacy_directory.path(), &clock, 2));
     downgrade_root_metadata(legacy_directory.path());
     write_capacity(legacy_directory.path(), 3, 0, None, false);
-    let clock_source: Arc<dyn ControllerClock> = clock.clone();
+    let clock_source: Arc<dyn ControllerClock> = clock;
     assert!(
         matches!(
             FileLedger::open_with_clock(legacy_directory.path(), config(2), clock_source),

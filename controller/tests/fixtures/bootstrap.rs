@@ -215,7 +215,7 @@ fn complete(report: &Path, result: &Path, outcome: BootstrapResult, bytes: &[u8]
     {
         return ExitCode::from(2);
     }
-    u8::try_from(result_exit_code(outcome)).map_or(ExitCode::from(2), ExitCode::from)
+    u8::try_from(result_exit_code(outcome)).map_or_else(|_| ExitCode::from(2), ExitCode::from)
 }
 
 fn malformed(result: &Path) -> ExitCode {
