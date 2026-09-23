@@ -93,7 +93,7 @@ fn engine() -> ExitCode {
     fs::read_to_string("engine-exit")
         .ok()
         .and_then(|raw| raw.trim().parse::<u8>().ok())
-        .map_or(ExitCode::from(9), ExitCode::from)
+        .map_or_else(|| ExitCode::from(9), ExitCode::from)
 }
 
 fn wrapper_constraint(staged: &Release) -> ExecutionConstraintDescriptor {

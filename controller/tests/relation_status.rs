@@ -297,7 +297,7 @@ fn durable_status_replays_and_completes_exactly_across_restart() {
             &artifacts,
             &pending,
             heads(&fixture),
-            retained.clone(),
+            retained,
             bundle(&fixture),
         )
         .unwrap()
