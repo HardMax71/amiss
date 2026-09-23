@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0](https://github.com/HardMax71/amiss/compare/v0.33.0...v0.34.0) - 2026-09-23
+
+### Changes
+
+- build a fallback or a clone only when it is used
+- inline one-line functions with a single caller
+- fold declined references to one row per document
+- read the source directory a book.toml names
+- lend a site the candidate newly configures to the base
+- leave a page whose heading a template writes undecided
+- read Hugo from every file it is configured in
+
 ## [0.33.0](https://github.com/HardMax71/amiss/compare/v0.32.4...v0.33.0) - 2026-09-22
 
 ### Changes
