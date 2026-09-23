@@ -851,12 +851,13 @@ fn a_hugo_site_leaves_an_unresolved_relative_destination_to_its_build() {
     assert_eq!(outcomes(&chain), want);
 }
 
-/// Under `book.toml`, a page is served one directory above its source, so a
-/// destination climbing past the book root is read back under the source
-/// directory of the book that holds the page it names. A built page no book
-/// answers belongs to the site around it, a climb past the outermost root
-/// reaches the same answer, and a source destination the tree lacks is a
-/// missing file as before.
+/// Under `book.toml`, a page is served at its path under the book's source
+/// directory, so a destination climbing past the book root is read back under
+/// the source directory of the book that holds the page it names. That
+/// directory is `src` unless the book's own `[book] src` names another. A built
+/// page no book answers belongs to the site around it, a climb past the
+/// outermost root reaches the same answer, and a source destination the tree
+/// lacks is a missing file as before.
 #[test]
 fn an_mdbook_page_climbs_out_of_its_book_the_way_its_url_does() {
     let chain = amiss_fixtures::mdbook_site().expect("the fixture stages");
@@ -891,6 +892,12 @@ fn an_mdbook_page_climbs_out_of_its_book_the_way_its_url_does() {
             Some("second/src/ch07.md"),
             ResolutionTag::Missing,
             Some("second/src/ch07.md"),
+        ),
+        row(
+            "third/chapters/intro.md",
+            Some("third/ch01.html"),
+            ResolutionTag::Resolved,
+            Some("src/ch01.md"),
         ),
     ]);
     assert_eq!(outcomes(&chain), want);

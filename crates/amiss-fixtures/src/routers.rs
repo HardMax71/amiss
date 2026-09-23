@@ -529,12 +529,14 @@ const CONFIGURED_SITE: [(&str, Staged<'static>); 5] = [
     ("site/content/fr/guide.md", Staged::File(b"# Guide\n")),
 ];
 
-/// Two mdBooks on one site: the outer book at the repository root and an
+/// Three mdBooks on one site: the outer book at the repository root, an
 /// archived one under `second/`, whose page climbs out of its own root the
-/// way the URL it is served at does. One climb reaches the outer book's
-/// source, one reaches a page no book answers, one climbs past the outermost
-/// root, and a source destination the tree lacks stays a missing file.
-const MDBOOK_SITE: [(&str, Staged<'static>); 5] = [
+/// way the URL it is served at does, and one under `third/` whose
+/// `book.toml` names its own source directory. One climb reaches the outer
+/// book's source, one reaches a page no book answers, one climbs past the
+/// outermost root, and a source destination the tree lacks stays a missing
+/// file.
+const MDBOOK_SITE: [(&str, Staged<'static>); 7] = [
     ("book.toml", Staged::File(b"[book]\ntitle = 'Guide'\n")),
     (
         "src/ch01.md",
@@ -550,6 +552,14 @@ const MDBOOK_SITE: [(&str, Staged<'static>); 5] = [
         Staged::File(
             b"# Old\n\n[current](../ch01.html)\n[gone](../ch09.html)\n[source](ch07.md)\n",
         ),
+    ),
+    (
+        "third/book.toml",
+        Staged::File(b"[book]\ntitle = 'Notes'\nsrc = \"chapters\" # not the default\n"),
+    ),
+    (
+        "third/chapters/intro.md",
+        Staged::File(b"# Notes\n\n[current](../ch01.html)\n"),
     ),
 ];
 

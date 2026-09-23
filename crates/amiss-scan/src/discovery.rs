@@ -176,7 +176,7 @@ fn settle_comments(discovery: &mut SnapshotDiscovery) {
     }
 }
 
-/// Whether a path is one of the four files read for what it declares. A
+/// Whether a path is one of the five files read for what it declares. A
 /// Sphinx configuration under a tree the scan excludes belongs to a fixture
 /// rather than to a site the repository publishes, the same reading that keeps
 /// Sphinx's own 176 test roots from declaring anything.
@@ -189,6 +189,7 @@ fn declaring(path: &RepoPath) -> bool {
         || crate::route::declares(&crate::route::ANTORA, path)
         || configures(path)
         || publishes(path)
+        || binds_book(path)
 }
 
 fn configures(path: &RepoPath) -> bool {
@@ -197,6 +198,11 @@ fn configures(path: &RepoPath) -> bool {
 
 fn publishes(path: &RepoPath) -> bool {
     crate::route::declares(&crate::route::HUGO, path) && !excluded_by_built_in(path.as_bytes())
+}
+
+fn binds_book(path: &RepoPath) -> bool {
+    crate::route::declares(&crate::route::MDBOOK_PAGES, path)
+        && !excluded_by_built_in(path.as_bytes())
 }
 
 /// What one descriptor's own bytes say, under the reading its name selects.
@@ -219,6 +225,11 @@ fn record_declaration(
         }
     } else if publishes(&path) {
         record_publication(discovery, declared, path, body);
+    } else if binds_book(&path) {
+        let root = crate::route::directory(path.as_bytes());
+        if let Some(source) = crate::route::book_source(root, body) {
+            declared.book_sources.insert(root.to_vec(), source);
+        }
     } else if let Some(router) = crate::route::declared_router(body) {
         declared.routers.insert(path, router);
     }
@@ -291,6 +302,7 @@ struct Declared {
     routers: BTreeMap<RepoPath, (String, Option<String>)>,
     published_roots: BTreeMap<Vec<u8>, Vec<(Vec<u8>, String)>>,
     bound_configs: BTreeMap<RepoPath, &'static [&'static str]>,
+    book_sources: BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
 /// Every document a page of a Sphinx tree renders in place of an include, and
@@ -372,6 +384,9 @@ pub struct SnapshotDiscovery {
     pub published_roots: BTreeMap<Vec<u8>, Vec<(Vec<u8>, String)>>,
     /// The names of the rule each configuration under a shared name selects.
     pub bound_configs: BTreeMap<RepoPath, &'static [&'static str]>,
+    /// The directory each mdBook reads its chapters from, by the directory
+    /// holding its `book.toml`.
+    pub book_sources: BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
 /// What the snapshot's documents say about one `.. _name:` label: the one
@@ -476,6 +491,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         declared_routers: BTreeMap::new(),
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
+        book_sources: BTreeMap::new(),
     }
 }
 
@@ -795,6 +811,7 @@ pub(crate) fn discover_walk(
         discovery.declared_routers = declared.routers;
         discovery.published_roots = declared.published_roots;
         discovery.bound_configs = declared.bound_configs;
+        discovery.book_sources = declared.book_sources;
         let context = DocumentContext {
             repo,
             includes,
@@ -864,6 +881,7 @@ pub fn discover_index(
     discovery.declared_routers = declared.routers;
     discovery.published_roots = declared.published_roots;
     discovery.bound_configs = declared.bound_configs;
+    discovery.book_sources = declared.book_sources;
     declared_documents(&context, git, scan, &mut discovery)?;
     settle_comments(&mut discovery);
     (discovery.published_routes, discovery.redirect_routes) =
