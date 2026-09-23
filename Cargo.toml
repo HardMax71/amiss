@@ -136,6 +136,8 @@ dbg_macro = "deny"
 mod_module_files = "warn"
 allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
+or_fun_call = "warn"
+redundant_clone = "warn"
 
 [profile.release]
 overflow-checks = true

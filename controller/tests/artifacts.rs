@@ -27,7 +27,7 @@ fn config() -> ArtifactStoreConfig {
 fn exact_components_survive_restart_under_one_stable_locator() {
     let root = tempfile::tempdir().unwrap();
     let clock = TestClock::at(1_000);
-    let controller_clock: Arc<dyn ControllerClock> = clock.clone();
+    let controller_clock: Arc<dyn ControllerClock> = clock;
     let store =
         FileArtifactStore::open_with_clock(root.path(), config(), Arc::clone(&controller_clock))
             .unwrap();
@@ -129,7 +129,7 @@ fn retained_once(
 fn audits_survive_restart_with_optional_evidence_exact() {
     let root = tempfile::tempdir().unwrap();
     let clock = TestClock::at(1_000);
-    let controller_clock: Arc<dyn ControllerClock> = clock.clone();
+    let controller_clock: Arc<dyn ControllerClock> = clock;
     let store =
         FileArtifactStore::open_with_clock(root.path(), config(), Arc::clone(&controller_clock))
             .unwrap();

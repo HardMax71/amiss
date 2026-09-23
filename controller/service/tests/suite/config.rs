@@ -542,7 +542,7 @@ fn queued_paths_add_only_the_inbox_field() {
         "ledger": "/controller/ledger",
         "artifacts": "/controller/artifacts"
     });
-    assert!(serde_json::from_value::<ExecutionPaths>(execution.clone()).is_ok());
+    assert!(serde_json::from_value::<ExecutionPaths>(execution).is_ok());
     assert!(
         serde_json::from_value::<ExecutionPaths>(json!({
             "bootstrap": "/controller/amiss-bootstrap",

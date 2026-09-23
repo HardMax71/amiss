@@ -174,7 +174,7 @@ fn every_binding_clause_of_the_refresh_query_stands_alone() {
     other_project.change.change = Change::MergeRequest(MergeRequestChange::new(102, 42).unwrap());
     let mut retried = delivery.clone();
     retried.provider_run.attempt = ProviderRunAttempt::literal(2);
-    let mut wider_format = delivery.clone();
+    let mut wider_format = delivery;
     wider_format.provider_run.object_format = ObjectFormat::Sha256;
 
     for broken in [

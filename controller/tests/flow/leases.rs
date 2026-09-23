@@ -185,7 +185,7 @@ fn a_staged_gate_must_use_the_publication_runs_object_format() {
         publication: Box::new(Publication {
             provider_run: authenticated.provider_run.clone(),
             evaluation_id: expected.evaluation_id.clone(),
-            check: expected.check.clone(),
+            check: expected.check,
             run: run.clone(),
             gate_commit: Oid::new(ObjectFormat::Sha256, "e".repeat(64)).unwrap(),
             conclusion: CheckConclusion::Pass,
@@ -338,7 +338,7 @@ fn a_staged_row_must_echo_the_lease_and_publication_exactly() {
         Err(ControllerError::LeaseLost)
     ));
 
-    let mut wrong_publication = staged_publication.clone();
+    let mut wrong_publication = staged_publication;
     wrong_publication.publication.report = Some(b"{}".to_vec());
     let (adapter, ledger) = scripted(Some(wrong_publication), expected.clone());
     let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
