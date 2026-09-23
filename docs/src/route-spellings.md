@@ -356,10 +356,12 @@ carrying none of these files keeps every claim it had, which is how the Kubernet
 repository keeps all 254 of its missing targets.
 
 mdBook is modelled rather than declared, because its URLs are in the tree. A book's root is the
-directory holding `book.toml`, its pages are the Markdown under `src`, and each page is served
-one directory shallower than its source, so `second/src/ch01.md` is `second/ch01.html`. A
-destination climbing past that root is therefore read back under the `src` of whichever book
-holds the page it names, and that is `book-route`: the rust book's
+directory holding `book.toml`, its pages are the Markdown under the source directory the
+`[book]` table names in `src`, `src` when it names none, and each page is served at its path
+under that directory, so `second/src/ch01.md` is `second/ch01.html`. A `src` climbing out of the
+repository, or one this reader cannot spell, leaves the book unread rather than read under the
+default. A destination climbing past the root is read back under the source directory of
+whichever book holds the page it names, and that is `book-route`: the rust book's
 `second-edition/src/ch09-02-recoverable-errors-with-result.md` writes
 `../ch09-02-recoverable-errors-with-result.html`, means the current edition's copy, and 241 of
 that repository's 403 missing targets are that one shape.

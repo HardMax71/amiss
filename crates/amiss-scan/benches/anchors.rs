@@ -160,6 +160,7 @@ fn late_policy_bound_adapter(bencher: Bencher<'_, '_>) {
         declared_routers: BTreeMap::new(),
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
+        book_sources: BTreeMap::new(),
     };
     let path = RepoPath::new("generated/099999.page".to_owned())
         .unwrap_or_else(|| panic!("benchmark lookup path"));

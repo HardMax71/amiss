@@ -248,6 +248,9 @@ const MOUNT_TABLE: &str = "[[module.mounts]]";
 const MOUNT_SOURCE: &[u8] = b"source";
 const MOUNT_TARGET: &[u8] = b"target";
 const DEFAULT_CONTENT_DIR: &str = "content";
+const BOOK_TABLE: &[u8] = b"[book]";
+const BOOK_SOURCE: &[u8] = b"src";
+const DEFAULT_BOOK_SOURCE: &str = "src";
 const RESTRUCTUREDTEXT: &str = "restructuredtext";
 pub const DEFAULT_SOURCE_SUFFIX: &str = ".rst";
 
@@ -827,6 +830,29 @@ fn language_table(header: &[u8]) -> Option<String> {
     (!code.is_empty() && !code.contains('.')).then(|| code.to_owned())
 }
 
+/// The directory one `book.toml` reads its chapters from, as a repository
+/// path: the `src` key of its `[book]` table read against the directory the
+/// file sits in, and `src` where the table names none. A key this reader
+/// cannot spell, or a path climbing out of the repository, names no directory,
+/// so the book is left unread rather than read under the default.
+#[must_use]
+pub(crate) fn book_source(root: &[u8], source: &[u8]) -> Option<Vec<u8>> {
+    let mut inside = false;
+    let mut named: Option<Option<&str>> = None;
+    for line in amiss_md::lines::scan(source) {
+        let content = line.content(source).trim_ascii_start();
+        if content.starts_with(b"[") {
+            inside = content.starts_with(BOOK_TABLE);
+        } else if inside && named.is_none() && assigned(content, BOOK_SOURCE).is_some() {
+            named = Some(configured(content, BOOK_SOURCE));
+        }
+    }
+    let directory = named.unwrap_or(Some(DEFAULT_BOOK_SOURCE))?;
+    normalized_path_under(root, false, directory)
+        .ok()
+        .map(|(path, _kind)| path.as_bytes().to_vec())
+}
+
 /// The lines a configuration file binds at its own top level, where an
 /// indented line and everything after the first table header belong to a
 /// table rather than to the project.
@@ -1032,10 +1058,10 @@ fn docusaurus_anchors(
 }
 
 /// Where the page's own URL puts a destination that climbs out of the book.
-/// mdBook serves a page under a book's `src` at its path under the book root,
-/// one directory shallower than the source, so a destination climbing past
-/// that root names a page of the book that holds it and is read back as a
-/// source under that book's own `src`. The reading beside the document comes
+/// mdBook serves a page under a book's source directory at its path under the
+/// book root, so a destination climbing past that root names a page of the
+/// book that holds it and is read back as a source under that book's own
+/// source directory, the one its `book.toml` names. The reading beside the document comes
 /// first, so the finding still names the path the author wrote.
 fn mdbook_anchors(
     snapshot: &SnapshotDiscovery,
@@ -1055,8 +1081,10 @@ fn mdbook_anchors(
     let Some(root) = site_root(snapshot, raw, &MDBOOK_PAGES) else {
         return Vec::new();
     };
-    let Some(page) = raw
-        .strip_prefix(join(&root, b"src").as_slice())
+    let Some(page) = snapshot
+        .book_sources
+        .get(&root)
+        .and_then(|source| raw.strip_prefix(source.as_slice()))
         .and_then(|rest| rest.strip_prefix(b"/"))
     else {
         return Vec::new();
@@ -1085,11 +1113,13 @@ fn mdbook_anchors(
     else {
         return Vec::new();
     };
-    let source = join(&owner, b"src");
+    let Some(source) = snapshot.book_sources.get(&owner) else {
+        return Vec::new();
+    };
     let source = if under.is_empty() {
-        source
+        source.clone()
     } else {
-        join(&source, under)
+        join(source, under)
     };
     vec![
         (directory(raw).to_vec(), path_part.to_owned()),
@@ -1504,9 +1534,14 @@ fn scalar<'a>(line: &'a [u8], key: &[u8]) -> Option<&'a str> {
         .ok()?
         .trim_matches([' ', '\t']);
     for quote in ['"', '\''] {
-        if let Some(inner) = text
-            .strip_prefix(quote)
-            .and_then(|rest| rest.strip_suffix(quote))
+        let Some(rest) = text.strip_prefix(quote) else {
+            continue;
+        };
+        if let Some(inner) = rest.strip_suffix(quote) {
+            return spelled(inner);
+        }
+        if let Some((inner, after)) = rest.split_once(quote)
+            && after.trim_start().starts_with('#')
         {
             return spelled(inner);
         }
