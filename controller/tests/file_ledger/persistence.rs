@@ -252,7 +252,7 @@ fn a_staged_row_without_its_report_is_corrupt_at_reopen() {
     drop(ledger);
     fs::remove_file(ledger_file(directory.path(), ".report").unwrap()).unwrap();
 
-    let clock_source: Arc<dyn ControllerClock> = clock.clone();
+    let clock_source: Arc<dyn ControllerClock> = clock;
     assert!(matches!(
         FileLedger::open_with_clock(directory.path(), config(MAX_RECORDS), clock_source),
         Err(FileLedgerError::Corrupt)

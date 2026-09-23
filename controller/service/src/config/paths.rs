@@ -198,5 +198,5 @@ fn separate_roots<const N: usize>(
     });
     (!overlap)
         .then_some(())
-        .ok_or(ConfigError::invalid(overlap_context))
+        .ok_or_else(|| ConfigError::invalid(overlap_context))
 }

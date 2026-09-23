@@ -184,7 +184,7 @@ fn heartbeat_loss_returns_before_uncooperative_acquisition() {
         },
         Some(1_753_219_200_000),
     );
-    let request = harness.request.clone();
+    let request = harness.request;
     let (outcome_sender, outcome) = mpsc::sync_channel(1);
     let runner_thread = std::thread::spawn(move || {
         let mut runner = runner;

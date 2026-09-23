@@ -70,5 +70,5 @@ fn complete(paths: &OutputPaths, report: &[u8], result: BootstrapResult) -> Exit
     if written.is_err() {
         return ExitCode::from(2);
     }
-    u8::try_from(result_exit_code(result)).map_or(ExitCode::from(2), ExitCode::from)
+    u8::try_from(result_exit_code(result)).map_or_else(|_| ExitCode::from(2), ExitCode::from)
 }

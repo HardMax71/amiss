@@ -686,7 +686,7 @@ pub(crate) fn antora_descriptor(source: &[u8]) -> Option<(String, bool)> {
     for line in amiss_md::lines::scan(source) {
         let content = line.content(source);
         if let Some(value) = scalar(content, ANTORA_COMPONENT) {
-            name = name.or(Some(value.to_owned()));
+            name.get_or_insert_with(|| value.to_owned());
         } else if content.starts_with(ANTORA_EXTENSIONS) {
             extended = true;
         }
@@ -709,9 +709,9 @@ pub(crate) fn declared_router(source: &[u8]) -> Option<(String, Option<String>)>
         if let Some(value) = scalar(content, DECLARED_ROUTER)
             .filter(|value| ROUTERS.iter().any(|rule| rule.name == *value))
         {
-            router = router.or(Some(value.to_owned()));
+            router.get_or_insert_with(|| value.to_owned());
         } else if let Some(value) = scalar(content, PUBLISHED_BASE).and_then(site_base) {
-            base = base.or(Some(value.to_owned()));
+            base.get_or_insert_with(|| value.to_owned());
         }
     }
     router.map(|router| (router, base))

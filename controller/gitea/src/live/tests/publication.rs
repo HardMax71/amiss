@@ -181,7 +181,7 @@ fn conflicting_replay_and_wrong_publication_tree_do_not_publish() {
         Err(ProviderError::InvalidResponse)
     );
 
-    let mut wrong_tree = publication.clone();
+    let mut wrong_tree = publication;
     wrong_tree.run.trees.candidate = oid('f');
     assert_eq!(
         fixture.client.publish(fixture.pull_request(), &wrong_tree),

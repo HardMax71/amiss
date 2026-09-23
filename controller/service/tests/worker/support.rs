@@ -263,7 +263,7 @@ impl Fixture {
             PlanScope {
                 provider: authenticated.identity.provider.clone(),
                 integration: authenticated.identity.integration.clone(),
-                repository: authenticated.change.repository.clone(),
+                repository: authenticated.change.repository,
             },
             plan,
         )

@@ -181,12 +181,12 @@ where
         operations.emit(ServiceEvent::Failed(component_name));
     }
     let result = server_result
-        .and(
+        .and_then(|()| {
             drain_result
                 .map(|_guard| ())
-                .map_err(SupervisionError::EndpointDrain),
-        )
-        .and(shutdown_result.map_err(SupervisionError::Shutdown))
+                .map_err(SupervisionError::EndpointDrain)
+        })
+        .and_then(|()| shutdown_result.map_err(SupervisionError::Shutdown))
         .and(stop_result)
         .and(component_result);
     operations.emit(ServiceEvent::Stopped);

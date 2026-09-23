@@ -199,7 +199,7 @@ fn a_new_owned_evaluation_advances_the_context_but_conflicts_do_not() {
         .publish_relation_status(&status, &target)
         .unwrap();
 
-    let mut newer = status.clone();
+    let mut newer = status;
     newer.targets.fence = LeaseFence::new(8).unwrap();
     fixture
         .client
@@ -288,7 +288,7 @@ fn a_relation_target_must_name_the_configured_reviewer_and_flat_repository() {
     let (status, target) = status_fixture(&fixture);
     let mut wrong_integration = target.clone();
     wrong_integration.scope.integration = opaque_id!("88");
-    let mut nested = target.clone();
+    let mut nested = target;
     nested.scope.repository = RepositoryIdentity::new(
         "forge.example".to_owned(),
         "group/acme".to_owned(),

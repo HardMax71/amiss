@@ -144,7 +144,7 @@ fn project_blob(
     let projected = normalized
         .as_ref()
         .strip_suffix(b"\n")
-        .unwrap_or(normalized.as_ref());
+        .unwrap_or_else(|| normalized.as_ref());
     let projected_bytes = u64::try_from(projected.len()).unwrap_or(u64::MAX);
     within(
         projected_bytes,

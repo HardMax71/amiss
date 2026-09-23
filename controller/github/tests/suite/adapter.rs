@@ -615,7 +615,7 @@ fn publication_is_delegated_only_under_the_authenticated_identity() {
     let valid = publication(&delivery, run.clone());
     let api = FakeApi::new(ChangeSnapshot {
         state: ChangeState::Active,
-        run: run.clone(),
+        run,
         gate_commit: oid('e'),
     });
     let adapter = adapter(api.clone());

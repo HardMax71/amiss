@@ -221,7 +221,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
             provider_run_attempt: input.run.provider_run.attempt.get(),
         },
         SuppliedControl {
-            value: checked_plan.execution.clone(),
+            value: checked_plan.execution,
             expected_digest: constraint_digest,
             trust_source: RequestTrust::ExternalRequiredCheck,
         },
