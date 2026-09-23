@@ -11535,7 +11535,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-crc32fast 1.5.1
+crc32fast 1.5.2
 License: MIT OR Apache-2.0
 Source: https://github.com/srijs/rust-crc32fast
 
@@ -20299,7 +20299,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ================================================================================
-json-serde 0.0.1-alpha.1
+json-serde 0.0.1-alpha.2
 License: Apache-2.0
 Source: https://github.com/oxidecomputer/json-serde
 

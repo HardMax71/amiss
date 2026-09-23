@@ -63,7 +63,7 @@ checksum = "e9d4ee0d472d1cd2e28c97dfa124b3d8d992e10eb0a035f33f5d12e3a177ba3b"
 
 [[package]]
 name = "amiss"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-fixtures",
  "amiss-git",
@@ -89,14 +89,14 @@ dependencies = [
 
 [[package]]
 name = "amiss-adoc"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-wire",
 ]
 
 [[package]]
 name = "amiss-api"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-controller-files",
  "amiss-wire",
@@ -114,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-bootstrap"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-fixtures",
  "amiss-git",
@@ -129,7 +129,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller-files",
@@ -168,7 +168,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-bootstrap-fixture"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-wire",
@@ -176,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-constraint"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller-files",
@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-files"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -201,7 +201,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-fixtures"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
@@ -218,7 +218,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-fuzz"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-controller",
  "amiss-controller-fixtures",
@@ -236,7 +236,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-git"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-controller",
  "amiss-fixtures",
@@ -255,7 +255,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-gitea"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-controller",
  "amiss-controller-fixtures",
@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-gitea-service"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-controller",
  "amiss-controller-bootstrap-fixture",
@@ -298,7 +298,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-github"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-controller",
  "amiss-controller-fixtures",
@@ -324,7 +324,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-github-service"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-controller",
  "amiss-controller-bootstrap-fixture",
@@ -343,7 +343,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-gitlab"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-controller",
  "amiss-controller-fixtures",
@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-gitlab-service"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-controller",
  "amiss-controller-bootstrap-fixture",
@@ -387,7 +387,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-service"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
@@ -424,7 +424,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-fixtures"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-wire",
  "flate2",
@@ -438,7 +438,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-fuzz"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-git",
  "amiss-scan",
@@ -449,7 +449,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-git"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-fixtures",
  "amiss-wire",
@@ -468,7 +468,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-md"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-wire",
  "linkify",
@@ -482,7 +482,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-probe"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-fixtures",
  "amiss-wire",
@@ -493,7 +493,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-rst"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-wire",
  "divan",
@@ -501,7 +501,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-scan"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "amiss-adoc",
  "amiss-fixtures",
@@ -532,7 +532,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-wire"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "countio",
  "digest-io",
@@ -1114,9 +1114,9 @@ dependencies = [
 
 [[package]]
 name = "crc32fast"
-version = "1.5.1"
+version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8498c871161e1742aaa9d52551b2d6ebdd4c3d45a3be423e3728f33b955be550"
+checksum = "01a7799fd6b852db0e61728dde9a204c423b44d689dbd432522543614b490e78"
 dependencies = [
  "cfg-if",
 ]
@@ -3056,18 +3056,18 @@ dependencies = [
 
 [[package]]
 name = "json-serde"
-version = "0.0.1-alpha.1"
+version = "0.0.1-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65a9d0d846e2f9ddd1718ee6b1c2b648d9563e529962c5f68873f1bb07b2ac09"
+checksum = "84f14ca5d9e1391edda48b3e5b5ccae8d3f2b367ac412278c65c7a026a3d43f6"
 dependencies = [
  "serde_core",
 ]
 
 [[package]]
 name = "jsonschema"
-version = "0.55.1"
+version = "0.56.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b68339c3d874e48151d74ffe256d93a58cffa240983cb0967d3cbaea083a44fe"
+checksum = "b6a806f80c1f5560431009ce5ec29b59d38f950e0cd7db5f1b8925e6d8104e21"
 dependencies = [
  "ahash",
  "bytecount",
@@ -3093,18 +3093,18 @@ dependencies = [
 
 [[package]]
 name = "jsonschema-regex"
-version = "0.55.1"
+version = "0.56.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6307b5b51216ec9b941b52244c74043fa0b1d6b657b56199f57cb1416d3641c5"
+checksum = "cb862addfa7782108933abcf842fe25334523a9df5b89ea4d9620e3dd7b42181"
 dependencies = [
  "regex-syntax",
 ]
 
 [[package]]
 name = "jsonschema-value"
-version = "0.55.1"
+version = "0.56.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0230ac05e09c6111e96c147b75c390579f5cbd45654b980c68ac60fe17b3f129"
+checksum = "a05cd404c5ff6e2731dbbf7e290a27417750acfb59e329560a1d0af384c93fb0"
 dependencies = [
  "ahash",
  "bytecount",
@@ -3118,9 +3118,9 @@ dependencies = [
 
 [[package]]
 name = "jsonwebtoken"
-version = "11.0.0"
+version = "11.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "881733cbc631fc9e472e24447ce32a64bedf2da498d6d8570b08edc87de71f65"
+checksum = "e75fe14a82d81e5f5af639997db37d8b96045938a7ac6ab18cdbe1c7467e05e1"
 dependencies = [
  "aws-lc-rs",
  "base64 0.22.1",
@@ -3786,9 +3786,9 @@ dependencies = [
 
 [[package]]
 name = "referencing"
-version = "0.55.1"
+version = "0.56.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a196a5b4a8a12f46b6353174df865a05d41a6055aff212ec30877492788618b6"
+checksum = "a3b4a92fac7e28c27de3ad26df2ecb9e652f227b258e845af034052e5b22c96c"
 dependencies = [
  "ahash",
  "fluent-uri",
