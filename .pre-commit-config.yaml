@@ -84,6 +84,7 @@ repos:
         language: system
         types: [rust]
         require_serial: true # parallel batches race rustup's toolchain auto-install
+      # Equal priorities run together; sweep deletes build artifacts, so it runs alone last.
       - id: clippy
         name: cargo clippy
         entry: cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -91,12 +92,14 @@ repos:
         types_or: [rust, toml]
         pass_filenames: false
         stages: [pre-push]
+        priority: 100
       - id: nextest
         name: cargo nextest
         entry: cargo nextest run --workspace --locked
         language: system
         pass_filenames: false
         stages: [pre-push]
+        priority: 101
       - id: deny
         name: cargo deny
         entry: cargo deny check
@@ -104,6 +107,7 @@ repos:
         files: (^|/)(Cargo\.(toml|lock)|deny\.toml)$
         pass_filenames: false
         stages: [pre-push]
+        priority: 101
       - id: deny-engine
         name: cargo deny engine bans
         entry: cargo deny --config deny-engine.toml check bans
@@ -111,6 +115,7 @@ repos:
         files: (^|/)(Cargo\.(toml|lock)|deny-engine\.toml)$
         pass_filenames: false
         stages: [pre-push]
+        priority: 101
       - id: shear
         name: cargo shear
         entry: cargo shear
@@ -118,6 +123,7 @@ repos:
         types_or: [rust, toml]
         pass_filenames: false
         stages: [pre-push]
+        priority: 101
       - id: sweep
         name: drop build artifacts older than two days
         entry: >-
@@ -130,8 +136,9 @@ repos:
         always_run: true
         pass_filenames: false
         stages: [pre-push]
-      # Whole functions compared by AST edit distance: a stable edge manifest
-      # rejects every new relationship while admitting removals.
+        priority: 102
+      # Whole functions compared by AST edit distance: every new relationship
+      # fails while removals pass.
       - id: similarity-ratchet
         name: function twin edges only decrease
         entry: scripts/similarity-gate.sh
@@ -139,3 +146,4 @@ repos:
         types: [rust]
         pass_filenames: false
         stages: [pre-push]
+        priority: 101
