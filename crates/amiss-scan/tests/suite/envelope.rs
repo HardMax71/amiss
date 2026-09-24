@@ -1,8 +1,9 @@
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::report::model::{ReportEnvelope, ReportPayload};
 use amiss_wire::report::{
-    EngineProvenance, FATAL_SCRATCH_BYTES, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, emit_report,
-    model::AnalysisErrorCode, unavailable_evaluation_wire,
+    EngineProvenance, FATAL_SCRATCH_BYTES, PAYLOAD_SCHEMA, emit_report, model::AnalysisErrorCode,
+    unavailable_evaluation_wire,
 };
 use serde_json::Value;
 use sha2::Digest as _;

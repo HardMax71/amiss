@@ -19,8 +19,8 @@ use amiss_controller::{
 };
 use amiss_controller::{opaque_id, provider_namespace};
 use amiss_wire::controls::Profile;
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
-use amiss_wire::report::MACHINE_JSON_BYTES;
 
 fn oid(value: char) -> Oid {
     Oid::new(ObjectFormat::Sha1, value.to_string().repeat(40)).unwrap()

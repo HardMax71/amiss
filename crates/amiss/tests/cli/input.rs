@@ -1,6 +1,6 @@
 use std::fs::{self, File};
 
-use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 
 use crate::support::amiss;
 

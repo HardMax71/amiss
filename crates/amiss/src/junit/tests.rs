@@ -1,8 +1,9 @@
 #![cfg(test)]
 
+use amiss_wire::controls::AnalysisPhase;
 use amiss_wire::repo_path_text;
 use amiss_wire::report::model::{
-    AnalysisError, AnalysisPhase, RepoPath, ReportEnvelope, ReportPayload, ReportStatus,
+    AnalysisError, RepoPath, ReportEnvelope, ReportPayload, ReportStatus,
 };
 use amiss_wire::report::{Disposition, model::AnalysisErrorCode};
 use quick_xml::Reader;

@@ -1,8 +1,6 @@
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{AsRefStr, Display, EnumIter, EnumString, IntoStaticStr};
 
-use crate::report::model::{AddressKind, FrontmatterContract, SourceProjection};
-
 /// The five closed source adapters. Every wire string an adapter contributes
 /// (identity, grammar profile, frontmatter contract, projection, address
 /// scheme) is frozen here so no call site can spell one by hand.
@@ -88,4 +86,42 @@ impl Adapter {
             Self::PlainAdvisory => &PLAIN_ADVISORY_METADATA,
         }
     }
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
+pub enum FrontmatterContract {
+    Frontmatter,
+    None,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
+pub enum SourceProjection {
+    None,
+    SourceProjection,
+}
+
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::IntoStaticStr,
+)]
+#[strum(serialize_all = "kebab-case")]
+pub enum AddressKind {
+    AsciidocBlockPath,
+    MarkdownAstNodePath,
+    MdxAstNodePath,
+    RstBlockPath,
 }

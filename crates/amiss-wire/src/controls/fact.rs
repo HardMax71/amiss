@@ -10,7 +10,8 @@ use crate::model::Digest;
 use crate::model::{Oid, RepoPathText};
 use crate::resolution::Target;
 
-use super::{EligibleFindingKind, FACT_DOMAIN, FINDING_KEY_DOMAIN, SourceConstruct, TargetKind};
+use super::{EligibleFindingKind, FACT_DOMAIN, FINDING_KEY_DOMAIN, TargetKind};
+use crate::extraction::SourceConstruct;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,

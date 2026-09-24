@@ -593,7 +593,7 @@ fn equal_broken_anchors_are_two_observations_in_one_finding() {
         .filter_map(|row| occurrences(row).candidate)
         .filter(|side| {
             side.observation_id_input.source_construct
-                == amiss_wire::controls::SourceConstruct::HtmlAnchor
+                == amiss_wire::extraction::SourceConstruct::HtmlAnchor
         })
         .collect();
     let [first, second] = anchors.as_slice() else {

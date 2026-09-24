@@ -2,7 +2,7 @@ use std::fs;
 use std::io::Read as _;
 use std::path::Path;
 
-use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ReadError {

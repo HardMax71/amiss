@@ -8,7 +8,7 @@ use amiss_scan::resolve::{ForgeContext, Resolver, TargetCache};
 use amiss_scan::{
     DocumentStatus, Intent, Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover,
 };
-use amiss_wire::controls::SourceConstruct;
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{

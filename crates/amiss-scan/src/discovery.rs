@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, TreeEntry, ValueCap, parse_tree};
 use amiss_md::Fault;
-use amiss_wire::controls::{GitMode, ResourceName, SourceConstruct};
+use amiss_wire::controls::{GitMode, ResourceName};
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{Adapter, Oid, RepoPath};
 
 use crate::document::{Classification, classify, excluded_by_built_in, native_adapter};

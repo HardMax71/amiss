@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 
 use crate::file_ledger::FileLedgerError;
 

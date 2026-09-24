@@ -1,4 +1,4 @@
-use amiss_wire::controls::SourceConstruct;
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::extraction::{
     Analysis, AnalyzeError, BlockKind, Extraction, Fault, Heading, HeadingSource, Occurrence,
     Opaque, Work,

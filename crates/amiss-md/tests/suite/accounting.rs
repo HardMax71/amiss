@@ -1,6 +1,6 @@
 use amiss_md::{AnalyzeError, Fault, Work, charge};
 use amiss_wire::model::Adapter;
-use amiss_wire::report::model::AnalysisErrorCode;
+use amiss_wire::report::fault_code;
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn markdown(source: &[u8]) -> Work {
@@ -121,11 +121,8 @@ fn only_a_parsing_adapter_requires_utf8() {
         })
     );
     assert_eq!(
-        AnalysisErrorCode::from(Fault::DocumentInvalid).as_ref(),
+        fault_code(Fault::DocumentInvalid).as_ref(),
         "DOCUMENT_INVALID"
     );
-    assert_eq!(
-        AnalysisErrorCode::from(Fault::ParserPanic).as_ref(),
-        "PARSER_PANIC"
-    );
+    assert_eq!(fault_code(Fault::ParserPanic).as_ref(), "PARSER_PANIC");
 }

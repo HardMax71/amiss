@@ -1,4 +1,7 @@
-use super::model::{AnalysisError, AnalysisErrorCode, AnalysisPhase};
+use crate::controls::AnalysisPhase;
+use crate::extraction::Fault;
+
+use super::model::{AnalysisError, AnalysisErrorCode};
 
 /// One typed analysis error's reportable detail: the code, the exact path
 /// where the partition names one, the raw bytes of a name the report cannot
@@ -37,5 +40,16 @@ pub fn error_row(detail: &ErrorDetail) -> AnalysisError<crate::model::RepoPath> 
         observed_lower_bound: detail
             .resource
             .map(|(_, _, observed)| observed.min(i64::MAX.unsigned_abs())),
+    }
+}
+
+/// The analysis error a parse fault is reported as.
+#[must_use]
+pub const fn fault_code(fault: Fault) -> AnalysisErrorCode {
+    match fault {
+        Fault::DocumentInvalid | Fault::DocumentUnparsable => AnalysisErrorCode::DocumentInvalid,
+        Fault::ParserError => AnalysisErrorCode::ParserError,
+        Fault::ParserPanic => AnalysisErrorCode::ParserPanic,
+        Fault::InvalidSourceSpan => AnalysisErrorCode::InvalidSourceSpan,
     }
 }

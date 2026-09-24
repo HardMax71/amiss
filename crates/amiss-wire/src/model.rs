@@ -5,7 +5,7 @@ mod identity;
 mod path;
 mod time;
 
-pub use adapter::{Adapter, AdapterMetadata};
+pub use adapter::{Adapter, AdapterMetadata, AddressKind, FrontmatterContract, SourceProjection};
 pub use digest::{Digest, RAW_EVIDENCE_DOMAIN};
 pub use git::{ForgeDialect, ObjectFormat, Oid, TreeIdentity};
 pub use identity::{ArtifactId, BranchRef, OwnerId, RepositoryIdentity};

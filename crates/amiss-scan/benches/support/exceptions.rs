@@ -14,9 +14,10 @@ use amiss_scan::scan::SpanDisplay;
 use amiss_wire::controls::{
     DebtItem, EligibleFindingKind, Fact, FactEvidence, FactEvidenceKind, FactSchema,
     FindingKeyInput, FindingKeyInputSchema, FindingOccurrence, FindingScope, MissingResolution,
-    OccurrenceKind, ReferenceScopeKind, SourceConstruct, StructuralResolution, TargetIntent,
-    TargetIntentKind, TargetKind, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
+    OccurrenceKind, ReferenceScopeKind, StructuralResolution, TargetIntent, TargetIntentKind,
+    TargetKind, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
 };
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{
     Adapter, ArtifactId, ObjectFormat, OwnerId, RepoPath, RepoPathText, RepositoryIdentity,
     TreeIdentity, UtcInstant,

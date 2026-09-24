@@ -3,7 +3,7 @@ mod tests;
 use std::io;
 use std::path::PathBuf;
 
-use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 
 use super::{Row, atomic_write, read_bounded, reject_non_file};
 use crate::file_ledger::FileLedgerError;

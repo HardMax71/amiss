@@ -6,8 +6,8 @@ use amiss_wire::model::Digest;
 use std::sync::Arc;
 
 use amiss_wire::controls::Profile;
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
-use amiss_wire::report::MACHINE_JSON_BYTES;
 
 use crate::PullRequestChange;
 use crate::{

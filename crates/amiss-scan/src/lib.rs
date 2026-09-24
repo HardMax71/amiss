@@ -105,7 +105,7 @@ impl Error {
     #[must_use]
     pub fn code(&self) -> AnalysisErrorCode {
         match self {
-            Self::Parse(fault) => AnalysisErrorCode::from(*fault),
+            Self::Parse(fault) => amiss_wire::report::fault_code(*fault),
             Self::Git(GitDefect::ObjectMissing) => AnalysisErrorCode::GitObjectMissing,
             Self::Git(GitDefect::ObjectWrongKind) => AnalysisErrorCode::GitObjectWrongKind,
             Self::Git(GitDefect::ObjectUnreadable) => AnalysisErrorCode::GitObjectUnreadable,

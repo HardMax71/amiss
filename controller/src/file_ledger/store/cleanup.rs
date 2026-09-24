@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 
 use super::{
     ADMISSION_LOCK, CAPACITY_FILE, MAINTENANCE_LOCK, METADATA_FILE, Store, atomic_write, capacity,
