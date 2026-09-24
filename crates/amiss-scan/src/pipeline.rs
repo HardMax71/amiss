@@ -13,11 +13,12 @@ use crate::Error;
 use crate::correlate::{Observation, Side, correlate, unique_path_pairs};
 use crate::discovery::{DocumentStatus, SnapshotDiscovery, discover};
 use crate::observe::{OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_input};
-use crate::report::{Built, CandidateBlock, Setup, SnapshotIdentity, construct_incomplete};
+use crate::report::{Built, CandidateBlock, Setup, SnapshotIdentity, construct_incomplete, detail};
 use crate::resolve::{ForgeContext, Resolver, TargetCache};
 use crate::resources::{ScanLimits, ScanResources};
 use crate::semantic::RecordSet;
 
+mod adoption;
 mod commit;
 /// Verification and packaging of wrapper-supplied external controls shared
 /// by both orchestration modes.
@@ -55,23 +56,6 @@ pub(crate) struct CandidateEvaluation<'a> {
 
 /// One resolved snapshot root: its tree OID plus the full identity block.
 type ResolvedTree = (Oid, SnapshotIdentity);
-
-pub(crate) fn detail(error: &Error, path: Option<&RepoPath>) -> ErrorDetail {
-    let resource = match error {
-        Error::ResourceLimit {
-            resource,
-            configured_limit,
-            observed_lower_bound,
-        } => Some((*resource, *configured_limit, *observed_lower_bound)),
-        Error::Parse(_) | Error::Git(_) | Error::UnrepresentablePath | Error::Internal => None,
-    };
-    ErrorDetail {
-        code: error.code(),
-        path: path.cloned(),
-        path_bytes: None,
-        resource,
-    }
-}
 
 #[derive(Clone, Copy)]
 pub(crate) struct ObservationContext<'a> {

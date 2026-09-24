@@ -126,7 +126,7 @@ fn commit_controls(
     )
     .map_err(|(reason, row)| failure(reason, row))?;
     if let Some(context) = external.debt() {
-        crate::adoption::reproduce(repo, git_resources, engine, forge, scan_limits, context)
+        super::adoption::reproduce(repo, git_resources, engine, forge, scan_limits, context)
             .map_err(|row| failure(external_reason(&row), row))?;
     }
     Ok(external)
