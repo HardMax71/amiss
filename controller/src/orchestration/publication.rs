@@ -2,10 +2,15 @@ mod tests;
 
 use amiss_wire::envelope::MACHINE_JSON_BYTES;
 
-use super::ledger::{CheckConclusion, Publication};
-use super::model::{
-    ChangeSnapshot, ChangeState, Evaluation, RunFailure, RunIdentity, RunRequest, RunnerOutcome,
-};
+use crate::Publication;
+
+use super::model::{Evaluation, RunnerOutcome};
+use crate::ChangeSnapshot;
+use crate::ChangeState;
+use crate::CheckConclusion;
+use crate::RunFailure;
+use crate::RunIdentity;
+use crate::RunRequest;
 
 pub(super) struct PreparedPublication {
     pub(super) publication: Publication,

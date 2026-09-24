@@ -4,17 +4,20 @@ use std::sync::Arc;
 
 use crate::{
     AdapterRegistry, ArtifactError, ArtifactReference, ControllerClock, ControllerEvaluationId,
-    FileArtifactStore, IngressError, IngressPolicy, PlanError, PlanRegistry, ProviderError,
-    ResolvedPlan, SystemClock, UntrustedDelivery, resolve_plan,
+    ExternalTally, FileArtifactStore, IngressError, IngressPolicy, PlanError, PlanRegistry,
+    ProviderError, ResolvedPlan, SystemClock, UntrustedDelivery, resolve_plan,
 };
 
 use self::helpers::{
     ClaimResolution, LedgerHeartbeat, publish_staged, renew_lease, resolve_claim,
     retain_publication, stage_publication, validate_change,
 };
-use super::ledger::{CheckConclusion, DeliveryLedger};
-use super::model::{ChangeState, RunRequest, Runner};
+use super::ledger::DeliveryLedger;
+use super::model::Runner;
 use super::publication::{finalize_publication, publication};
+use crate::ChangeState;
+use crate::CheckConclusion;
+use crate::RunRequest;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ControllerError<E> {
@@ -60,15 +63,6 @@ pub enum HandleOutcome {
         conclusion: CheckConclusion,
         artifact: Option<ArtifactReference>,
     },
-}
-
-/// The verdict counts of one published delivery's retained external assessment.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ExternalTally {
-    pub refuted: u64,
-    pub unproven: u64,
-    pub reachable: u64,
 }
 
 /// Receives the external outcome frozen into a retained publication.

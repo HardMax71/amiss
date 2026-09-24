@@ -18,7 +18,10 @@ use amiss_wire::requests::{
 };
 
 use crate::ProviderRun;
-use crate::{OpaqueId, ProviderIdentity, RunRequest};
+use crate::{
+    ControllerEvaluationId, DeliveryIdentity, OpaqueId, ProviderIdentity, ProviderRunIdentity,
+    RunIdentity,
+};
 
 pub use amiss_wire::semantic::SemanticEvidenceTemplate;
 pub use controls::PolicyControls;
@@ -279,4 +282,14 @@ fn normalized_expectations(
         return Err(BootstrapJobError::SemanticEvidence);
     }
     Ok(normalized)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RunRequest {
+    pub delivery: DeliveryIdentity,
+    pub provider_run: ProviderRunIdentity,
+    pub evaluation_id: ControllerEvaluationId,
+    pub check: CheckBinding,
+    pub plan: Arc<CheckPlan>,
+    pub run: RunIdentity,
 }

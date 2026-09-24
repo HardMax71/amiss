@@ -1,38 +1,8 @@
-use std::sync::Arc;
 use std::time::Duration;
 
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
+use amiss_wire::model::ObjectFormat;
 
-use crate::{
-    ChangeLocator, CheckBinding, CheckPlan, ControllerEvaluationId, DeliveryIdentity,
-    ProviderRunIdentity,
-};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ChangeState {
-    Active,
-    Superseded,
-    Closed,
-    AuthorizationRevoked,
-}
-
-/// The refs one run resolves against.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RunRefs {
-    pub forge: ForgeDialect,
-    pub candidate: BranchRef,
-    pub target: BranchRef,
-    pub default_branch: BranchRef,
-}
-
-/// One base and candidate pair of object ids.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct OidPair {
-    pub base: Oid,
-    pub candidate: Oid,
-}
+use crate::{ChangeLocator, OidPair, RunIdentity, RunRefs, RunRequest};
 
 impl OidPair {
     pub(crate) fn well_formed(&self, object_format: ObjectFormat) -> bool {
@@ -40,17 +10,6 @@ impl OidPair {
             .into_iter()
             .all(|oid| oid.object_format() == object_format)
     }
-}
-
-/// The exact identity one evaluation runs as. Everything here is data; the
-/// binding laws live in `validate_change` and the runner recheck.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RunIdentity {
-    pub change: ChangeLocator,
-    pub refs: RunRefs,
-    pub object_format: ObjectFormat,
-    pub commits: OidPair,
-    pub trees: OidPair,
 }
 
 impl RunIdentity {
@@ -75,43 +34,10 @@ impl RunIdentity {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ChangeSnapshot {
-    pub state: ChangeState,
-    pub run: RunIdentity,
-    /// Provider revision to which the adapter binds this run's gate.
-    pub gate_commit: Oid,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RunRequest {
-    pub delivery: DeliveryIdentity,
-    pub provider_run: ProviderRunIdentity,
-    pub evaluation_id: ControllerEvaluationId,
-    pub check: CheckBinding,
-    pub plan: Arc<CheckPlan>,
-    pub run: RunIdentity,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Evaluation {
     Pass,
     Block,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, strum::AsRefStr)]
-#[serde(rename_all = "kebab-case")]
-#[strum(serialize_all = "kebab-case")]
-pub enum RunFailure {
-    MissingOutput,
-    Timeout,
-    TamperedRuntime,
-    Unavailable,
-    OversizedOutput,
-    WrongIdentity,
-    WrongTree,
-    AuthorizationRevoked,
-    Closed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

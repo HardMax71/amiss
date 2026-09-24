@@ -24,7 +24,9 @@ use amiss_wire::relation::{RELATION_DOCUMENT_BYTES, RelationVerdict};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use super::{ArtifactError, ArtifactReference, ArtifactStoreConfig};
+use super::{ArtifactReference, ArtifactStoreConfig};
+
+use crate::ArtifactError;
 use crate::{ControllerEvaluationId, ExternalTally};
 
 pub(super) const ROOT_SCHEMA: RootSchema = RootSchema::Current;

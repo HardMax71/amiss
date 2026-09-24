@@ -9,8 +9,8 @@ use amiss_wire::model::Digest;
 use url::Url;
 
 use crate::{
-    ExternalTally, LocaleAuditBundle, LocaleAuditDigests, PublicationAuditBundle,
-    PublicationAuditDigests, RelationAuditBundle, RelationAuditDigests,
+    LocaleAuditBundle, LocaleAuditDigests, PublicationAuditBundle, PublicationAuditDigests,
+    RelationAuditBundle, RelationAuditDigests,
 };
 
 pub(crate) use format::valid_id as valid_artifact_id;
@@ -122,28 +122,6 @@ pub struct ArtifactCleanup {
     pub removed_bytes: u64,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum ArtifactError {
-    #[error("artifact store is already open")]
-    AlreadyOpen,
-    #[error("artifact store configuration changed")]
-    Configuration,
-    #[error("artifact store is corrupt")]
-    Corrupt,
-    #[error("artifact store capacity is exhausted")]
-    Full,
-    #[error("artifact exceeds its configured size limit")]
-    TooLarge,
-    #[error("artifact identity was rebound to different bytes")]
-    Conflict,
-    #[error("artifact is absent or expired")]
-    NotFound,
-    #[error("artifact clock is unavailable")]
-    Clock,
-    #[error("artifact storage failed")]
-    Io(#[from] std::io::Error),
-}
-
 #[must_use]
 pub fn artifact_route(base_url: &str) -> Option<String> {
     if base_url.len() > 2_048 || base_url.ends_with('/') {
@@ -193,4 +171,13 @@ pub(crate) fn reference_matches_report(
 ) -> bool {
     report
         .is_some_and(|bytes| Digest::from(sha2::Sha256::digest(bytes).0) == reference.report_digest)
+}
+
+/// The verdict counts of one published delivery's retained external assessment.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExternalTally {
+    pub refuted: u64,
+    pub unproven: u64,
+    pub reachable: u64,
 }

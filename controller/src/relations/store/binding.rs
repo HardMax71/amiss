@@ -4,12 +4,21 @@ use amiss_wire::model::Digest;
 use serde::Serialize;
 use sha2::Digest as _;
 
-use super::super::{
-    PendingRelation, RelationLimits, RelationPlan, RelationScheduleError,
-    RelationStatusDestination, RelationTransition, TriggeredRelation, relation_transition,
-};
+use super::super::{PendingRelation, RelationScheduleError};
+
+use crate::relation_transition;
+
+use crate::RelationTransition;
+
+use crate::TriggeredRelation;
+
+use crate::RelationPlan;
+
+use crate::RelationStatusDestination;
+
 use super::{RelationScheduleStoreError, StoredBinding};
 use crate::LeaseFence;
+use crate::RelationLimits;
 
 const PLAN_BINDING_DOMAIN: &str = "amiss/controller-relation-plan-binding-v1";
 const SOURCE_BINDING_SCHEMA: &str = "amiss/controller-relation-source-binding-v1";

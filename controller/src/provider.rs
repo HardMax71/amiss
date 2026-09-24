@@ -3,26 +3,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    ChangeLocator, ChangeSnapshot, DeliveryIdentity, IngressCheck, IntegrationId, ProviderIdentity,
-    ProviderNamespace, ProviderRunIdentity, Publication, VerifiedDelivery,
+    ArtifactReference, AuthenticatedDelivery, ChangeSnapshot, CheckBinding, ControllerEvaluationId,
+    IngressCheck, ProviderNamespace, ProviderRunIdentity, RunIdentity, VerifiedDelivery,
 };
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AuthenticatedDelivery {
-    pub identity: DeliveryIdentity,
-    pub change: ChangeLocator,
-    pub provider_run: ProviderRunIdentity,
-}
-
-/// What a provider authenticated about one delivery. Which delivery it is
-/// stays the ingress's to say, from the replay identity the proof carries.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProviderFacts {
-    pub provider: ProviderIdentity,
-    pub integration: IntegrationId,
-    pub change: ChangeLocator,
-    pub provider_run: ProviderRunIdentity,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ProviderError {
@@ -169,4 +152,39 @@ pub fn provider_api_url(base: &url::Url, route: &str) -> Result<url::Url, Provid
     }
     base.join(&format!(".{route}"))
         .map_err(|_defect| ProviderError::InvalidResponse)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, strum::AsRefStr)]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
+pub enum RunFailure {
+    MissingOutput,
+    Timeout,
+    TamperedRuntime,
+    Unavailable,
+    OversizedOutput,
+    WrongIdentity,
+    WrongTree,
+    AuthorizationRevoked,
+    Closed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CheckConclusion {
+    Pass,
+    Block,
+    Superseded,
+    Unavailable(RunFailure),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Publication {
+    pub provider_run: ProviderRunIdentity,
+    pub evaluation_id: ControllerEvaluationId,
+    pub check: CheckBinding,
+    pub run: RunIdentity,
+    pub gate_commit: amiss_wire::model::Oid,
+    pub conclusion: CheckConclusion,
+    pub report: Option<Vec<u8>>,
+    pub artifact: Option<ArtifactReference>,
 }
