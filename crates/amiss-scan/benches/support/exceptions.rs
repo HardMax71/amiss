@@ -13,8 +13,8 @@ use amiss_scan::resolve::Intent;
 use amiss_scan::scanned::SpanDisplay;
 use amiss_wire::controls::{
     DebtItem, EligibleFindingKind, Fact, FactEvidence, FactEvidenceKind, FactSchema,
-    FindingKeyInput, FindingKeyInputSchema, FindingOccurrence, FindingScope, MissingResolution,
-    OccurrenceKind, ReferenceScopeKind, StructuralResolution, TargetIntent, TargetIntentKind,
+    FindingKeyInput, FindingKeyInputSchema, FindingOccurrence, MissingResolution, OccurrenceKind,
+    ReferenceScope, ReferenceScopeKind, StructuralResolution, TargetIntent, TargetIntentKind,
     TargetKind, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
 };
 use amiss_wire::extraction::SourceConstruct;
@@ -152,7 +152,7 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
         key_input: FindingKeyInput {
             schema: FindingKeyInputSchema::Current,
             finding_kind: EligibleFindingKind::ExplicitTargetMissing,
-            scope: FindingScope {
+            scope: ReferenceScope {
                 kind: ReferenceScopeKind::Reference,
                 document: repo_path_text(document_text),
                 source_construct: SourceConstruct::InlineLink,

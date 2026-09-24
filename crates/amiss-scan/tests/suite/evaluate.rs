@@ -800,7 +800,7 @@ fn waived_fact() -> amiss_wire::controls::Fact {
         key_input: amiss_wire::controls::FindingKeyInput {
             schema: amiss_wire::controls::FindingKeyInputSchema::Current,
             finding_kind: amiss_wire::controls::EligibleFindingKind::ExplicitTargetMissing,
-            scope: amiss_wire::controls::FindingScope {
+            scope: amiss_wire::controls::ReferenceScope {
                 kind: amiss_wire::controls::ReferenceScopeKind::Reference,
                 document: repo_path_text!("d.md"),
                 source_construct: SourceConstruct::InlineLink,

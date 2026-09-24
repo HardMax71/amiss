@@ -24,7 +24,7 @@ pub use execution_constraint::{
 };
 pub use fact::{
     Fact, FactEvidence, FactEvidenceKind, FactSchema, FindingKeyInput, FindingKeyInputSchema,
-    FindingOccurrence, FindingScope, MissingResolution, OccurrenceKind, ReferenceScopeKind,
+    FindingOccurrence, MissingResolution, OccurrenceKind, ReferenceScope, ReferenceScopeKind,
     StructuralResolution, TargetIntent, TargetIntentKind,
 };
 pub use floor::{

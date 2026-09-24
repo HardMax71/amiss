@@ -82,7 +82,7 @@ pub struct FindingOccurrence {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct FindingScope {
+pub struct ReferenceScope {
     pub document: RepoPathText,
     pub kind: ReferenceScopeKind,
     pub normalized_target_intent: TargetIntent,
@@ -92,7 +92,7 @@ pub struct FindingScope {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct FindingKeyInput<F = EligibleFindingKind, S = FindingScope> {
+pub struct FindingKeyInput<F = EligibleFindingKind, S = ReferenceScope> {
     pub finding_kind: F,
     pub schema: FindingKeyInputSchema,
     pub scope: S,
