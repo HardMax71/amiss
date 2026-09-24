@@ -5,9 +5,10 @@ mod pack;
 pub mod repo;
 pub mod resources;
 
+pub use handle::RepositoryOpenError;
 pub use index::{IndexEntry, LogicalIndex, parse_index_file};
 pub use object::{Commit, Object, ObjectKind, TreeEntry, parse_commit, parse_tree};
-pub use repo::{Repository, RepositoryOpenError};
+pub use repo::Repository;
 pub use resources::{GitLimits, GitResources, ValueCap};
 
 use amiss_wire::controls::ResourceName;

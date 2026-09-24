@@ -7,7 +7,7 @@ use amiss_wire::controls::ResourceName;
 use amiss_wire::model::{ObjectFormat, Oid};
 
 use crate::Error;
-use crate::handle::{open_dir, open_file, open_root};
+use crate::handle::{RepositoryOpenError, open_dir, open_file, open_root};
 use crate::object::{Object, ObjectKind, decode_loose_reusing, discard_to_unreadable, verify_oid};
 use crate::pack::{
     self, EntryKind, PackSet, apply_delta, inflate_exact, parse_entry_header, parse_ofs_distance,
@@ -22,9 +22,6 @@ pub struct Repository {
     packs: OnceLock<Result<PackSet, Error>>,
     repacked: OnceLock<Result<PackSet, Error>>,
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RepositoryOpenError;
 
 impl Repository {
     /// Opens the non-bare checkout forms, all through no-follow handles. A
