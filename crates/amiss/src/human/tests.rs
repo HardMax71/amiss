@@ -7,8 +7,9 @@ use std::time::Instant;
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
 fn measurement_report(finding_count: usize) -> amiss_wire::report::model::ReportPayload {
+    use amiss_wire::model::RepoPath;
     use amiss_wire::model::RepoPathText;
-    use amiss_wire::report::model::{RepoPath, ReportEnvelope};
+    use amiss_wire::report::model::ReportEnvelope;
 
     let report: ReportEnvelope = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
     let mut payload = report.payload;
@@ -22,8 +23,8 @@ fn measurement_report(finding_count: usize) -> amiss_wire::report::model::Report
             finding.finding_key = format!("sha256:{index:064x}").parse().unwrap();
             finding.fix = None;
             finding.kind = amiss_wire::report::FindingKind::ExplicitTargetMissing;
-            finding.location.path = Some(RepoPath::Text(
-                RepoPathText::try_from(format!("docs/guide-{index:05}.md")).unwrap(),
+            finding.location.path = Some(RepoPath::from(
+                &RepoPathText::try_from(format!("docs/guide-{index:05}.md")).unwrap(),
             ));
             finding.location.span = Some(amiss_wire::report::model::SourceSpan {
                 end_byte: 19,
@@ -46,9 +47,10 @@ fn measurement_report(finding_count: usize) -> amiss_wire::report::model::Report
 /// position settle on the finding key, so no pair of them can swap.
 #[test]
 fn places_read_in_location_order_and_settle_ties_on_the_finding_key() {
+    use amiss_wire::model::RepoPath;
     use amiss_wire::model::RepoPathText;
     use amiss_wire::report::Disposition;
-    use amiss_wire::report::model::{Attribution, RepoPath, ReportEnvelope, SourceSpan};
+    use amiss_wire::report::model::{Attribution, ReportEnvelope, SourceSpan};
     use amiss_wire::resolution::ResolutionTag;
 
     let report: ReportEnvelope = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
@@ -67,8 +69,8 @@ fn places_read_in_location_order_and_settle_ties_on_the_finding_key() {
         finding.attribution = Attribution::PreExisting;
         finding.effective_disposition = Disposition::Warn;
         finding.finding_key = format!("sha256:{key:064x}").parse().unwrap();
-        finding.location.path = Some(RepoPath::Text(
-            RepoPathText::try_from(path.to_owned()).unwrap(),
+        finding.location.path = Some(RepoPath::from(
+            &RepoPathText::try_from(path.to_owned()).unwrap(),
         ));
         finding.location.span = Some(SourceSpan {
             start_byte: 0,
@@ -84,14 +86,14 @@ fn places_read_in_location_order_and_settle_ties_on_the_finding_key() {
 
     let read: Vec<(String, u64, u64, String)> = super::places(
         &payload,
-        |path: Option<&RepoPath>| path.map_or_else(|| "-".to_owned(), super::wire_path),
+        |path: Option<&RepoPath>| path.map_or_else(|| "-".to_owned(), super::engine_path),
         &|_resolution| (ResolutionTag::Missing, None),
     )
     .iter()
     .map(|place| {
         let span = place.span.unwrap();
         (
-            place.document.map_or_else(String::new, super::wire_path),
+            place.document.map_or_else(String::new, super::engine_path),
             span.start_line,
             span.start_column,
             place.key.to_string(),
@@ -147,17 +149,14 @@ fn measure<T, F: Fn() -> T>(label: &str, project: F) {
 fn large_projection_latency_and_memory() {
     let envelope = measurement_report(10_000);
     measure("sarif", || {
-        crate::sarif::log(&envelope, |path| match path {
-            amiss_wire::report::model::RepoPath::Text(text) => Some(text.as_str()),
-            amiss_wire::report::model::RepoPath::Bytes(_) => None,
-        })
+        crate::sarif::log(&envelope, amiss_wire::model::RepoPath::as_str)
     });
     measure("code-quality", || {
         crate::codequality::issues(&envelope, |path| {
-            std::borrow::Cow::Borrowed(match path {
-                amiss_wire::report::model::RepoPath::Text(text) => text.as_str(),
-                amiss_wire::report::model::RepoPath::Bytes(bytes) => &bytes.bytes_hex,
-            })
+            path.as_str().map_or_else(
+                || std::borrow::Cow::Owned(hex::encode(path.as_bytes())),
+                std::borrow::Cow::Borrowed,
+            )
         })
     });
 }

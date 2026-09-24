@@ -41,7 +41,7 @@ fn typed_index_identities_hash_every_entry_field_without_changing_the_wire() {
                         {"path": "docs/quoted-\"β\n.md", "entry_kind": kind,
                          "git_mode": mode_name, "object_format": name,
                          "object_oid": "a".repeat(width), "skip_worktree": skip},
-                        {"path": {"bytes_hex": "646f63732fff2e6d64"}, "entry_kind": kind,
+                        {"path": {"bytes": [100, 111, 99, 115, 47, 255, 46, 109, 100]}, "entry_kind": kind,
                          "git_mode": mode_name, "object_format": name,
                          "object_oid": "a".repeat(width), "skip_worktree": !skip}
                     ]

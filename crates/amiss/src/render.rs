@@ -5,9 +5,7 @@ use std::process::ExitCode;
 use amiss_wire::ExitClass;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::human::atom;
-use amiss_wire::report::model::{
-    MissingResolution, RepoPath, ReportPayload, Resolution as WireResolution,
-};
+use amiss_wire::report::model::{MissingResolution, ReportPayload, Resolution as WireResolution};
 use amiss_wire::report::result_verdict;
 use amiss_wire::resolution::{MissingTag, ResolutionTag, VersionScopeTag};
 
@@ -43,11 +41,11 @@ pub(crate) fn run(invocation: &RenderInvocation, reserve: &mut BufWriter<Stdout>
         },
         reserve,
         |out| amiss_wire::report::emit_report(&envelope, out),
-        |path| match path {
-            RepoPath::Text(path) => Ok(path.as_str()),
-            RepoPath::Bytes(path) => Err(Cow::Borrowed(&path.bytes_hex)),
+        |path| {
+            path.as_str()
+                .ok_or_else(|| Cow::Owned(hex::encode(path.as_bytes())))
         },
-        |resolution| wire_resolution(resolution, crate::human::wire_path),
+        |resolution| wire_resolution(resolution, crate::human::engine_path),
     );
     crate::projection_exit(result, ExitCode::from(verdict.code()))
 }

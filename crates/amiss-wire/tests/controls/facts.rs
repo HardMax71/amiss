@@ -8,7 +8,9 @@ use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 
-use amiss_wire::report::model::{FindingFactEvidence, RepoPath};
+use amiss_wire::report::model::FindingFactEvidence;
+
+use amiss_wire::model::RepoPath;
 use amiss_wire::resolution::{BlobContent, BlobMode, Target};
 use serde_json::Value;
 

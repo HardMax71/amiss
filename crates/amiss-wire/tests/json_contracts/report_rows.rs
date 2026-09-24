@@ -1,7 +1,8 @@
 use amiss_wire::controls::AnalysisPhase;
+use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
-    AnalysisError, AnalysisErrorCode, Feedback, RepoPath, RepoPathBytes, ReportEnvelope,
-    ReportStatus, UnavailableFeedback, UnavailableStatus,
+    AnalysisError, AnalysisErrorCode, Feedback, ReportEnvelope, ReportStatus, UnavailableFeedback,
+    UnavailableStatus,
 };
 
 #[expect(
@@ -13,9 +14,7 @@ pub(super) fn reports() -> serde_json::Result<[ReportEnvelope; 2]> {
     let mut report: ReportEnvelope = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-report.canonical.json"
     ))?;
-    let path = RepoPath::Bytes(RepoPathBytes {
-        bytes_hex: hex::encode(b"docs/b\xff.md"),
-    });
+    let path: RepoPath = serde_json::from_value(serde_json::json!({ "bytes": b"docs/b\xff.md" }))?;
     report.payload.documents[0].path = path.clone();
     let Feedback::Available(feedback) = &mut report.payload.feedback else {
         panic!("the report fixture has available feedback");
@@ -28,7 +27,7 @@ pub(super) fn reports() -> serde_json::Result<[ReportEnvelope; 2]> {
         description: AnalysisErrorCode::InvalidUtf8.meaning().to_owned(),
         observed_lower_bound: None,
         path: Some(path),
-        path_bytes_hex: None,
+        path_bytes: None,
         phase: AnalysisPhase::Configuration,
         resource: None,
     });

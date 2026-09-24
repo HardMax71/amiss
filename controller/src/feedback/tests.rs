@@ -2,10 +2,11 @@
 use amiss_wire::model::RepoPathText;
 use amiss_wire::repo_path_text;
 
+use amiss_wire::model::RepoPath;
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::report::model::{
-    AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem, RepoPath,
-    RepoPathBytes, UnavailableFeedback, UnavailableStatus,
+    AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem,
+    UnavailableFeedback, UnavailableStatus,
 };
 use amiss_wire::report::{Disposition, FindingKind};
 use sha2::Digest as _;
@@ -51,20 +52,18 @@ fn feedback_projects_counts_labels_and_atom_targets() {
         vec![
             item(
                 FeedbackAction::Fix,
-                Some(RepoPath::Text(repo_path_text!("docs/new.md"))),
+                Some(RepoPath::from(&repo_path_text!("docs/new.md"))),
                 1,
             ),
             item(
                 FeedbackAction::Check,
-                Some(RepoPath::Bytes(RepoPathBytes {
-                    bytes_hex: "ff".to_owned(),
-                })),
+                Some(RepoPath::from_bytes(vec![0xff]).unwrap()),
                 2,
             ),
             item(FeedbackAction::Existing, None, 3),
             item(
                 FeedbackAction::Fix,
-                Some(RepoPath::Text(repo_path_text!("docs/second.md"))),
+                Some(RepoPath::from(&repo_path_text!("docs/second.md"))),
                 4,
             ),
         ],
@@ -87,7 +86,7 @@ fn a_hostile_target_cannot_carry_control_bytes_into_provider_markdown() {
         0,
         vec![item(
             FeedbackAction::Fix,
-            Some(RepoPath::Text(repo_path_text!(
+            Some(RepoPath::from(&repo_path_text!(
                 "docs/\u{1b}[31m::error::x.md"
             ))),
             1,
@@ -112,8 +111,8 @@ fn eleven_items_show_ten_and_one_overflow_line() {
         .map(|index| {
             item(
                 FeedbackAction::Fix,
-                Some(RepoPath::Text(
-                    RepoPathText::try_from(format!("docs/absent-{index}.md")).unwrap(),
+                Some(RepoPath::from(
+                    &RepoPathText::try_from(format!("docs/absent-{index}.md")).unwrap(),
                 )),
                 1,
             )
@@ -201,27 +200,25 @@ fn malformed_feedback_cannot_turn_into_plausible_counts_or_labels() {
 #[test]
 fn malformed_byte_targets_refuse_the_summary_even_outside_the_display_window() {
     for invalid in [
-        String::new(),
-        "gg".to_owned(),
-        "f".to_owned(),
-        "fG".to_owned(),
-        "FF".to_owned(),
-        "ff00".to_owned(),
-        "ff5c".to_owned(),
-        "2fff".to_owned(),
-        "ff2f".to_owned(),
-        "ff2f2fff".to_owned(),
-        "2e2fff".to_owned(),
-        "ff2f2e2e".to_owned(),
-        "646f63732f612e6d64".to_owned(),
-        "ff".repeat(4097),
+        serde_json::json!(Vec::<u8>::new()),
+        serde_json::json!([256]),
+        serde_json::json!("ff"),
+        serde_json::json!(vec![0xff_u8, 0x00]),
+        serde_json::json!(vec![0xff_u8, b'\\']),
+        serde_json::json!(vec![b'/', 0xff]),
+        serde_json::json!(vec![0xff, b'/']),
+        serde_json::json!(vec![0xff, b'/', b'/', 0xff]),
+        serde_json::json!(vec![b'.', b'/', 0xff]),
+        serde_json::json!(vec![0xff, b'/', b'.', b'.']),
+        serde_json::json!(b"docs/a.md".to_vec()),
+        serde_json::json!(vec![0xff_u8; 4097]),
     ] {
         for index in [0, 10] {
-            let mut items = vec![item(FeedbackAction::Fix, None, 1); 11];
-            items[index].target = Some(RepoPath::Bytes(RepoPathBytes {
-                bytes_hex: invalid.clone(),
-            }));
-            let bytes = report(0, items);
+            let items = vec![item(FeedbackAction::Fix, None, 1); 11];
+            let mut forged: serde_json::Value = serde_json::from_slice(&report(0, items)).unwrap();
+            forged["payload"]["feedback"]["items"][index]["target"] =
+                serde_json::json!({ "bytes": invalid });
+            let bytes = bind(&mut forged);
             assert!(
                 feedback_lines(Some(&bytes), false).is_empty(),
                 "accepted byte target {invalid:?} at item {index}"
@@ -235,9 +232,7 @@ fn malformed_byte_targets_refuse_the_summary_even_outside_the_display_window() {
             );
         }
     }
-    let target = Some(RepoPath::Bytes(RepoPathBytes {
-        bytes_hex: "ff".repeat(4096),
-    }));
+    let target = Some(RepoPath::from_bytes(vec![0xff; 4096]).unwrap());
     let bytes = report(0, vec![item(FeedbackAction::Fix, target, 1)]);
     assert_eq!(
         feedback_lines(Some(&bytes), false),
@@ -310,7 +305,7 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
         0,
         vec![item(
             FeedbackAction::Fix,
-            Some(RepoPath::Text(repo_path_text!("docs/new.md"))),
+            Some(RepoPath::from(&repo_path_text!("docs/new.md"))),
             1,
         )],
     );

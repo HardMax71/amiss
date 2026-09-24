@@ -1,9 +1,6 @@
 use std::borrow::Cow;
-use std::sync::Arc;
 
-use hex_fmt::HexFmt;
 use serde::{Deserialize, Serialize};
-use serde_with::{DisplayFromStr, serde_as};
 
 /// A repository path whose bytes are valid UTF-8, mirroring the schema's
 /// `RepoPathText`: the form every configuration surface is confined to.
@@ -51,19 +48,21 @@ macro_rules! repo_path_text {
 /// `RepoPath` union: text when the raw bytes are valid UTF-8, and the bytes
 /// themselves otherwise. Construction classifies, so one logical path has
 /// exactly one representation and a digest can never split across forms.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RepoPath(Repr);
 
-#[serde_as]
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 enum Repr {
-    Text(String),
-    Bytes {
-        #[serde_as(as = "DisplayFromStr")]
-        bytes_hex: Arc<HexFmt<Vec<u8>>>,
-    },
+    Text(RepoPathText),
+    Bytes(PathBytes),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PathBytes {
+    bytes: Vec<u8>,
 }
 
 impl RepoPath {
@@ -75,10 +74,10 @@ impl RepoPath {
             return None;
         }
         match String::from_utf8(raw) {
-            Ok(text) => Some(Self(Repr::Text(text))),
-            Err(invalid) => Some(Self(Repr::Bytes {
-                bytes_hex: Arc::new(HexFmt(invalid.into_bytes())),
-            })),
+            Ok(text) => Some(Self(Repr::Text(RepoPathText(Cow::Owned(text))))),
+            Err(invalid) => Some(Self(Repr::Bytes(PathBytes {
+                bytes: invalid.into_bytes(),
+            }))),
         }
     }
 
@@ -90,16 +89,16 @@ impl RepoPath {
     #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         match &self.0 {
-            Repr::Text(text) => text.as_bytes(),
-            Repr::Bytes { bytes_hex } => &bytes_hex.0,
+            Repr::Text(text) => text.as_str().as_bytes(),
+            Repr::Bytes(path) => &path.bytes,
         }
     }
 
     #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match &self.0 {
-            Repr::Text(text) => Some(text),
-            Repr::Bytes { .. } => None,
+            Repr::Text(text) => Some(text.as_str()),
+            Repr::Bytes(_) => None,
         }
     }
 }
@@ -108,7 +107,7 @@ impl RepoPath {
 /// byte grammar, and a `String` is UTF-8 by construction.
 impl From<&RepoPathText> for RepoPath {
     fn from(text: &RepoPathText) -> Self {
-        Self(Repr::Text(text.as_str().to_owned()))
+        Self(Repr::Text(text.clone()))
     }
 }
 

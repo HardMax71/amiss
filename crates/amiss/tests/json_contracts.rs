@@ -3,11 +3,11 @@ use sha2::Digest as _;
 use std::{fs, process::Command};
 
 use amiss_wire::{
+    model::RepoPath,
     report::{
         PAYLOAD_SCHEMA,
         model::{
-            MissingResolution, Occurrence, Pair, RepoPath, RepoPathBytes, ReportEnvelope,
-            Resolution, Sides, occurrences,
+            MissingResolution, Occurrence, Pair, ReportEnvelope, Resolution, Sides, occurrences,
         },
     },
     resolution::{Target, VersionScope},
@@ -20,9 +20,8 @@ fn refs_preserve_original_occurrences_but_reject_unknown_span_fields() {
     let mut comparison = report.payload.observations[0].clone();
     let candidate = occurrences(&comparison).candidate.unwrap().clone();
     let mut alternative = candidate.clone();
-    alternative.observation_id_input.document = RepoPath::Bytes(RepoPathBytes {
-        bytes_hex: hex::encode(b"docs/\xff.md"),
-    });
+    alternative.observation_id_input.document =
+        RepoPath::from_bytes(b"docs/\xff.md".to_vec()).unwrap();
     let expected = [candidate, alternative.clone()];
     comparison.alternatives.candidate = vec![alternative.clone()];
     report.payload.observations = vec![comparison];
@@ -118,7 +117,7 @@ fn refs_query_each_path_source_and_raw_byte_targets() {
     let original: ReportEnvelope = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("report.json");
-    let text_target = RepoPath::Text(repo_path_text!("docs/query.md"));
+    let text_target = RepoPath::from(&repo_path_text!("docs/query.md"));
     for (intent, resolution, flag, target) in [
         (
             Some(text_target.clone()),
@@ -155,9 +154,7 @@ fn refs_query_each_path_source_and_raw_byte_targets() {
             "docs/query.md",
         ),
         (
-            Some(RepoPath::Bytes(RepoPathBytes {
-                bytes_hex: hex::encode(b"docs/\xff.md"),
-            })),
+            Some(RepoPath::from_bytes(b"docs/\xff.md".to_vec()).unwrap()),
             Resolution::Missing(MissingResolution::LabelNotDeclared {}),
             "--target-bytes-hex",
             "646f63732fff2e6d64",

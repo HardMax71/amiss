@@ -431,8 +431,8 @@ fn an_unrepresentable_tree_path_is_disclosed_by_its_bytes() {
         .expect("the walk reports the entry it could not name");
     assert!(row["path"].is_null(), "there is no spelling to print");
     assert_eq!(
-        row["path_bytes_hex"].as_str(),
-        Some(hex::encode(raw).as_str()),
+        row["path_bytes"],
+        serde_json::json!(raw),
         "the bytes are the disclosure: {row}"
     );
 }
@@ -461,20 +461,20 @@ fn an_index_path_is_disclosed_up_to_the_ceiling() {
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
     let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap();
     let payload = payload(&built);
-    let disclosed: Vec<Option<&str>> = payload["errors"]
+    let disclosed: Vec<serde_json::Value> = payload["errors"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|row| row["code"] == "UNREPRESENTABLE_PATH")
-        .map(|row| row["path_bytes_hex"].as_str())
+        .map(|row| row["path_bytes"].clone())
         .collect();
     assert_eq!(disclosed.len(), 2, "both entries are refused");
     assert!(
-        disclosed.contains(&Some(hex::encode(&at_ceiling).as_str())),
+        disclosed.contains(&serde_json::json!(at_ceiling)),
         "the entry at the ceiling is disclosed whole"
     );
     assert!(
-        disclosed.contains(&None),
+        disclosed.contains(&serde_json::Value::Null),
         "the entry past the ceiling has no disclosure to make"
     );
 }

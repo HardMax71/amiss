@@ -17,9 +17,10 @@ use amiss_controller::{
 };
 use amiss_controller::{ProviderRun, PullRequestChange};
 use amiss_controller::{opaque_id, provider_namespace};
+use amiss_wire::model::RepoPath;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::model::{
-    AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem, RepoPath,
+    AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem,
 };
 use amiss_wire::report::{Disposition, FindingKind};
 
@@ -493,7 +494,7 @@ fn publication_summary_carries_the_report_feedback_lines() {
             effective_disposition: Disposition::Fail,
             finding_kinds: vec![FindingKind::ExplicitTargetMissing],
             location_count: std::num::NonZeroU64::new(2).unwrap(),
-            target: Some(RepoPath::Text(repo_path_text!("docs/new.md"))),
+            target: Some(RepoPath::from(&repo_path_text!("docs/new.md"))),
         }],
         status: AvailableFeedbackStatus::Available,
     }));

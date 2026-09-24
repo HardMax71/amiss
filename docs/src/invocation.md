@@ -269,7 +269,7 @@ Adding `--repo`, `--object-format`, and `--index` together switches the output t
 JSON array of the current stage-zero paths that the selector matches, in raw Git path order. The
 preview uses the scanner's production suffix matcher, its repository/index reader and ceilings,
 and an end-of-read index identity check. A path that is not UTF-8 uses the report's existing
-`{"bytes_hex":"..."}` form. This previews selection only: a built-in document classification still
+`{"bytes":[...]}` form. This previews selection only: a built-in document classification still
 wins its adapter, and a later scan can still reject an unavailable object or unsupported entry
 kind. The three preview flags are one group; partial groups and every unrelated option are invalid
 invocations. Exit 0 wrote the row or complete preview, exit 1 means the repository, index, or output

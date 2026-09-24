@@ -3,9 +3,11 @@ mod producer_paths;
 mod projection;
 
 use amiss_wire::report::model::{
-    BaseSnapshot, Evaluation, FindingFactEvidence, FindingKeyScope, MissingResolution, RepoPath,
+    BaseSnapshot, Evaluation, FindingFactEvidence, FindingKeyScope, MissingResolution,
     ReportEnvelope, Resolution, Snapshot,
 };
+
+use amiss_wire::model::RepoPath;
 use amiss_wire::requests::CandidateSnapshot;
 use amiss_wire::resolution::{Target, VersionScope};
 

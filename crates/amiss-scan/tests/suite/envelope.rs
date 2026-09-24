@@ -153,7 +153,7 @@ fn maximal_error(index: usize) -> Value {
         ("code", Value::from("RESOURCE_LIMIT_EXCEEDED")),
         ("description", Value::from(("d".repeat(400)).as_str())),
         ("path", Value::from((maximal_path(index)).as_str())),
-        ("path_bytes_hex", Value::from(("ab".repeat(4_096)).as_str())),
+        ("path_bytes", Value::from(vec![0xab_u8; 4_096])),
         (
             "resource",
             Value::from("aggregate-git-compressed-object-bytes-per-evaluation"),

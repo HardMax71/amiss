@@ -1,8 +1,9 @@
 use std::fs;
 use std::path::Path;
 
+use amiss_wire::model::RepoPath;
 use amiss_wire::repo_path_text;
-use amiss_wire::report::model::{RepoPath, Resolution, occurrences};
+use amiss_wire::report::model::{Resolution, occurrences};
 use amiss_wire::resolution::VersionScope;
 
 use crate::support::{amiss, payload, report};
@@ -137,7 +138,7 @@ fn a_declared_forge_host_is_recognized_and_reported_end_to_end() {
         commit_oid.to_string(),
         "0123456789012345678901234567890123456789"
     );
-    assert_eq!(*path, RepoPath::Text(repo_path_text!("docs/guide.md")));
+    assert_eq!(*path, RepoPath::from(&repo_path_text!("docs/guide.md")));
     let historical_destination = "https://ghes.example/acme/widget/blob/0123456789012345678901234567890123456789/docs/guide.md";
     assert_eq!(
         history.external_destination.as_deref(),

@@ -32,7 +32,7 @@ pub fn error_row(detail: &ErrorDetail) -> AnalysisError<crate::model::RepoPath> 
         code: detail.code,
         description: detail.code.meaning().to_owned(),
         path: detail.path.clone(),
-        path_bytes_hex: detail.path_bytes.as_ref().map(hex::encode),
+        path_bytes: detail.path_bytes.clone(),
         resource: detail.resource.map(|(name, _, _)| name),
         configured_limit: detail
             .resource

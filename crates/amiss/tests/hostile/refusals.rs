@@ -2,7 +2,7 @@ use std::fs;
 
 use tempfile::TempDir;
 
-use crate::support::{BYTE_NAME_HEX, amiss, byte_named_index, git, hidden_entry, payload};
+use crate::support::{amiss, byte_named_index, git, hidden_entry, payload};
 
 /// The repository under evaluation is the attacker. It writes the policy the
 /// scanner reads, so the one thing that policy may never do is widen what the
@@ -111,15 +111,14 @@ fn a_document_the_grammar_refuses_is_still_refused_rather_than_dropped() {
             .iter()
             .find(|row| row["code"] == "UNREPRESENTABLE_PATH")
             .unwrap_or_else(|| panic!("{where_from}: the defect is disclosed, not swallowed"));
-        let hex = hex::encode(name);
         assert_eq!(
             row["path"],
             serde_json::Value::Null,
             "{where_from}: a name the grammar refuses is not a path value"
         );
         assert_eq!(
-            row["path_bytes_hex"].as_str(),
-            Some(hex.as_str()),
+            row["path_bytes"],
+            serde_json::json!(name),
             "{where_from}: the refused bytes are disclosed exactly, not dropped"
         );
         assert!(
@@ -316,10 +315,10 @@ fn a_tracked_blob_the_store_does_not_hold_refuses_and_names_the_document() {
 }
 
 /// A byte-named document whose bytes will not decode is counted, not dropped:
-/// the wire carries its name as hex on a document row whose reason says why it
+/// the wire carries its name as bytes on a document row whose reason says why it
 /// was never scanned, and the run finishes over the documents it could read.
 #[test]
-fn a_byte_named_invalid_document_is_unsupported_with_its_name_in_hex() {
+fn a_byte_named_invalid_document_is_unsupported_with_its_name_in_bytes() {
     let (dir, base) = byte_named_index(b"# \xff\n");
     let repo = amiss_fixtures::path_arg(dir.path());
     let (code, stdout) = amiss(&[
@@ -365,7 +364,7 @@ fn a_byte_named_invalid_document_is_unsupported_with_its_name_in_hex() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|row| row["path"]["bytes_hex"] == BYTE_NAME_HEX)
+        .find(|row| row["path"]["bytes"] == serde_json::json!(b"bad-\xff-doc.md"))
         .unwrap_or_else(|| panic!("no bytes row in {documents}"))
         .clone();
     assert_eq!(row["candidate"]["status"], "unsupported");

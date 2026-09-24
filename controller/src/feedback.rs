@@ -3,7 +3,8 @@ mod tests;
 
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::human::{atom, atom_bytes};
-use amiss_wire::report::model::{Feedback, FeedbackAction, FeedbackItem, RepoPath, ReportPayload};
+use amiss_wire::model::RepoPath;
+use amiss_wire::report::model::{Feedback, FeedbackAction, FeedbackItem, ReportPayload};
 
 use crate::ArtifactReference;
 
@@ -89,26 +90,15 @@ fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {
     };
     let items = &feedback.items;
     if items.iter().any(|item| {
-        let Some(RepoPath::Bytes(encoded)) = &item.target else {
-            return false;
-        };
-        hex::decode(&encoded.bytes_hex)
-            .ok()
-            .and_then(amiss_wire::model::RepoPath::from_bytes)
-            .is_none_or(|path| {
-                path.as_str().is_some() || hex::encode(path.as_bytes()) != encoded.bytes_hex
-            })
+        item.target.as_ref().is_some_and(|path| {
+            path.as_str().is_none()
+                && RepoPath::from_bytes(path.as_bytes().to_vec())
+                    .is_none_or(|canonical| canonical.as_str().is_some())
+        })
     }) {
         return Vec::new();
     }
-    let Ok(displayed) = items
-        .iter()
-        .take(DISPLAYED_ITEMS)
-        .map(item_line)
-        .collect::<Result<Vec<_>, _>>()
-    else {
-        return Vec::new();
-    };
+    let displayed = items.iter().take(DISPLAYED_ITEMS).map(item_line);
     let fixes = items
         .iter()
         .filter(|item| item.action == FeedbackAction::Fix)
@@ -139,18 +129,20 @@ fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {
     lines
 }
 
-fn item_line(item: &FeedbackItem) -> Result<String, hex::FromHexError> {
+fn item_line(item: &FeedbackItem) -> String {
     let mut action = item.action.as_ref().to_owned();
     if let Some(first) = action.get_mut(0..1) {
         first.make_ascii_uppercase();
     }
-    let target = match &item.target {
-        Some(RepoPath::Text(path)) => atom(path.as_str()),
-        Some(RepoPath::Bytes(path)) => atom_bytes(&hex::decode(&path.bytes_hex)?),
-        None => "-".to_owned(),
-    };
-    Ok(format!(
+    let target = item.target.as_ref().map_or_else(
+        || "-".to_owned(),
+        |path| {
+            path.as_str()
+                .map_or_else(|| atom_bytes(path.as_bytes()), atom)
+        },
+    );
+    format!(
         "- {action} target {target} affected places {}",
         item.location_count
-    ))
+    )
 }

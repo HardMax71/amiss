@@ -10,7 +10,7 @@ use crate::envelope::{Envelope, Payload, Sealing};
 use crate::model::Digest;
 use crate::model::ForgeDialect;
 use crate::report::model::{
-    Evaluation, ObservationComparison, Occurrence, RepoPath, ReportPayload, Resolution, occurrences,
+    Evaluation, ObservationComparison, Occurrence, ReportPayload, Resolution, occurrences,
 };
 use crate::resolution::ExternalReference;
 use crate::resolution::VersionScope;
@@ -302,10 +302,7 @@ fn collect<'report>(
             .external_destination
             .as_deref()
             .filter(|value| !value.is_empty());
-        let document = match &occurrence.observation_id_input.document {
-            RepoPath::Text(path) => Some(path.as_str()),
-            RepoPath::Bytes(_) => None,
-        };
+        let document = occurrence.observation_id_input.document.as_str();
         let scheme = if historical {
             Some("https")
         } else {

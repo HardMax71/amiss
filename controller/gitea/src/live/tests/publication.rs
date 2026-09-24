@@ -2,9 +2,10 @@ use amiss_controller::PullRequestChange;
 use amiss_controller::{
     ArtifactReference, Change, CheckConclusion, ProviderError, ProviderRunAttempt, RunFailure,
 };
+use amiss_wire::model::RepoPath;
 use amiss_wire::model::{ForgeDialect, ObjectFormat};
 use amiss_wire::report::model::{
-    AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem, RepoPath,
+    AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem,
 };
 use amiss_wire::report::{Disposition, FindingKind};
 use amiss_wire::{repo_path_text, required_status_name};
@@ -28,7 +29,7 @@ fn review_bodies_carry_the_report_feedback_lines() {
             effective_disposition: Disposition::Warn,
             finding_kinds: vec![FindingKind::DependencyChangedSubjectUnchanged],
             location_count: std::num::NonZeroU64::new(3).unwrap(),
-            target: Some(RepoPath::Text(repo_path_text!("docs/guide.md"))),
+            target: Some(RepoPath::from(&repo_path_text!("docs/guide.md"))),
         }],
         status: AvailableFeedbackStatus::Available,
     }));

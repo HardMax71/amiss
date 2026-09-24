@@ -10,7 +10,7 @@ use crate::model::Digest;
 use crate::model::{Adapter, AddressKind, Oid};
 use crate::resolution::{Target, VersionScope};
 
-use super::RepoPath;
+use crate::model::RepoPath;
 use crate::report::ReportDefect;
 use crate::resolution::{
     ExternalReference, InvalidReference, UnsupportedSemanticsReason, UnsupportedTargetTag,

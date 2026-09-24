@@ -1,7 +1,8 @@
+use amiss_wire::model::RepoPath;
 use amiss_wire::repo_path_text;
 use amiss_wire::report::IntentKind;
 use amiss_wire::report::model::{
-    MissingResolution, RepoPath, Resolution, UnsupportedSemanticsResolution, occurrences,
+    MissingResolution, Resolution, UnsupportedSemanticsResolution, occurrences,
 };
 use amiss_wire::resolution::UnsupportedSemanticsReason;
 use amiss_wire::resolution::{BlobTarget, Target};
@@ -60,7 +61,7 @@ fn a_sphinx_doc_role_resolves_through_the_path_lane() {
     assert!(
         doc.iter().any(|side| {
             side.observation_id_input.extracted_intent.repository_path
-                == Some(RepoPath::Text(repo_path_text!("docs/guide.rst")))
+                == Some(RepoPath::from(&repo_path_text!("docs/guide.rst")))
                 && matches!(side.resolution, Resolution::Resolved { .. })
         }),
         "the :doc: role resolves through the ordinary path lane: {doc:?}"
@@ -149,7 +150,7 @@ fn sphinx_labels_resolve_through_the_label_table() {
     let (Target::Tree { path } | Target::Blob(BlobTarget { path, .. })) = held;
     assert_eq!(
         *path,
-        RepoPath::Text(repo_path_text!("docs/guide.rst")),
+        RepoPath::from(&repo_path_text!("docs/guide.rst")),
         "the label resolves to its declaring document"
     );
     for side in &labels {

@@ -18,10 +18,11 @@ use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::Profile;
 use amiss_wire::envelope::Payload as _;
+use amiss_wire::model::RepoPath;
 use amiss_wire::model::{ArtifactId, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::IntentKind;
 use amiss_wire::report::model::{
-    MissingResolution, ObservationComparison, Occurrence, RepoPath, ReportEnvelope, ReportPayload,
+    MissingResolution, ObservationComparison, Occurrence, ReportEnvelope, ReportPayload,
     Resolution, UnsupportedSemanticsResolution, occurrences,
 };
 use amiss_wire::requests::{
@@ -561,7 +562,7 @@ fn assert_site_routes(payload: &ReportPayload) {
             .filter(|(_, side)| match &side.resolution {
                 Resolution::Resolved {
                     target: Target::Tree { path } | Target::Blob(BlobTarget { path, .. }),
-                } => *path == RepoPath::Text(repo_path_text!("docs/guide.md")),
+                } => *path == RepoPath::from(&repo_path_text!("docs/guide.md")),
                 Resolution::DeclaredUntracked { .. }
                 | Resolution::External { .. }
                 | Resolution::Invalid { .. }

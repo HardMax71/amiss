@@ -7,8 +7,9 @@ use std::fs;
 use std::process::{Command, Stdio};
 
 use amiss_wire::extraction::SourceConstruct;
+use amiss_wire::model::RepoPath;
 use amiss_wire::repo_path_text;
-use amiss_wire::report::model::{Occurrence, RepoPath, Resolution};
+use amiss_wire::report::model::{Occurrence, Resolution};
 use amiss_wire::resolution::{BlobTarget, Target};
 
 use crate::support::{amiss, fixture};
@@ -56,10 +57,13 @@ fn json_returns_exact_candidate_occurrences_without_revising_the_verdict() {
         panic!("one occurrence: {rows:?}");
     };
     let identity = &row.observation_id_input;
-    assert_eq!(identity.document, RepoPath::Text(repo_path_text!("README")));
+    assert_eq!(
+        identity.document,
+        RepoPath::from(&repo_path_text!("README"))
+    );
     assert_eq!(
         identity.extracted_intent.repository_path,
-        Some(RepoPath::Text(repo_path_text!("docs/guide.md")))
+        Some(RepoPath::from(&repo_path_text!("docs/guide.md")))
     );
     let Resolution::Resolved {
         target: Target::Tree { path: target } | Target::Blob(BlobTarget { path: target, .. }),
@@ -67,7 +71,7 @@ fn json_returns_exact_candidate_occurrences_without_revising_the_verdict() {
     else {
         panic!("the occurrence resolves: {row:?}");
     };
-    assert_eq!(*target, RepoPath::Text(repo_path_text!("docs/guide.md")));
+    assert_eq!(*target, RepoPath::from(&repo_path_text!("docs/guide.md")));
     assert_eq!(identity.source_construct, SourceConstruct::InlineLink);
     assert!(row.source_span.start_line > 0);
 

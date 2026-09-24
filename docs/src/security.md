@@ -40,7 +40,7 @@ carriage return, or a forged `::error::` workflow command embedded in a filename
 the log only as harmless `\uXXXX` text. A path that is raw bytes rather than text renders
 each such byte as the two-digit escape of its value, never inventing a character the
 bytes never encoded. The JSON report keeps fidelity its own way, the exact original
-string for a UTF-8 path and a `bytes_hex` object for anything else, because the log needs
+string for a UTF-8 path and a `bytes` object for anything else, because the log needs
 safety and the report needs fidelity, and those are different channels with different
 rules. The Action separately HTML-escapes repository-controlled targets before placing
 them in its Markdown summary and applies GitHub workflow-command escaping to annotation

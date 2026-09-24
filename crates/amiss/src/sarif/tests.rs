@@ -1,11 +1,11 @@
 #![cfg(test)]
 
 use amiss_wire::controls::AnalysisPhase;
+use amiss_wire::model::RepoPath;
 use amiss_wire::model::RepoPathText;
 use amiss_wire::repo_path_text;
 use amiss_wire::report::model::{
-    AnalysisError, ByteSpan, FindingFix, RepoPath, RepoPathBytes, ReportEnvelope, ReportStatus,
-    SourceSpan,
+    AnalysisError, ByteSpan, FindingFix, ReportEnvelope, ReportStatus, SourceSpan,
 };
 use amiss_wire::report::{Disposition, FindingKind, model::AnalysisErrorCode};
 
@@ -22,7 +22,7 @@ fn projection_payload() -> amiss_wire::report::model::ReportPayload {
         configured_limit: None,
         observed_lower_bound: None,
         path: None,
-        path_bytes_hex: None,
+        path_bytes: None,
         phase: AnalysisPhase::Git,
         resource: None,
     }];
@@ -30,7 +30,7 @@ fn projection_payload() -> amiss_wire::report::model::ReportPayload {
     first.kind = FindingKind::ExplicitTargetMissing;
     first.description = "missing \"target\"\n".to_owned();
     first.effective_disposition = Disposition::Fail;
-    first.location.path = Some(RepoPath::Text(repo_path_text!("docs/a b.md")));
+    first.location.path = Some(RepoPath::from(&repo_path_text!("docs/a b.md")));
     first.location.span = Some(SourceSpan {
         start_byte: 4,
         end_byte: 7,
@@ -50,14 +50,12 @@ fn projection_payload() -> amiss_wire::report::model::ReportPayload {
     });
     let mut byte_path = first.clone();
     byte_path.effective_disposition = Disposition::Warn;
-    byte_path.location.path = Some(RepoPath::Bytes(RepoPathBytes {
-        bytes_hex: "ff2e6d64".to_owned(),
-    }));
+    byte_path.location.path = Some(RepoPath::from_bytes(b"\xff.md".to_vec()).unwrap());
     byte_path.location.span = None;
     byte_path.fix = None;
     let mut without_span = first.clone();
     without_span.effective_disposition = Disposition::Record;
-    without_span.location.path = Some(RepoPath::Text(repo_path_text!("docs/b.md")));
+    without_span.location.path = Some(RepoPath::from(&repo_path_text!("docs/b.md")));
     without_span.location.span = None;
     without_span.fix = None;
     payload.findings = vec![first, byte_path, without_span];
@@ -68,10 +66,7 @@ fn projection_payload() -> amiss_wire::report::model::ReportPayload {
 fn typed_sarif_preserves_optional_fields_and_canonical_order() {
     let payload = projection_payload();
     let fingerprint = payload.findings[0].finding_key.to_string();
-    let log = super::log(&payload, |path| match path {
-        RepoPath::Text(text) => Some(text.as_str()),
-        RepoPath::Bytes(_) => None,
-    });
+    let log = super::log(&payload, RepoPath::as_str);
     let bytes = serde_json::to_vec(&log).unwrap();
     assert_eq!(bytes, serde_json_canonicalizer::to_vec(&log).unwrap());
     let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
@@ -134,12 +129,9 @@ fn sarif_paths_escape_uri_delimiters_and_utf8_in_locations_and_fixes() {
         let mut payload = projection_payload();
         let path = RepoPathText::try_from(path.to_owned()).unwrap();
         let finding = &mut payload.findings[0];
-        finding.location.path = Some(RepoPath::Text(path.clone()));
+        finding.location.path = Some(RepoPath::from(&path.clone()));
         finding.fix.as_mut().unwrap().path = path;
-        let log = super::log(&payload, |path| match path {
-            RepoPath::Text(text) => Some(text.as_str()),
-            RepoPath::Bytes(_) => None,
-        });
+        let log = super::log(&payload, RepoPath::as_str);
         let value = serde_json::to_value(log).unwrap();
         let finding = &value["runs"][0]["results"][0];
         assert_eq!(
