@@ -181,6 +181,9 @@ pub struct Effects {
     /// The effective complete-findings ceiling: the built-in 100,000, which a
     /// verified floor may only tighten.
     pub complete_findings: u64,
+    /// The machine-json-bytes ceiling the report wire may not cross: the
+    /// contract's fixed 268,435,456, which no floor or option changes.
+    pub machine_json_bytes: u64,
 }
 
 impl Default for Effects {
@@ -199,6 +202,7 @@ impl Default for Effects {
             semantic_evidence: Vec::new(),
             errors_retained: 64,
             complete_findings: crate::resources::ScanLimits::CONTRACT.complete_findings,
+            machine_json_bytes: amiss_wire::envelope::MACHINE_JSON_BYTES,
         }
     }
 }
@@ -309,6 +313,7 @@ pub fn effects(
         semantic_evidence: Vec::new(),
         errors_retained: 64,
         complete_findings: crate::resources::ScanLimits::CONTRACT.complete_findings,
+        machine_json_bytes: amiss_wire::envelope::MACHINE_JSON_BYTES,
     }
 }
 
