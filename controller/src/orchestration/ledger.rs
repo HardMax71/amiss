@@ -1,6 +1,6 @@
 use std::num::NonZeroU64;
 
-use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId, Publication};
+use crate::{AcceptedDelivery, CheckBinding, OpaqueId, Publication};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LeaseFence(NonZeroU64);
@@ -20,7 +20,7 @@ impl LeaseFence {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeliveryLease {
-    pub evaluation_id: ControllerEvaluationId,
+    pub evaluation_id: OpaqueId,
     pub check: CheckBinding,
     pub fence: LeaseFence,
     /// Advisory deadline; only the ledger transaction decides ownership.
@@ -32,11 +32,11 @@ pub enum DeliveryClaim {
     Execute(DeliveryLease),
     Publish(StagedPublication),
     Busy {
-        evaluation_id: ControllerEvaluationId,
+        evaluation_id: OpaqueId,
         retry_at_unix_millis: i64,
     },
     Duplicate {
-        evaluation_id: ControllerEvaluationId,
+        evaluation_id: OpaqueId,
     },
     BindingConflict,
 }
@@ -127,7 +127,7 @@ pub trait DeliveryLedger {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StagedPublication {
-    pub evaluation_id: ControllerEvaluationId,
+    pub evaluation_id: OpaqueId,
     pub fence: LeaseFence,
     pub publication: Box<Publication>,
 }

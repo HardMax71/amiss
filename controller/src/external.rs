@@ -6,7 +6,7 @@ use amiss_wire::external::{
     ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
     ExternalRepository, evidence,
 };
-pub use amiss_wire::external::{ForgeRepository as ForgeVisibility, ForgeTail};
+pub use amiss_wire::external::{ForgeRepository, ForgeTail};
 use amiss_wire::model::ForgeDialect;
 use strum::AsRefStr;
 
@@ -55,13 +55,13 @@ pub enum ForgeEvidence {
 /// Returns a provider defect other than standing unavailability. An unavailable
 /// tail lookup preserves the readable fact and asks the outer walk to stop.
 pub fn forge_repository_evidence(
-    visibility: ForgeVisibility,
+    visibility: ForgeRepository,
     resolve_tail: impl FnOnce() -> Result<Option<ForgeTail>, ProviderError>,
 ) -> Result<ForgeEvidence, ProviderError> {
     match visibility {
-        ForgeVisibility::Missing => Ok(ForgeEvidence::Missing),
-        ForgeVisibility::Denied => Ok(ForgeEvidence::Denied),
-        ForgeVisibility::Readable => match resolve_tail() {
+        ForgeRepository::Missing => Ok(ForgeEvidence::Missing),
+        ForgeRepository::Denied => Ok(ForgeEvidence::Denied),
+        ForgeRepository::Readable => match resolve_tail() {
             Ok(tail) => Ok(ForgeEvidence::Readable(tail)),
             Err(ProviderError::Unavailable) => Ok(ForgeEvidence::ReadableThenUnavailable),
             Err(defect) => Err(defect),
@@ -99,10 +99,10 @@ pub fn forge_evidence<S>(
             Err(defect) => return Err(defect),
         };
         let (repository, tail, stop) = match evidence {
-            ForgeEvidence::Missing => (ForgeVisibility::Missing, None, false),
-            ForgeEvidence::Denied => (ForgeVisibility::Denied, None, false),
-            ForgeEvidence::Readable(tail) => (ForgeVisibility::Readable, tail, false),
-            ForgeEvidence::ReadableThenUnavailable => (ForgeVisibility::Readable, None, true),
+            ForgeEvidence::Missing => (ForgeRepository::Missing, None, false),
+            ForgeEvidence::Denied => (ForgeRepository::Denied, None, false),
+            ForgeEvidence::Readable(tail) => (ForgeRepository::Readable, tail, false),
+            ForgeEvidence::ReadableThenUnavailable => (ForgeRepository::Readable, None, true),
         };
         rows.push(ExternalEvidenceRow::ForgeApi {
             destination: row.destination.clone(),

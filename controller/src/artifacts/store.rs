@@ -16,7 +16,7 @@ use super::{
     RetainedRelationAudit,
 };
 use crate::ArtifactError;
-use crate::{ControllerClock, ControllerEvaluationId};
+use crate::{ControllerClock, OpaqueId};
 
 pub struct FileArtifactStore {
     root: PathBuf,
@@ -29,7 +29,7 @@ pub struct FileArtifactStore {
 struct State {
     root: Root,
     records: BTreeMap<String, StoredRecord>,
-    evaluations: BTreeMap<ControllerEvaluationId, String>,
+    evaluations: BTreeMap<OpaqueId, String>,
     bytes: u64,
     trusted: bool,
 }
@@ -71,7 +71,7 @@ impl FileArtifactStore {
     /// or durable storage cannot be trusted.
     pub fn retain(
         &self,
-        evaluation_id: &ControllerEvaluationId,
+        evaluation_id: &OpaqueId,
         bundle: ArtifactBundle<'_>,
     ) -> Result<ArtifactReference, ArtifactError> {
         let input = record_input(bundle)?;
@@ -94,7 +94,7 @@ impl FileArtifactStore {
     /// or durable storage cannot be trusted.
     pub fn retain_audit(
         &self,
-        evaluation_id: &ControllerEvaluationId,
+        evaluation_id: &OpaqueId,
         bundle: ArtifactAuditBundle<'_>,
     ) -> Result<ArtifactAuditReference, ArtifactError> {
         let (payload, digests, kind, audit) = match bundle {
@@ -162,7 +162,7 @@ impl FileArtifactStore {
 
     fn retain_validated_audit(
         &self,
-        evaluation_id: &ControllerEvaluationId,
+        evaluation_id: &OpaqueId,
         payload: AuditPayload<'_>,
         digests: AuditDigests,
         kind: AuditKind,
@@ -242,7 +242,7 @@ impl FileArtifactStore {
 
     fn retain_record<const N: usize>(
         &self,
-        evaluation_id: &ControllerEvaluationId,
+        evaluation_id: &OpaqueId,
         input: RecordInput,
         payloads: [(ArtifactComponent, Option<&[u8]>); N],
     ) -> Result<ArtifactReference, ArtifactError> {
@@ -380,7 +380,7 @@ impl FileArtifactStore {
     /// The clock, root, or retained payloads cannot be trusted.
     pub fn find(
         &self,
-        evaluation_id: &ControllerEvaluationId,
+        evaluation_id: &OpaqueId,
     ) -> Result<Option<ArtifactReference>, ArtifactError> {
         let mut state = self.lock_state()?;
         require_trusted(&state)?;

@@ -1,13 +1,11 @@
 use crate::ingress::RequestBinding;
-use crate::{
-    IngressCheck, ProviderFacts, ReplayIdentity, TrustAnchorId, TrustSetId, VerifiedDelivery,
-};
+use crate::{IngressCheck, OpaqueId, ProviderFacts, ReplayIdentity, VerifiedDelivery};
 
 /// Transient proof returned after a provider-controlled signature is verified.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignedRequestProof {
-    trust_set: TrustSetId,
-    anchor: TrustAnchorId,
+    trust_set: OpaqueId,
+    anchor: OpaqueId,
     replay: ReplayIdentity,
     issued_at_unix_millis: Option<i64>,
     request: RequestBinding,
@@ -22,8 +20,8 @@ impl SignedRequestProof {
     #[must_use]
     pub fn verified(
         check: IngressCheck<'_>,
-        trust_set: TrustSetId,
-        anchor: TrustAnchorId,
+        trust_set: OpaqueId,
+        anchor: OpaqueId,
         replay: ReplayIdentity,
         issued_at_unix_millis: Option<i64>,
     ) -> Self {
@@ -36,11 +34,11 @@ impl SignedRequestProof {
         }
     }
 
-    pub fn trust_set(&self) -> &TrustSetId {
+    pub fn trust_set(&self) -> &OpaqueId {
         &self.trust_set
     }
 
-    pub fn anchor(&self) -> &TrustAnchorId {
+    pub fn anchor(&self) -> &OpaqueId {
         &self.anchor
     }
 
@@ -66,5 +64,3 @@ impl SignedRequestProof {
         )
     }
 }
-
-pub type WebhookProof = SignedRequestProof;

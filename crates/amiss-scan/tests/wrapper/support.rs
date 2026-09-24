@@ -17,7 +17,7 @@ use std::path::Path;
 use amiss_git::Repository;
 use amiss_scan::policy::{DebtInput, FloorInput, TimeInput, WaiverInput};
 use amiss_scan::report::{CandidateBlock, candidate_identity_digest};
-use amiss_scan::{Effects, Setup, SetupShell, SnapshotIdentity, commit_pair};
+use amiss_scan::{Effects, GitSnapshotIdentity, Setup, SetupShell, commit_pair};
 use amiss_wire::controls::{DebtSnapshot, Profile, WaiverBundle};
 use amiss_wire::de::Error;
 use amiss_wire::model::Digest;
@@ -126,8 +126,8 @@ pub(crate) fn shell(profile: Profile) -> SetupShell {
     }
 }
 
-pub(crate) fn identity(commit: &Oid, tree: &str) -> SnapshotIdentity {
-    SnapshotIdentity {
+pub(crate) fn identity(commit: &Oid, tree: &str) -> GitSnapshotIdentity {
+    GitSnapshotIdentity {
         commit_oid: commit.clone(),
         kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
         object_format: ObjectFormat::Sha1,

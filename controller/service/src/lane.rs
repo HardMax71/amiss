@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use amiss_controller::Change;
 use amiss_controller::{
-    AcceptedDelivery, ControllerClock, DeliveryHeader as IngressHeader, DeliveryRoute,
-    IngressCheck, IngressPolicy, PlanRegistry, ProviderError, UntrustedDelivery, VerifiedDelivery,
-    resolve_plan,
+    AcceptedDelivery, ControllerClock, DeliveryHeader, DeliveryRoute, IngressCheck, IngressPolicy,
+    PlanRegistry, ProviderError, UntrustedDelivery, VerifiedDelivery, resolve_plan,
 };
 
 use crate::{AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission};
@@ -106,7 +105,7 @@ where
         let headers = request
             .headers
             .iter()
-            .map(|header| IngressHeader {
+            .map(|header| DeliveryHeader {
                 name: &header.name,
                 value: &header.value,
             })

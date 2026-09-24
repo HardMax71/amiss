@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use amiss_controller::{IntegrationId, PlanScope, ProviderIdentity, TrustAnchorId};
+use amiss_controller::{OpaqueId, PlanScope, ProviderIdentity};
 use amiss_controller_gitlab::{OidcPublicKey, PolicyBinding, RunnerTrust};
 use amiss_controller_service::{ConfigError, read_regular};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
@@ -15,7 +15,7 @@ pub(super) fn provider(instance: String) -> Result<ProviderIdentity, ConfigError
 }
 
 pub(super) fn policy(raw: RawPolicy) -> Result<PolicyBinding, ConfigError> {
-    let integration = IntegrationId::try_from(raw.integration)
+    let integration = OpaqueId::try_from(raw.integration)
         .map_err(|_defect| ConfigError::invalid("GitLab policy integration is invalid"))?;
     let config_commit = Oid::new(ObjectFormat::Sha1, raw.config_commit)
         .ok_or(ConfigError::invalid("GitLab policy commit is invalid"))?;
@@ -53,7 +53,7 @@ pub(super) fn policy(raw: RawPolicy) -> Result<PolicyBinding, ConfigError> {
 pub(super) fn keys(raw: Vec<RawOidcKey>) -> Result<Vec<OidcPublicKey>, ConfigError> {
     raw.into_iter()
         .map(|key| {
-            let anchor = TrustAnchorId::try_from(key.anchor)
+            let anchor = OpaqueId::try_from(key.anchor)
                 .map_err(|_defect| ConfigError::invalid("GitLab OIDC trust anchor is invalid"))?;
             let pem = read_regular(&key.public_key_file, PUBLIC_KEY_BYTES)?;
             OidcPublicKey::from_rsa_pem(key.kid, anchor, &pem).map_err(|defect| {

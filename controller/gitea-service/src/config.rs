@@ -5,8 +5,7 @@ use std::time::Duration;
 use crate::objects::GiteaGitObjects;
 use amiss_controller::opaque_id;
 use amiss_controller::{
-    CheckPlan, DeliveryRoute, GiteaWebhook, IntegrationId, PlanScope, ProviderIdentity,
-    SignedTimePolicy,
+    CheckPlan, DeliveryRoute, GiteaWebhook, OpaqueId, PlanScope, ProviderIdentity, SignedTimePolicy,
 };
 use amiss_controller_gitea::{
     DedicatedReviewer, GiteaClient, GiteaObjectResolver, GiteaTimeouts, gitea_repository_url,
@@ -284,8 +283,8 @@ fn target_branch(raw: &str) -> Result<BranchRef, ConfigError> {
         ))
 }
 
-fn reviewer_integration(id: u64) -> Result<IntegrationId, ConfigError> {
-    IntegrationId::try_from(id.to_string())
+fn reviewer_integration(id: u64) -> Result<OpaqueId, ConfigError> {
+    OpaqueId::try_from(id.to_string())
         .map_err(|_defect| ConfigError::invalid("dedicated reviewer integration is invalid"))
 }
 

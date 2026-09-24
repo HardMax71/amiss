@@ -4,7 +4,7 @@ use crate::OpaqueId;
 use crate::{Delivery, IngressCheck, ReplayIdentity};
 
 use super::headers::Headers;
-use super::{WebhookError, WebhookKeyring, WebhookProof};
+use super::{SignedRequestProof, WebhookError, WebhookKeyring};
 
 const ID_HEADER: &str = "webhook-id";
 const TIMESTAMP_HEADER: &str = "webhook-timestamp";
@@ -36,7 +36,7 @@ impl GitLabWebhook {
     ///
     /// Returns an error for invalid headers, an inactive key set, or a
     /// signature mismatch.
-    pub fn verify(&self, check: IngressCheck<'_>) -> Result<WebhookProof, WebhookError> {
+    pub fn verify(&self, check: IngressCheck<'_>) -> Result<SignedRequestProof, WebhookError> {
         let request = check.delivery();
         let headers = Headers::new(request.headers)?;
         let raw_id = headers.exact(ID_HEADER, MAX_ID_BYTES)?;
@@ -50,7 +50,7 @@ impl GitLabWebhook {
             &signatures,
             &[raw_id, b".", raw_timestamp, b".", request.body],
         )?;
-        Ok(WebhookProof::verified(
+        Ok(SignedRequestProof::verified(
             check,
             self.keys.trust_set().clone(),
             anchor,

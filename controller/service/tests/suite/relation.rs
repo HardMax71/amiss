@@ -11,12 +11,11 @@ use amiss_controller::PullRequestChange;
 use amiss_controller::opaque_id;
 use amiss_controller::{
     ArtifactComponent, ArtifactStoreConfig, AuthenticatedDelivery, Change, ChangeLocator,
-    ControllerClock, ControllerEvaluationId, Delivery, DeliveryIdentity, FileArtifactStore,
-    FileRelationScheduleStore, PendingRelation, ProviderError, ProviderRun, ProviderRunAttempt,
-    ProviderRunIdentity, RelationAcquiredRoot, RelationAcquisitionError, RelationAdmission,
-    RelationCredentialRoute, RelationStatusDestination, RelationSubjectHead,
-    RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_credential_router,
-    relation_registry, relation_transition,
+    ControllerClock, Delivery, DeliveryIdentity, FileArtifactStore, FileRelationScheduleStore,
+    OpaqueId, PendingRelation, ProviderError, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
+    RelationAcquiredRoot, RelationAcquisitionError, RelationAdmission, RelationCredentialRoute,
+    RelationStatusDestination, RelationSubjectHead, RelationSubjectTransition, RelationTransition,
+    TriggeredRelation, relation_credential_router, relation_registry, relation_transition,
 };
 use amiss_controller_fixtures::{clock::TestClock, relation::relation_audit};
 use amiss_controller_service::{
@@ -480,7 +479,7 @@ fn relation_stores(max_bindings: u64) -> Result<RelationStores, Box<dyn std::err
 fn audit_request<'a>(
     fixture: &'a RelationWorkFixture,
     pending: &'a PendingRelation,
-    evaluation_id: &'a ControllerEvaluationId,
+    evaluation_id: &'a OpaqueId,
 ) -> RelationAuditRequest<'a> {
     let [documentation, source] = &pending.transition.subjects;
     RelationAuditRequest {

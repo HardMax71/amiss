@@ -8,15 +8,15 @@ use std::sync::Arc;
 
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AuthenticatedDelivery, Change, ChangeLocator, Delivery, DeliveryIdentity, IntegrationId,
-    LeaseFence, OidPair, OpaqueId, PendingRelation, PlanScope, ProviderIdentity, ProviderRun,
-    ProviderRunAttempt, ProviderRunIdentity, RELATION_REGISTRY_LIMIT, RelationAcquiredRoot,
-    RelationAcquisitionError, RelationAdmission, RelationCredentialError, RelationCredentialRoute,
-    RelationLimits, RelationPlan, RelationRegistryError, RelationScheduleError,
-    RelationStatusDestination, RelationStatusError, RelationSubject, RelationSubjectHead,
-    RelationSubjectTransition, RelationTransition, relation_authority, relation_credential_router,
-    relation_registry, relation_status_targets, relation_transition, relations_for_delivery,
-    schedule_relation, verify_relation_acquired,
+    AuthenticatedDelivery, Change, ChangeLocator, Delivery, DeliveryIdentity, LeaseFence, OidPair,
+    OpaqueId, PendingRelation, PlanScope, ProviderIdentity, ProviderRun, ProviderRunAttempt,
+    ProviderRunIdentity, RELATION_REGISTRY_LIMIT, RelationAcquiredRoot, RelationAcquisitionError,
+    RelationAdmission, RelationCredentialError, RelationCredentialRoute, RelationLimits,
+    RelationPlan, RelationRegistryError, RelationScheduleError, RelationStatusDestination,
+    RelationStatusError, RelationSubject, RelationSubjectHead, RelationSubjectTransition,
+    RelationTransition, relation_authority, relation_credential_router, relation_registry,
+    relation_status_targets, relation_transition, relations_for_delivery, schedule_relation,
+    verify_relation_acquired,
 };
 use amiss_controller::{opaque_id, provider_namespace};
 use amiss_fixtures::{CommitPair, commit_pair, git};
@@ -46,7 +46,7 @@ fn repository(name: &str) -> RepositoryIdentity {
 fn scope(name: &str) -> PlanScope {
     PlanScope {
         provider: provider(),
-        integration: IntegrationId::try_from(format!("installation/{name}")).unwrap(),
+        integration: OpaqueId::try_from(format!("installation/{name}")).unwrap(),
         repository: repository(name),
     }
 }

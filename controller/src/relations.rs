@@ -12,9 +12,8 @@ use amiss_wire::model::{ArtifactId, ObjectFormat};
 use amiss_wire::relation::RelationPlan as PlanPayload;
 
 use crate::{
-    AuthenticatedDelivery, IntegrationId, OpaqueId, PlanScope, ProviderIdentity,
-    RelationAcquisitionError, RelationPlan, RelationRegistryError, RelationTransition,
-    TriggeredRelation,
+    AuthenticatedDelivery, OpaqueId, PlanScope, ProviderIdentity, RelationAcquisitionError,
+    RelationPlan, RelationRegistryError, RelationTransition, TriggeredRelation,
 };
 
 use crate::relation_plan::validate_relation;
@@ -94,7 +93,7 @@ struct TriggerScope {
 pub struct RelationRegistry {
     plans: BTreeMap<ArtifactId, Arc<RelationPlan>>,
     triggers: BTreeMap<TriggerScope, Vec<TriggeredRelation>>,
-    credentials: BTreeMap<OpaqueId, (ProviderIdentity, IntegrationId)>,
+    credentials: BTreeMap<OpaqueId, (ProviderIdentity, OpaqueId)>,
 }
 
 /// Validates and freezes the complete operator-owned registry in one step.

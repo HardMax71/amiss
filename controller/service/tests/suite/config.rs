@@ -10,7 +10,7 @@ use amiss_controller::PullRequestChange;
 use amiss_controller::opaque_id;
 use amiss_controller::{
     AuthenticatedDelivery, Change, ChangeLocator, Delivery, DeliveryIdentity, ExternalPolicy,
-    IntegrationId, ProviderIdentity, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
+    OpaqueId, ProviderIdentity, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
     RelationRegistry, relations_for_delivery,
 };
 use amiss_controller_service::{
@@ -102,7 +102,7 @@ fn relation_delivery(
     AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
-            integration: IntegrationId::try_from(integration.to_owned()).unwrap(),
+            integration: OpaqueId::try_from(integration.to_owned()).unwrap(),
             delivery: Delivery::Provided(opaque_id!("delivery/1")),
         },
         change: ChangeLocator {

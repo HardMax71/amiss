@@ -9,7 +9,7 @@ use amiss_md::{Heading, HeadingSource};
 use amiss_scan::anchor::{RULES, identities};
 use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::RequestDigests;
-use amiss_scan::{Classification, DocumentRecord, DocumentStatus, SnapshotDiscovery};
+use amiss_scan::{DocumentClassification, DocumentRecord, DocumentStatus, SnapshotDiscovery};
 use amiss_wire::controls::GitMode;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::EngineProvenance;
@@ -135,7 +135,7 @@ fn late_policy_bound_adapter(bencher: Bencher<'_, '_>) {
         .map(|index| DocumentRecord {
             path: RepoPath::new(format!("generated/{index:06}.page"))
                 .unwrap_or_else(|| panic!("benchmark path")),
-            classification: Classification::PolicyIncluded,
+            classification: DocumentClassification::PolicyIncluded,
             adapter: Some(Adapter::Markdown),
             status: DocumentStatus::ExcludedBuiltIn,
             oid: oid.clone(),

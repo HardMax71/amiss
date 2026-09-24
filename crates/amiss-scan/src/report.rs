@@ -17,7 +17,7 @@ use amiss_wire::report::model;
 use amiss_wire::report::model::{ControlsUnavailableReason, SnapshotUnavailableReason};
 use amiss_wire::report::{EngineProvenance, ErrorDetail};
 pub use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
-pub use amiss_wire::requests::GitSnapshotIdentity as SnapshotIdentity;
+pub use amiss_wire::requests::GitSnapshotIdentity;
 use amiss_wire::resolution::Resolution;
 
 use crate::Error;
@@ -29,7 +29,7 @@ pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
 /// incomplete index run reports with its closed reasons.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CandidateBlock {
-    Commit(SnapshotIdentity),
+    Commit(GitSnapshotIdentity),
     Index(IndexCandidate),
     Unavailable(Vec<SnapshotUnavailableReason>),
 }
@@ -62,7 +62,7 @@ pub struct Setup {
     pub candidate_ref: Option<BranchRef>,
     pub target_ref: Option<BranchRef>,
     pub default_branch_ref: Option<BranchRef>,
-    pub base: SnapshotIdentity,
+    pub base: GitSnapshotIdentity,
     pub candidate: CandidateBlock,
     pub policy: crate::policy::Effects,
     pub controls_unavailable: Option<ControlsUnavailableReason>,

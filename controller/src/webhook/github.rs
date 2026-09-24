@@ -1,6 +1,6 @@
 use crate::IngressCheck;
 
-use super::{WebhookError, WebhookKeyring, WebhookProof, body_signature};
+use super::{SignedRequestProof, WebhookError, WebhookKeyring, body_signature};
 
 const SIGNATURE_HEADER: &str = "x-hub-signature-256";
 
@@ -22,7 +22,7 @@ impl GitHubWebhook {
     ///
     /// Returns an error for invalid headers, an inactive key set, or a
     /// signature mismatch.
-    pub fn verify(&self, check: IngressCheck<'_>) -> Result<WebhookProof, WebhookError> {
+    pub fn verify(&self, check: IngressCheck<'_>) -> Result<SignedRequestProof, WebhookError> {
         body_signature::verify(&self.keys, check, SIGNATURE_HEADER, b"sha256=")
     }
 }

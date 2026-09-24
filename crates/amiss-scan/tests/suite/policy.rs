@@ -526,12 +526,12 @@ fn bound_adapter_answers_only_policy_included_rows() {
         documents: vec![
             record(
                 "docs/r.rst",
-                amiss_scan::Classification::StructuredRst,
+                amiss_scan::DocumentClassification::StructuredRst,
                 Some(Adapter::Rst),
             ),
             record(
                 "man/g.txt",
-                amiss_scan::Classification::PolicyIncluded,
+                amiss_scan::DocumentClassification::PolicyIncluded,
                 Some(Adapter::Rst),
             ),
         ],

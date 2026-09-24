@@ -6,7 +6,7 @@ mod record;
 use amiss_wire::model::Digest;
 use serde::Serialize;
 
-use crate::{ControllerEvaluationId, DeliveryIdentity};
+use crate::{DeliveryIdentity, OpaqueId};
 
 use self::model::StoredDeliveryKey;
 pub(super) use self::publication::{ReportRef, StoredPublication};
@@ -44,8 +44,8 @@ pub(super) fn delivery_key(identity: &DeliveryIdentity) -> Result<String, FileLe
 pub(super) fn evaluation_id(
     identity: &DeliveryIdentity,
     nonce: &[u8; 16],
-) -> Result<ControllerEvaluationId, FileLedgerError> {
-    ControllerEvaluationId::try_from(format!(
+) -> Result<OpaqueId, FileLedgerError> {
+    OpaqueId::try_from(format!(
         "eval:{}:{}",
         delivery_key(identity)?,
         hex::encode(nonce)
@@ -54,7 +54,7 @@ pub(super) fn evaluation_id(
 }
 
 pub(super) fn staged_digest(
-    evaluation_id: &ControllerEvaluationId,
+    evaluation_id: &OpaqueId,
     fence: u64,
     publication: &StoredPublication,
 ) -> Result<Digest, FileLedgerError> {
@@ -71,7 +71,7 @@ pub(super) fn staged_digest(
 
 #[derive(Serialize)]
 struct StagedDigest<'a> {
-    evaluation_id: &'a ControllerEvaluationId,
+    evaluation_id: &'a OpaqueId,
     fence: u64,
     publication: &'a StoredPublication,
 }

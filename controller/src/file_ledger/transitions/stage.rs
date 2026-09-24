@@ -1,4 +1,4 @@
-use crate::{ControllerEvaluationId, DeliveryLease, Publication, StageOutcome, StagedPublication};
+use crate::{DeliveryLease, OpaqueId, Publication, StageOutcome, StagedPublication};
 
 use crate::file_ledger::format::{Record, State, StoredPublication};
 use crate::file_ledger::store::Row;
@@ -11,7 +11,7 @@ impl FileLedger {
         lease: &DeliveryLease,
         publication: &Publication,
         mut record: Record,
-        evaluation_id: ControllerEvaluationId,
+        evaluation_id: OpaqueId,
     ) -> Result<StageOutcome, FileLedgerError> {
         let State::Running {
             owner,

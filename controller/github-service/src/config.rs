@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use amiss_controller::opaque_id;
 use amiss_controller::{
-    CheckPlan, DeliveryRoute, GitHubWebhook, IntegrationId, PlanScope, ProviderIdentity,
+    CheckPlan, DeliveryRoute, GitHubWebhook, OpaqueId, PlanScope, ProviderIdentity,
     SignedTimePolicy,
 };
 use amiss_controller_github::{GitHubApp, GitHubTimeouts};
@@ -184,7 +184,7 @@ impl RawConfig {
 
 struct CheckedScope {
     provider: ProviderIdentity,
-    integration: IntegrationId,
+    integration: OpaqueId,
     repository: RepositoryIdentity,
     repository_id: u64,
     target: BranchRef,
@@ -272,9 +272,9 @@ fn validate_github_plan(provider: &ProviderIdentity, plan: &CheckPlan) -> Result
         ))
 }
 
-fn positive_id(raw: u64) -> Result<IntegrationId, ConfigError> {
+fn positive_id(raw: u64) -> Result<OpaqueId, ConfigError> {
     positive(raw)?;
-    IntegrationId::try_from(raw.to_string())
+    OpaqueId::try_from(raw.to_string())
         .map_err(|_defect| ConfigError::invalid("installation identity is invalid"))
 }
 

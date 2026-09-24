@@ -1,6 +1,6 @@
 use crate::states::ReviewState;
 use amiss_controller::{Change, ProviderRun};
-use amiss_controller::{ChangeState, CheckConclusion, IntegrationId, ProviderError, Publication};
+use amiss_controller::{ChangeState, CheckConclusion, OpaqueId, ProviderError, Publication};
 use amiss_wire::model::{ForgeDialect, ObjectFormat};
 
 use crate::GiteaPullRequest;
@@ -21,7 +21,7 @@ pub(super) fn validate_publication(
     pull_request: GiteaPullRequest<'_>,
     publication: &Publication,
 ) -> Result<(), ProviderError> {
-    let integration = IntegrationId::try_from(config.reviewer.id.to_string())
+    let integration = OpaqueId::try_from(config.reviewer.id.to_string())
         .map_err(|_defect| ProviderError::InvalidResponse)?;
     let expected_run = provider_run(
         &integration,

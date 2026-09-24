@@ -10,10 +10,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-use amiss_scan::report::{CandidateBlock, RequestDigests, Setup, SnapshotIdentity, construct};
+use amiss_scan::report::{CandidateBlock, GitSnapshotIdentity, RequestDigests, Setup, construct};
 use amiss_scan::{
-    Classification, DocumentRecord, DocumentStatus, ScanLimits, ScanResources, SnapshotDiscovery,
-    scan_document,
+    DocumentClassification, DocumentRecord, DocumentStatus, ScanLimits, ScanResources,
+    SnapshotDiscovery, scan_document,
 };
 use amiss_wire::controls::GitMode;
 use amiss_wire::model::{Digest, RAW_EVIDENCE_DOMAIN};
@@ -192,7 +192,7 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
         book_sources: BTreeMap::new(),
         documents: vec![DocumentRecord {
             path,
-            classification: Classification::StructuredMarkdown,
+            classification: DocumentClassification::StructuredMarkdown,
             adapter: Some(Adapter::Markdown),
             status: DocumentStatus::Scanned(scanned.into()),
             oid,
@@ -214,13 +214,13 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
 }
 
 fn setup() -> Setup {
-    let base = SnapshotIdentity {
+    let base = GitSnapshotIdentity {
         commit_oid: Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap(),
         kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
         object_format: ObjectFormat::Sha1,
         tree_oid: Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap(),
     };
-    let candidate = SnapshotIdentity {
+    let candidate = GitSnapshotIdentity {
         commit_oid: Oid::new(ObjectFormat::Sha1, "c".repeat(40)).unwrap(),
         kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
         object_format: ObjectFormat::Sha1,

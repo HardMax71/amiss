@@ -1,7 +1,7 @@
 use amiss_controller::{
-    ArtifactAuditBundle, ArtifactError, AuthenticatedDelivery, ControllerEvaluationId,
-    FileArtifactStore, FileRelationScheduleStore, PendingRelation, ProviderError,
-    RelationAcquiredRoot, RelationAcquisitionError, RelationAuditBundle, RelationCredentialError,
+    ArtifactAuditBundle, ArtifactError, AuthenticatedDelivery, FileArtifactStore,
+    FileRelationScheduleStore, OpaqueId, PendingRelation, ProviderError, RelationAcquiredRoot,
+    RelationAcquisitionError, RelationAuditBundle, RelationCredentialError,
     RelationCredentialRouter, RelationLookupError, RelationRegistry, RelationScheduleStoreError,
     RelationStatusRecord, RelationStatusTarget, RelationSubjectHead, RelationSubjectTransition,
     RelationTransition, TriggeredRelation, relation_audit_plan, relation_authority,
@@ -29,7 +29,7 @@ pub struct CoordinatedTransition {
 }
 
 pub struct RelationAuditRequest<'a> {
-    pub evaluation_id: &'a ControllerEvaluationId,
+    pub evaluation_id: &'a OpaqueId,
     pub pending: &'a PendingRelation,
     pub report: &'a [u8],
     pub roots: [RelationAcquiredRoot<'a>; 2],

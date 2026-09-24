@@ -14,7 +14,7 @@ use std::sync::Arc;
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPath};
-pub use amiss_wire::report::model::SemanticEvidenceProvenance as Provenance;
+pub use amiss_wire::report::model::SemanticEvidenceProvenance;
 use amiss_wire::report::{ErrorDetail, model::AnalysisErrorCode};
 
 pub(crate) use parse::{parse, validated_envelope};
@@ -27,7 +27,7 @@ pub struct Inputs {
     pub(crate) record_sets: Arc<BTreeMap<ArtifactId, RecordSet>>,
     pub(crate) routes: Arc<BTreeMap<String, SiteRoute>>,
     pub(crate) site: SiteEvaluation,
-    pub(crate) provenance: Vec<Provenance>,
+    pub(crate) provenance: Vec<SemanticEvidenceProvenance>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -118,7 +118,7 @@ pub(crate) struct Context {
     pub(crate) record_sets: Arc<BTreeMap<ArtifactId, RecordSet>>,
     pub(crate) routes: Arc<BTreeMap<String, SiteRoute>>,
     pub(crate) site: SiteEvaluation,
-    pub(crate) provenance: Vec<Provenance>,
+    pub(crate) provenance: Vec<SemanticEvidenceProvenance>,
 }
 
 #[derive(Clone, Copy)]

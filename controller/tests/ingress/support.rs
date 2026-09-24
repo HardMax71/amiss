@@ -6,9 +6,9 @@ use amiss_controller::ProviderFacts;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
     Change, ChangeLocator, DeliveryHeader, DeliveryRoute, GitHubWebhook, GitLabWebhook,
-    IngressError, IngressLimits, IngressPolicy, OpaqueId, ProviderIdentity, ProviderInstance,
-    ProviderRun, ProviderRunAttempt, ProviderRunIdentity, ReplayWindow, SignedTimePolicy,
-    TrustSetId, UntrustedDelivery, VerifiedDelivery, WebhookKey, WebhookKeyring, WebhookProof,
+    IngressError, IngressLimits, IngressPolicy, OpaqueId, ProviderIdentity, ProviderRun,
+    ProviderRunAttempt, ProviderRunIdentity, ReplayWindow, SignedRequestProof, SignedTimePolicy,
+    UntrustedDelivery, VerifiedDelivery, WebhookKey, WebhookKeyring,
 };
 use amiss_controller::{opaque_id, provider_namespace};
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
@@ -44,7 +44,7 @@ pub(crate) fn opaque(value: &str) -> OpaqueId {
 pub(crate) fn provider(instance: &str) -> ProviderIdentity {
     ProviderIdentity {
         namespace: provider_namespace!("forge"),
-        instance: ProviderInstance::try_from(instance.to_owned()).unwrap(),
+        instance: OpaqueId::try_from(instance.to_owned()).unwrap(),
     }
 }
 
@@ -104,7 +104,7 @@ pub(crate) fn split_delivery(
 pub(crate) fn github_verified(
     check: amiss_controller::IngressCheck<'_>,
     provider: &ProviderIdentity,
-    trust_set: TrustSetId,
+    trust_set: OpaqueId,
 ) -> VerifiedDelivery {
     github_proof(check, trust_set).bind(delivery(provider))
 }
@@ -113,15 +113,15 @@ pub(crate) fn github_verified_split(
     check: amiss_controller::IngressCheck<'_>,
     identity_provider: &ProviderIdentity,
     change_provider: &ProviderIdentity,
-    trust_set: TrustSetId,
+    trust_set: OpaqueId,
 ) -> VerifiedDelivery {
     github_proof(check, trust_set).bind(split_delivery(identity_provider, change_provider))
 }
 
 pub(crate) fn github_proof(
     check: amiss_controller::IngressCheck<'_>,
-    trust_set: TrustSetId,
-) -> WebhookProof {
+    trust_set: OpaqueId,
+) -> SignedRequestProof {
     let key = WebhookKey::new(opaque_id!("anchor-2"), GITHUB_SECRET.to_vec(), 0, None).unwrap();
     GitHubWebhook::new(WebhookKeyring::new(trust_set, vec![key]).unwrap())
         .verify(check)

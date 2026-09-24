@@ -6,7 +6,7 @@ use amiss_wire::model::Digest;
 use amiss_wire::model::Oid;
 use serde::{Deserialize, Serialize};
 
-use crate::{ArtifactReference, CheckBinding, ControllerEvaluationId, Publication};
+use crate::{ArtifactReference, CheckBinding, OpaqueId, Publication};
 
 use super::model::{StoredConclusion, StoredDelivery, StoredRun};
 use crate::ProviderRunIdentity;
@@ -18,7 +18,7 @@ const REPORT_DOMAIN: &str = "amiss/controller-report-blob-v1";
 #[serde(deny_unknown_fields)]
 pub(in crate::file_ledger) struct StoredPublication {
     provider_run: ProviderRunIdentity,
-    evaluation_id: ControllerEvaluationId,
+    evaluation_id: OpaqueId,
     check: CheckBinding,
     run: StoredRun,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -115,7 +115,7 @@ impl StoredPublication {
 
     pub(super) fn validate_binding(
         &self,
-        expected_evaluation_id: &ControllerEvaluationId,
+        expected_evaluation_id: &OpaqueId,
         delivery: &StoredDelivery,
         expected_check: &CheckBinding,
     ) -> Result<(), FileLedgerError> {

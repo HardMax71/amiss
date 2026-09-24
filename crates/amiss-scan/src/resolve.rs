@@ -17,7 +17,7 @@ use amiss_wire::uri::{absolute_valid, decode_fragment, scheme};
 use crate::Error;
 use crate::declared::Declarations;
 use crate::discovery::{Located, SnapshotDiscovery};
-use crate::document::{Classification, classify};
+use crate::document::{DocumentClassification, classify};
 use crate::published::anchors;
 use crate::published::redirected;
 use crate::published::unplaced;
@@ -697,7 +697,8 @@ fn refusal(
         return Some(Resolution::TypeMismatch { target: entry });
     }
     let evaluable = !is_tree
-        && classify(path.as_bytes()).is_some_and(|class| class != Classification::PlainAdvisory)
+        && classify(path.as_bytes())
+            .is_some_and(|class| class != DocumentClassification::PlainAdvisory)
         && snapshot.is_scanned_structured(path);
     match query {
         Some(_) if !evaluable => Some(Resolution::UnsupportedSemantics(

@@ -1,6 +1,6 @@
 use crate::states::CommitStatus;
 use amiss_controller::{
-    IntegrationId, PlanScope, ProviderError, RelationStatusRecord, RelationStatusTarget,
+    OpaqueId, PlanScope, ProviderError, RelationStatusRecord, RelationStatusTarget,
     RelationSubject, RelationSubjectHead, relation_status_publication,
 };
 use amiss_wire::model::Digest;
@@ -170,7 +170,7 @@ fn validate_relation_scope(
     scope: &PlanScope,
     object_format: ObjectFormat,
 ) -> Result<(), ProviderError> {
-    let integration = IntegrationId::try_from(config.reviewer.id.to_string())
+    let integration = OpaqueId::try_from(config.reviewer.id.to_string())
         .map_err(|_defect| ProviderError::InvalidResponse)?;
     let repository = &scope.repository;
     (scope.provider == config.provider

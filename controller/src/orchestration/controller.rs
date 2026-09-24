@@ -3,8 +3,8 @@ mod helpers;
 use std::sync::Arc;
 
 use crate::{
-    AdapterRegistry, ArtifactError, ArtifactReference, ControllerClock, ControllerEvaluationId,
-    ExternalTally, FileArtifactStore, IngressError, IngressPolicy, PlanError, PlanRegistry,
+    AdapterRegistry, ArtifactError, ArtifactReference, ControllerClock, ExternalTally,
+    FileArtifactStore, IngressError, IngressPolicy, OpaqueId, PlanError, PlanRegistry,
     ProviderError, ResolvedPlan, SystemClock, UntrustedDelivery, resolve_plan,
 };
 
@@ -52,11 +52,11 @@ pub enum ControllerError<E> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HandleOutcome {
     InProgress {
-        evaluation_id: ControllerEvaluationId,
+        evaluation_id: OpaqueId,
         retry_at_unix_millis: i64,
     },
     Duplicate {
-        evaluation_id: ControllerEvaluationId,
+        evaluation_id: OpaqueId,
         artifact: Option<ArtifactReference>,
     },
     Published {

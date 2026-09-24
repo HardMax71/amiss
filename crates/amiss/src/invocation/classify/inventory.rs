@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use super::super::arguments::{Gathered, required};
-use super::super::{Code, Command, InventoryInvocation, OutputFormat, Refusal, Verb};
+use super::super::{AnalysisErrorCode, Command, InventoryInvocation, OutputFormat, Refusal, Verb};
 use super::{invalid, record, refuse_foreign};
 
 /// The inventory form: one checkout, one plan, one locale layout. The plan
@@ -44,7 +44,7 @@ pub(super) fn classify_locale_inventory(
     }
     let [Some(repo), Some(plan), Some(context)] = paths else {
         return Err(BTreeSet::from([invalid(
-            Code::InvalidInvocation.meaning().to_owned(),
+            AnalysisErrorCode::InvalidInvocation.meaning().to_owned(),
         )]));
     };
     Ok(Command::LocaleInventory(InventoryInvocation {

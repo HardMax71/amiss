@@ -4,7 +4,7 @@ use std::ffi::OsString;
 use amiss_wire::controls::Profile;
 use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat};
 
-use crate::invocation::{CandidateSelector, Code, Outcome, OutputFormat, Verb, parse};
+use crate::invocation::{AnalysisErrorCode, CandidateSelector, Outcome, OutputFormat, Verb, parse};
 
 const BASE_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const HEAD_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -51,10 +51,11 @@ fn parse_tokens(tokens: &[String]) -> Outcome {
     parse(&argv)
 }
 
-fn rejected_codes(outcome: Outcome) -> Vec<Code> {
+fn rejected_codes(outcome: Outcome) -> Vec<AnalysisErrorCode> {
     match outcome {
         Outcome::Rejected { refusals, .. } => {
-            let codes: BTreeSet<Code> = refusals.into_iter().map(|(code, _reason)| code).collect();
+            let codes: BTreeSet<AnalysisErrorCode> =
+                refusals.into_iter().map(|(code, _reason)| code).collect();
             codes.into_iter().collect()
         }
         Outcome::Accepted(_)
@@ -115,7 +116,7 @@ fn semantic_templates_are_check_only_and_singular() {
     ] {
         assert_eq!(
             rejected_codes(parse_tokens(&rejected)),
-            vec![Code::InvalidInvocation],
+            vec![AnalysisErrorCode::InvalidInvocation],
             "tokens {rejected:?}"
         );
     }
@@ -157,7 +158,7 @@ fn semantic_templates_are_check_only_and_singular() {
     ] {
         assert_eq!(
             rejected_codes(parse(&rejected)),
-            vec![Code::InvalidInvocation]
+            vec![AnalysisErrorCode::InvalidInvocation]
         );
     }
 }
@@ -188,7 +189,7 @@ fn record_set_authoring_accepts_only_one_evidence_path() {
     ] {
         assert_eq!(
             rejected_codes(parse(&rejected)),
-            vec![Code::InvalidInvocation],
+            vec![AnalysisErrorCode::InvalidInvocation],
             "tokens {rejected:?}"
         );
     }
@@ -264,7 +265,7 @@ fn rejects_structural_defects_as_invalid_invocation() {
     for tokens in cases {
         assert_eq!(
             rejected_codes(parse_tokens(&tokens)),
-            vec![Code::InvalidInvocation],
+            vec![AnalysisErrorCode::InvalidInvocation],
             "tokens {tokens:?}"
         );
     }
@@ -363,7 +364,7 @@ fn the_policy_include_form_uses_the_policy_grammar_and_an_optional_index_group()
     ] {
         assert_eq!(
             rejected_codes(parse(&tokens)),
-            vec![Code::InvalidInvocation],
+            vec![AnalysisErrorCode::InvalidInvocation],
             "tokens {tokens:?}"
         );
     }
@@ -374,13 +375,13 @@ fn classifies_profile_host_and_event_rows() {
     let bogus_profile = replace_value(&valid_pair(), "observe", "audit");
     assert_eq!(
         rejected_codes(parse_tokens(&bogus_profile)),
-        vec![Code::InvalidProfile]
+        vec![AnalysisErrorCode::InvalidProfile]
     );
 
     let empty_profile = replace_value(&valid_pair(), "observe", "");
     assert_eq!(
         rejected_codes(parse_tokens(&empty_profile)),
-        vec![Code::InvalidProfile]
+        vec![AnalysisErrorCode::InvalidProfile]
     );
 
     let gitlab = with(
@@ -423,7 +424,7 @@ fn classifies_profile_host_and_event_rows() {
     );
     assert_eq!(
         rejected_codes(parse_tokens(&uppercase_owner)),
-        vec![Code::InvalidEvent]
+        vec![AnalysisErrorCode::InvalidEvent]
     );
 
     let bad_ref = with(
@@ -439,7 +440,7 @@ fn classifies_profile_host_and_event_rows() {
     );
     assert_eq!(
         rejected_codes(parse_tokens(&bad_ref)),
-        vec![Code::InvalidEvent]
+        vec![AnalysisErrorCode::InvalidEvent]
     );
 
     let two_component = with(
@@ -455,7 +456,7 @@ fn classifies_profile_host_and_event_rows() {
     );
     assert_eq!(
         rejected_codes(parse_tokens(&two_component)),
-        vec![Code::InvalidInvocation],
+        vec![AnalysisErrorCode::InvalidInvocation],
         "an incomplete value is not guessed into a lower row"
     );
 }
@@ -478,7 +479,10 @@ fn emits_every_applicable_row_together() {
     );
     assert_eq!(
         rejected_codes(parse_tokens(&tokens)),
-        vec![Code::InvalidInvocation, Code::InvalidProfile]
+        vec![
+            AnalysisErrorCode::InvalidInvocation,
+            AnalysisErrorCode::InvalidProfile
+        ]
     );
     let Outcome::Rejected { refusals, .. } = parse_tokens(&tokens) else {
         panic!("expected rejection");
@@ -503,7 +507,7 @@ fn option_shaped_tokens_are_not_values() {
     tokens.remove(base_at + 1);
     assert_eq!(
         rejected_codes(parse_tokens(&tokens)),
-        vec![Code::InvalidInvocation],
+        vec![AnalysisErrorCode::InvalidInvocation],
         "--base consumes --candidate as an option, not as a value"
     );
 
@@ -513,7 +517,7 @@ fn option_shaped_tokens_are_not_values() {
     );
     assert_eq!(
         rejected_codes(parse_tokens(&starved)),
-        vec![Code::InvalidInvocation],
+        vec![AnalysisErrorCode::InvalidInvocation],
         "--profile that swallowed --explain-scope would name the flag as its profile instead"
     );
 }
@@ -532,7 +536,7 @@ fn every_repetition_refuses_by_itself() {
     for tokens in cases {
         assert_eq!(
             rejected_codes(parse_tokens(&tokens)),
-            vec![Code::InvalidInvocation],
+            vec![AnalysisErrorCode::InvalidInvocation],
             "tokens {tokens:?}"
         );
     }
@@ -577,7 +581,7 @@ fn output_selection_follows_the_format_law() {
 
     assert_eq!(
         rejected_codes(parse_tokens(&with(&valid_pair(), &["--format", "junit"]))),
-        vec![Code::InvalidInvocation],
+        vec![AnalysisErrorCode::InvalidInvocation],
         "JUnit is admitted only by the report renderer"
     );
 
@@ -685,7 +689,7 @@ fn the_render_form_requires_one_non_json_projection() {
     ] {
         assert_eq!(
             rejected_codes(parse(&tokens)),
-            vec![Code::InvalidInvocation],
+            vec![AnalysisErrorCode::InvalidInvocation],
             "tokens {tokens:?}"
         );
     }
@@ -730,7 +734,7 @@ fn the_refs_form_accepts_text_or_canonical_path_bytes() {
             "--format",
             "junit",
         ]))),
-        vec![Code::InvalidInvocation],
+        vec![AnalysisErrorCode::InvalidInvocation],
         "JUnit is admitted only by the report renderer"
     );
 }
@@ -756,7 +760,7 @@ fn rejects_non_unicode_argv_before_lossy_conversion() {
     tokens.push(OsString::from_vec(vec![0xff, 0xfe]));
     assert_eq!(
         rejected_codes(parse(&tokens)),
-        vec![Code::InvalidInvocation]
+        vec![AnalysisErrorCode::InvalidInvocation]
     );
 }
 
@@ -781,7 +785,7 @@ fn rejects_unpaired_surrogate_argv_before_lossy_conversion() {
     tokens.push(OsString::from_wide(&[0xD800]));
     assert_eq!(
         rejected_codes(parse(&tokens)),
-        vec![Code::InvalidInvocation]
+        vec![AnalysisErrorCode::InvalidInvocation]
     );
 }
 
@@ -852,7 +856,7 @@ fn refuses_an_unknown_host_without_a_dialect() {
     );
     assert_eq!(
         rejected_codes(parse_tokens(&identity)),
-        vec![Code::InvalidEvent]
+        vec![AnalysisErrorCode::InvalidEvent]
     );
 
     let flagged = scan_of(parse_tokens(&with(&identity, &["--forge", "gitlab"])));
@@ -906,7 +910,7 @@ fn classifies_the_forge_dialect_grammar() {
         rejected_codes(parse_tokens(&with_identity(
             "github.com/group/subgroup/repo"
         ))),
-        vec![Code::InvalidEvent],
+        vec![AnalysisErrorCode::InvalidEvent],
         "the github dialect cannot match a nested owner"
     );
     assert_eq!(
@@ -914,7 +918,7 @@ fn classifies_the_forge_dialect_grammar() {
             &with_identity("git.example.internal/group/sub/repo"),
             &["--forge", "gitea"],
         ))),
-        vec![Code::InvalidEvent],
+        vec![AnalysisErrorCode::InvalidEvent],
         "the gitea dialect cannot match a nested owner either"
     );
     for dialect in ["bitbucket-cloud", "bitbucket-data-center"] {
@@ -923,7 +927,7 @@ fn classifies_the_forge_dialect_grammar() {
                 &with_identity("bitbucket.example/group/sub/repo"),
                 &["--forge", dialect],
             ))),
-            vec![Code::InvalidEvent],
+            vec![AnalysisErrorCode::InvalidEvent],
             "the {dialect} dialect cannot match a nested owner"
         );
     }
@@ -932,13 +936,13 @@ fn classifies_the_forge_dialect_grammar() {
             &with_identity("ghes.corp.example/group/sub/repo"),
             &["--forge", "github"],
         ))),
-        vec![Code::InvalidEvent],
+        vec![AnalysisErrorCode::InvalidEvent],
         "the explicit github dialect refuses a nested owner too"
     );
 
     assert_eq!(
         rejected_codes(parse_tokens(&with(&valid_pair(), &["--forge", "github"]))),
-        vec![Code::InvalidInvocation],
+        vec![AnalysisErrorCode::InvalidInvocation],
         "a dialect without an identity triple is orphaned"
     );
     assert_eq!(
@@ -946,7 +950,7 @@ fn classifies_the_forge_dialect_grammar() {
             &with_identity("github.com/acme/repo"),
             &["--forge", "sourcehut"],
         ))),
-        vec![Code::InvalidInvocation],
+        vec![AnalysisErrorCode::InvalidInvocation],
         "an unknown dialect is a grammar violation"
     );
     assert_eq!(
@@ -954,14 +958,14 @@ fn classifies_the_forge_dialect_grammar() {
             &with_identity("github.com/acme/repo"),
             &["--forge", "github", "--forge", "github"],
         ))),
-        vec![Code::InvalidInvocation]
+        vec![AnalysisErrorCode::InvalidInvocation]
     );
     assert_eq!(
         rejected_codes(parse_tokens(&with(
             &with_identity("github.com/acme/repo"),
             &["--forge"],
         ))),
-        vec![Code::InvalidInvocation]
+        vec![AnalysisErrorCode::InvalidInvocation]
     );
 }
 

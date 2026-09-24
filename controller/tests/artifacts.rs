@@ -4,10 +4,9 @@ use std::time::Duration;
 use amiss_controller::opaque_id;
 use amiss_controller::{
     ArtifactAuditBundle, ArtifactAuditDigests, ArtifactAuditReference, ArtifactBundle,
-    ArtifactComponent, ArtifactError, ArtifactStoreConfig, ControllerClock, ControllerEvaluationId,
-    ExternalTally, FileArtifactStore, LocaleAuditBundle, PublicationAuditBundle,
-    RelationAuditBundle, validate_locale_audit, validate_publication_audit,
-    validate_relation_audit,
+    ArtifactComponent, ArtifactError, ArtifactStoreConfig, ControllerClock, ExternalTally,
+    FileArtifactStore, LocaleAuditBundle, OpaqueId, PublicationAuditBundle, RelationAuditBundle,
+    validate_locale_audit, validate_publication_audit, validate_relation_audit,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::relation::relation_audit;
@@ -102,11 +101,11 @@ fn parts<'a>(
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn retained_once(
     store: &FileArtifactStore,
-    evaluation: ControllerEvaluationId,
+    evaluation: OpaqueId,
     bundle: ArtifactAuditBundle<'_>,
     expected: ArtifactAuditDigests,
     components: [(ArtifactComponent, Option<&[u8]>); 3],
-) -> (ControllerEvaluationId, ArtifactAuditReference) {
+) -> (OpaqueId, ArtifactAuditReference) {
     let reference = store.retain_audit(&evaluation, bundle).unwrap();
     assert_eq!(reference.audit, expected);
     assert_eq!(store.retain_audit(&evaluation, bundle).unwrap(), reference);
@@ -208,8 +207,7 @@ fn audits_survive_restart_with_optional_evidence_exact() {
                 ),
             ),
         ] {
-            let evaluation =
-                ControllerEvaluationId::try_from(format!("evaluation/{kind}/{mode}")).unwrap();
+            let evaluation = OpaqueId::try_from(format!("evaluation/{kind}/{mode}")).unwrap();
             retained.push(retained_once(
                 &store, evaluation, bundle, expected, components,
             ));

@@ -8,7 +8,7 @@ use amiss_wire::controls::{GitMode, ResourceName};
 use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{Adapter, Oid, RepoPath};
 
-use crate::document::{Classification, classify, excluded_by_built_in, native_adapter};
+use crate::document::{DocumentClassification, classify, excluded_by_built_in, native_adapter};
 use crate::policy::Includes;
 use crate::resources::{ScanIdentity, ScanMemo, ScanResources, crossing};
 use crate::route::DIRECTORY_PAGES;
@@ -63,7 +63,7 @@ pub enum DocumentStatus {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DocumentRecord {
     pub path: RepoPath,
-    pub classification: Classification,
+    pub classification: DocumentClassification,
     pub adapter: Option<Adapter>,
     pub status: DocumentStatus,
     pub oid: Oid,
@@ -439,7 +439,7 @@ impl SnapshotDiscovery {
     #[must_use]
     pub fn bound_adapter(&self, path: &RepoPath) -> Option<Adapter> {
         self.document(path.as_bytes())
-            .filter(|record| record.classification == Classification::PolicyIncluded)
+            .filter(|record| record.classification == DocumentClassification::PolicyIncluded)
             .and_then(|record| record.adapter)
     }
 
@@ -458,7 +458,7 @@ impl SnapshotDiscovery {
     #[must_use]
     pub fn is_scanned_structured(&self, path: &RepoPath) -> bool {
         self.document(path.as_bytes()).is_some_and(|record| {
-            record.classification != Classification::PlainAdvisory
+            record.classification != DocumentClassification::PlainAdvisory
                 && matches!(record.status, DocumentStatus::Scanned(_))
         })
     }
@@ -577,7 +577,7 @@ fn declared_documents(
             discovery,
             path,
             &entry,
-            Some(Classification::StructuredRst),
+            Some(DocumentClassification::StructuredRst),
         )?;
     }
     discovery
@@ -593,17 +593,17 @@ fn record_document(
     discovery: &mut SnapshotDiscovery,
     path: RepoPath,
     entry: &TreeEntry,
-    declared: Option<Classification>,
+    declared: Option<DocumentClassification>,
 ) -> Result<(), Error> {
     let classification = match classify(path.as_bytes()).or(declared) {
         Some(native) => native,
-        None if context.includes.matches(&path) => Classification::PolicyIncluded,
+        None if context.includes.matches(&path) => DocumentClassification::PolicyIncluded,
         None => {
             discovery.outside_document_set = discovery.outside_document_set.saturating_add(1);
             return Ok(());
         }
     };
-    let adapter = if classification == Classification::PolicyIncluded {
+    let adapter = if classification == DocumentClassification::PolicyIncluded {
         context.includes.binding(&path)
     } else {
         native_adapter(classification)
