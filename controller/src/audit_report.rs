@@ -14,8 +14,6 @@ use amiss_wire::requests::{
     CandidateSnapshot, RequestMode, SnapshotMaterialization,
 };
 
-use crate::ArtifactError;
-
 pub(crate) struct AcceptedReport {
     pub(crate) report_digest: Digest,
     pub(crate) payload_digest: Digest,
@@ -123,4 +121,26 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
         },
         candidate_identity_digest,
     })
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ArtifactError {
+    #[error("artifact store is already open")]
+    AlreadyOpen,
+    #[error("artifact store configuration changed")]
+    Configuration,
+    #[error("artifact store is corrupt")]
+    Corrupt,
+    #[error("artifact store capacity is exhausted")]
+    Full,
+    #[error("artifact exceeds its configured size limit")]
+    TooLarge,
+    #[error("artifact identity was rebound to different bytes")]
+    Conflict,
+    #[error("artifact is absent or expired")]
+    NotFound,
+    #[error("artifact clock is unavailable")]
+    Clock,
+    #[error("artifact storage failed")]
+    Io(#[from] std::io::Error),
 }

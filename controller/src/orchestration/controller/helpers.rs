@@ -11,11 +11,15 @@ use crate::{
 };
 
 use super::{ControllerError, HandleOutcome};
+use crate::ChangeSnapshot;
+use crate::CheckConclusion;
+use crate::Publication;
+use crate::RunIdentity;
 use crate::orchestration::ledger::{
-    CheckConclusion, DeliveryClaim, DeliveryLease, DeliveryLedger, LeaseCompletion, LeaseRenewal,
-    Publication, StageOutcome, StagedPublication,
+    DeliveryClaim, DeliveryLease, DeliveryLedger, LeaseCompletion, LeaseRenewal, StageOutcome,
+    StagedPublication,
 };
-use crate::orchestration::model::{ChangeSnapshot, HeartbeatOutcome, RunHeartbeat, RunIdentity};
+use crate::orchestration::model::{HeartbeatOutcome, RunHeartbeat};
 
 pub(super) struct LedgerHeartbeat<'a, L: DeliveryLedger> {
     ledger: &'a mut L,
@@ -332,7 +336,7 @@ struct PreparedExternal {
     plan: Option<Vec<u8>>,
     evidence: Option<Vec<u8>>,
     assessment: Option<Vec<u8>>,
-    tally: Option<super::ExternalTally>,
+    tally: Option<crate::ExternalTally>,
     incomplete: bool,
 }
 
@@ -374,7 +378,7 @@ fn prepare_external(
                             ..PreparedExternal::default()
                         };
                     };
-                    let mut tally = super::ExternalTally::default();
+                    let mut tally = crate::ExternalTally::default();
                     for row in parsed.payload.verdicts {
                         match row.verdict {
                             ExternalVerdict::Refuted => {

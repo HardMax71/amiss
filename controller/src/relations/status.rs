@@ -7,7 +7,11 @@ use crate::{
     RelationAuditBundle, validate_relation_audit,
 };
 
-use super::{PendingRelation, RelationSubject, relation_transition};
+use super::PendingRelation;
+
+use crate::relation_transition;
+
+use crate::RelationSubject;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationSubjectHead {

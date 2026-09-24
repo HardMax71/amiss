@@ -25,8 +25,9 @@ use self::journal::{
 use self::status::{StoredStatus, validate_stored_status};
 use super::{
     PendingRelation, RelationAdmission, RelationScheduleError, RelationStatusError,
-    RelationTransition, schedule_relation,
+    schedule_relation,
 };
+use crate::RelationTransition;
 use crate::atomic_write_recovery::{ATOMIC_WRITE_DIRECTORY_PREFIX, AtomicWriteDirectory};
 
 const LOCK_FILE: &str = ".amiss-relation-schedules.lock";

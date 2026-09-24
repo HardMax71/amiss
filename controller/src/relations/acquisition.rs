@@ -3,81 +3,12 @@ use std::path::Path;
 use amiss_wire::model::ArtifactId;
 
 use crate::acquisition::verify_commits;
-use crate::{OidPair, TriggeredRelation};
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelationSubjectTransition {
-    pub role: ArtifactId,
-    pub commits: OidPair,
-    pub trees: OidPair,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelationTransition {
-    pub relation: TriggeredRelation,
-    pub coordination: ArtifactId,
-    pub subjects: [RelationSubjectTransition; 2],
-}
+use crate::{RelationAcquisitionError, RelationTransition, relation_transition};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RelationAcquiredRoot<'a> {
     pub role: &'a ArtifactId,
     pub repository: &'a Path,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
-pub enum RelationAcquisitionError {
-    #[error("the frozen relation transition is inconsistent with its operator plan")]
-    InvalidTransition,
-    #[error("one or more exact relation subjects cannot be proven")]
-    Unproven,
-}
-
-/// Freezes two independently resolved base/candidate pairs against one
-/// operator-owned relation selected by an authenticated trigger. `coordination`
-/// is the trusted operator's opaque identity for the exact pair, release, or
-/// workflow occurrence; this function never derives one from revisions or time.
-///
-/// # Errors
-///
-/// The relation, trigger role, subject roles, or object formats do not exactly
-/// reproduce the registered plan.
-pub fn relation_transition(
-    relation: TriggeredRelation,
-    coordination: ArtifactId,
-    mut subjects: [RelationSubjectTransition; 2],
-) -> Result<RelationTransition, RelationAcquisitionError> {
-    subjects.sort_by(|left, right| left.role.cmp(&right.role));
-    let plan = relation.plan.as_ref();
-    let relation_valid = super::validate_relation(plan).is_ok()
-        && plan
-            .subjects
-            .iter()
-            .any(|subject| subject.role == relation.trigger_role);
-    let subjects_valid = subjects[0].role != subjects[1].role
-        && subjects.iter().all(|transition| {
-            plan.subjects
-                .iter()
-                .find(|subject| subject.role == transition.role)
-                .is_some_and(|subject| {
-                    [
-                        &transition.commits.base,
-                        &transition.commits.candidate,
-                        &transition.trees.base,
-                        &transition.trees.candidate,
-                    ]
-                    .into_iter()
-                    .all(|oid| oid.object_format() == subject.object_format)
-                })
-        });
-    if !relation_valid || !subjects_valid {
-        return Err(RelationAcquisitionError::InvalidTransition);
-    }
-    Ok(RelationTransition {
-        relation,
-        coordination,
-        subjects,
-    })
 }
 
 /// Rechecks the frozen transition and proves every acquired commit names its

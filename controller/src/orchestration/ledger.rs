@@ -1,10 +1,6 @@
 use std::num::NonZeroU64;
 
-use crate::{
-    AcceptedDelivery, ArtifactReference, CheckBinding, ControllerEvaluationId, ProviderRunIdentity,
-};
-
-use super::model::{RunFailure, RunIdentity};
+use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId, Publication};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LeaseFence(NonZeroU64);
@@ -127,26 +123,6 @@ pub trait DeliveryLedger {
         delivery: &AcceptedDelivery,
         staged: &StagedPublication,
     ) -> Result<LeaseCompletion, Self::Error>;
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CheckConclusion {
-    Pass,
-    Block,
-    Superseded,
-    Unavailable(RunFailure),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Publication {
-    pub provider_run: ProviderRunIdentity,
-    pub evaluation_id: ControllerEvaluationId,
-    pub check: CheckBinding,
-    pub run: RunIdentity,
-    pub gate_commit: amiss_wire::model::Oid,
-    pub conclusion: CheckConclusion,
-    pub report: Option<Vec<u8>>,
-    pub artifact: Option<ArtifactReference>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

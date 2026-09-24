@@ -64,7 +64,7 @@ fn run_identity(candidate: char) -> RunIdentity {
     .expect("a run identity")
 }
 
-fn request() -> super::super::model::RunRequest {
+fn request() -> crate::RunRequest {
     let mut constraint = ExecutionConstraintDescriptor::parse(include_bytes!(
         "../../../../spec/examples/scanner-execution-constraint.json"
     ))
@@ -75,7 +75,7 @@ fn request() -> super::super::model::RunRequest {
     let plan = Arc::new(
         check_plan(Profile::Enforce, PolicyControls::default(), constraint).expect("a plan"),
     );
-    super::super::model::RunRequest {
+    crate::RunRequest {
         delivery: DeliveryIdentity {
             provider: ProviderIdentity {
                 namespace: provider_namespace!("gitea"),

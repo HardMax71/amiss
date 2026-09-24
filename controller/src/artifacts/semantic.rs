@@ -13,7 +13,7 @@ use base64::Engine as _;
 
 use crate::semantic_artifact::InputArtifact;
 
-use super::ArtifactError;
+use crate::ArtifactError;
 
 pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactError> {
     if artifact.is_empty() {
