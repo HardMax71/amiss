@@ -8,8 +8,8 @@ use amiss_wire::report::model::{
 };
 use amiss_wire::report::{Disposition, FindingKind};
 use amiss_wire::resolution::{
-    Missing, MissingTag, Resolution as EngineResolution, ResolutionTag, UnsupportedSemanticsTag,
-    UnsupportedTargetTag, VersionScopeTag,
+    Missing, MissingTag, Resolution, ResolutionTag, UnsupportedSemanticsTag, UnsupportedTargetTag,
+    VersionScopeTag,
 };
 
 mod tests;
@@ -188,10 +188,10 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[Occurrence]) {
 /// The engine's own resolution, spelled for a place line: its tag and,
 /// where the resolution says more, the reason with any nearby spelling.
 pub(crate) fn engine_resolution(
-    resolution: &EngineResolution<RepoPath>,
+    resolution: &Resolution<RepoPath>,
 ) -> (ResolutionTag, Option<String>) {
     let detail = match resolution {
-        EngineResolution::Missing(missing) => {
+        Resolution::Missing(missing) => {
             let near = match missing {
                 Missing::PathNotFound {
                     near: Some(near), ..
@@ -206,20 +206,20 @@ pub(crate) fn engine_resolution(
             };
             Some(missing_detail(MissingTag::from(missing), near))
         }
-        EngineResolution::Invalid { reason } => Some(reason.as_ref().to_owned()),
-        EngineResolution::UnsupportedTarget(target) => {
+        Resolution::Invalid { reason } => Some(reason.as_ref().to_owned()),
+        Resolution::UnsupportedTarget(target) => {
             Some(UnsupportedTargetTag::from(target).as_ref().to_owned())
         }
-        EngineResolution::UnsupportedSemantics(semantics) => {
+        Resolution::UnsupportedSemantics(semantics) => {
             Some(UnsupportedSemanticsTag::from(semantics).as_ref().to_owned())
         }
-        EngineResolution::UnsupportedVersion { scope } => {
+        Resolution::UnsupportedVersion { scope } => {
             Some(VersionScopeTag::from(scope).as_ref().to_owned())
         }
-        EngineResolution::Resolved { .. }
-        | EngineResolution::TypeMismatch { .. }
-        | EngineResolution::DeclaredUntracked(_)
-        | EngineResolution::External { .. } => None,
+        Resolution::Resolved { .. }
+        | Resolution::TypeMismatch { .. }
+        | Resolution::DeclaredUntracked(_)
+        | Resolution::External { .. } => None,
     };
     (ResolutionTag::from(resolution), detail)
 }

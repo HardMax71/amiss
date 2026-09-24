@@ -60,7 +60,7 @@ fn adoption_facts_match_evaluation_for_each_shape_and_multiplicity() -> Result<(
     Ok(())
 }
 
-fn structural_resolutions(path: &RepoPath) -> Vec<Resolution> {
+fn structural_resolutions(path: &RepoPath) -> Vec<Resolution<RepoPath>> {
     let mut cases = vec![
         Resolution::Missing(Missing::LineFragmentOutOfRange { path: path.clone() }),
         Resolution::Missing(Missing::LabelNotDeclared),

@@ -69,7 +69,7 @@ fn fact_producers_borrow_the_key_and_actual_resolution() -> Result<(), serde_jso
             assert_eq!(decoded.schema, FactSchema::Current);
             assert!(matches!(
                 observed_resolution,
-                report::Resolution::Missing(report::MissingResolution::PathNotFound {
+                report::ReportResolution::Missing(report::MissingResolution::PathNotFound {
                     near: None,
                     same_object_at: Some(_),
                     ..

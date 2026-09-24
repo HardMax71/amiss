@@ -1,12 +1,13 @@
 use amiss_fixtures::commit_chain;
 use amiss_git::GitLimits;
 use amiss_scan::resolve::ForgeContext;
-use amiss_scan::{Error, Resolution, ScanLimits};
+use amiss_scan::{Error, ScanLimits};
 use amiss_wire::branch_ref;
 use amiss_wire::controls::{ResourceName, TargetKind};
 use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 use amiss_wire::model::{Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::report::IntentKind;
+use amiss_wire::resolution::Resolution;
 use amiss_wire::resolution::{
     BlobContent, ExternalReference, Missing, Target, UnsupportedSemantics, VersionScope,
 };

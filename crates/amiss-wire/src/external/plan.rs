@@ -10,7 +10,7 @@ use crate::envelope::{Envelope, Payload, Sealing};
 use crate::model::Digest;
 use crate::model::ForgeDialect;
 use crate::report::model::{
-    Evaluation, ObservationComparison, Occurrence, ReportPayload, Resolution, occurrences,
+    Evaluation, ObservationComparison, Occurrence, ReportPayload, ReportResolution, occurrences,
 };
 use crate::resolution::ExternalReference;
 use crate::resolution::VersionScope;
@@ -275,14 +275,14 @@ fn collect<'report>(
         };
         let external = matches!(
             &occurrence.resolution,
-            Resolution::External {
+            ReportResolution::External {
                 reason: ExternalReference::Url | ExternalReference::ForeignRepository,
                 ..
             }
         );
         let historical = matches!(
             &occurrence.resolution,
-            Resolution::UnsupportedVersion {
+            ReportResolution::UnsupportedVersion {
                 scope: VersionScope::KnownCommit { .. },
                 ..
             }
@@ -290,7 +290,7 @@ fn collect<'report>(
         if (!external && !historical)
             || matches!(
                 &occurrence.resolution,
-                Resolution::External {
+                ReportResolution::External {
                     reason: ExternalReference::IntersphinxInventory | ExternalReference::SiteBuild,
                     ..
                 }

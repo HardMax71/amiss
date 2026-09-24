@@ -95,7 +95,7 @@ pub struct UnsupportedSemanticsResolution<P = RepoPath> {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 #[strum(serialize_all = "kebab-case")]
-pub enum Resolution<P = RepoPath> {
+pub enum ReportResolution<P = RepoPath> {
     DeclaredUntracked {
         declared_by: P,
         path: P,
@@ -125,7 +125,7 @@ pub enum Resolution<P = RepoPath> {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Occurrence<P = RepoPath, R = Resolution<P>> {
+pub struct Occurrence<P = RepoPath, R = ReportResolution<P>> {
     pub block_kind: BlockKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_destination: Option<String>,
@@ -139,7 +139,7 @@ pub struct Occurrence<P = RepoPath, R = Resolution<P>> {
 /// trees hold, or each side on its own.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub enum Sides<P = RepoPath, R = Resolution<P>> {
+pub enum Sides<P = RepoPath, R = ReportResolution<P>> {
     Each(Box<Pair<Occurrence<P, R>>>),
     Same(Box<Occurrence<P, R>>),
 }
@@ -190,7 +190,7 @@ pub fn comparisons_valid<P: PartialEq, R: PartialEq>(
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct CorrelationAlternatives<P = RepoPath, R = Resolution<P>> {
+pub struct CorrelationAlternatives<P = RepoPath, R = ReportResolution<P>> {
     pub base: Vec<Occurrence<P, R>>,
     pub candidate: Vec<Occurrence<P, R>>,
 }
@@ -307,7 +307,7 @@ pub enum Impact {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ObservationComparison<P = RepoPath, R = Resolution<P>> {
+pub struct ObservationComparison<P = RepoPath, R = ReportResolution<P>> {
     pub alternatives: CorrelationAlternatives<P, R>,
     pub correlation: Correlation,
     pub correlation_reason: CorrelationReason,

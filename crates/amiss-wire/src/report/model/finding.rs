@@ -12,7 +12,8 @@ use crate::model::{ArtifactId, OwnerId, RepoPathText, TreeIdentity, UtcInstant};
 
 use super::super::{Disposition, EvidenceClass, FindingKind, InvariantClass};
 use super::{
-    DocumentGitMode, DocumentResult, DocumentSide, ObservationComparison, Resolution, SourceSpan,
+    DocumentGitMode, DocumentResult, DocumentSide, ObservationComparison, ReportResolution,
+    SourceSpan,
 };
 use crate::controls::FindingOccurrence;
 use crate::model::RepoPath;
@@ -227,7 +228,7 @@ pub enum ExceptionDiagnostic {
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum FindingFactEvidence<
     P = RepoPath,
-    R = Resolution<P>,
+    R = ReportResolution<P>,
     S = ProjectionSource,
     D = ProjectionDifference,
     M = DocumentGitMode,

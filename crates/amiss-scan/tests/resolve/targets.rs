@@ -3,10 +3,11 @@ use std::fs;
 
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::resolve::{Resolver, TARGET_PROJECTION_DOMAIN, TargetCache};
-use amiss_scan::{Error, Resolution, ScanLimits, ScanResources, discover, discover_index};
+use amiss_scan::{Error, ScanLimits, ScanResources, discover, discover_index};
 use amiss_wire::controls::ResourceName;
 use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
+use amiss_wire::resolution::Resolution;
 use amiss_wire::resolution::{BlobContent, BlobMode, Target, UnsupportedSemantics};
 
 use crate::support::{POINTER, bed, bed_with, fixture, git};

@@ -6,14 +6,16 @@ use crate::discovery::Located;
 use crate::semantic::{SiteClaim, SitePageBacking, SiteRoute, SiteTarget, View, fragment_target};
 
 use super::syntax::split_components;
-use super::{Resolution, Resolver, lookup};
+use super::{Resolver, lookup};
+use amiss_wire::model::RepoPath;
+use amiss_wire::resolution::Resolution;
 
 pub(super) fn resolve(
     resolver: &mut Resolver<'_>,
     semantic: View<'_>,
     destination: &str,
     is_image: bool,
-) -> Result<Option<Resolution>, Error> {
+) -> Result<Option<Resolution<RepoPath>>, Error> {
     let Some(routes) = semantic.routes else {
         return Ok(None);
     };

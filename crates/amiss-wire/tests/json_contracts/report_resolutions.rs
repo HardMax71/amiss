@@ -1,4 +1,4 @@
-use amiss_wire::report::model::Resolution;
+use amiss_wire::report::model::ReportResolution;
 
 #[test]
 fn blob_fragments_reuse_the_producer_type_and_require_its_tag() {
@@ -25,7 +25,7 @@ fn blob_fragments_reuse_the_producer_type_and_require_its_tag() {
             );
             let encoded =
                 String::from_utf8(serde_json_canonicalizer::to_vec(&producer).unwrap()).unwrap();
-            let decoded: Resolution = serde_json::from_str(&encoded).unwrap();
+            let decoded: ReportResolution = serde_json::from_str(&encoded).unwrap();
             assert_eq!(decoded.as_ref(), producer.discriminant().as_ref());
             assert_eq!(
                 serde_json_canonicalizer::to_vec(&decoded).unwrap(),
@@ -37,7 +37,7 @@ fn blob_fragments_reuse_the_producer_type_and_require_its_tag() {
             ] {
                 assert_ne!(encoded, invalid);
                 assert!(
-                    serde_json::from_str::<Resolution>(&invalid).is_err(),
+                    serde_json::from_str::<ReportResolution>(&invalid).is_err(),
                     "{invalid}"
                 );
             }
@@ -57,7 +57,7 @@ fn resolution_tags_reject_fields_from_other_variants() {
         r#"{"kind":"unsupported-version","scope":{"kind":"unknown-path","path":"a.md"}}"#,
     ] {
         assert!(
-            serde_json::from_str::<Resolution>(invalid).is_err(),
+            serde_json::from_str::<ReportResolution>(invalid).is_err(),
             "{invalid}"
         );
     }

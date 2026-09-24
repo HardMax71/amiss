@@ -6,7 +6,9 @@ use amiss_wire::resolution::Missing;
 use crate::discovery::empty_discovery;
 use crate::{Error, GitDefect};
 
-use super::{Resolution, Resolver};
+use super::Resolver;
+
+use amiss_wire::resolution::Resolution;
 
 pub(super) fn lookup(
     resolver: &mut Resolver<'_>,
@@ -16,7 +18,7 @@ pub(super) fn lookup(
     query: Option<&str>,
     fragment: Option<&str>,
     forge: ForgeDialect,
-) -> Result<Option<Resolution>, Error> {
+) -> Result<Option<Resolution<RepoPath>>, Error> {
     let Some(mut tree_oid) = commit_tree(resolver, commit_oid)? else {
         return Ok(None);
     };

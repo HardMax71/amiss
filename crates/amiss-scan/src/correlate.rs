@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
-use amiss_wire::resolution::Resolution as WireResolution;
+use amiss_wire::resolution::Resolution;
 
 pub(crate) use components::unique_path_pairs;
 use components::{ObservationPool, correlation_components};
@@ -246,10 +246,10 @@ fn derive(
 
     match (left, right) {
         (
-            WireResolution::Resolved {
+            Resolution::Resolved {
                 target: left_target,
             },
-            WireResolution::Resolved {
+            Resolution::Resolved {
                 target: right_target,
             },
         ) => {
@@ -269,7 +269,7 @@ fn derive(
             };
             (TargetChange::Changed, impact)
         }
-        (WireResolution::Missing(left_missing), WireResolution::Missing(right_missing)) => {
+        (Resolution::Missing(left_missing), Resolution::Missing(right_missing)) => {
             if left_missing == right_missing {
                 (TargetChange::Equal, equal_impact)
             } else {
@@ -277,8 +277,8 @@ fn derive(
             }
         }
         (
-            WireResolution::DeclaredUntracked(left_declared),
-            WireResolution::DeclaredUntracked(right_declared),
+            Resolution::DeclaredUntracked(left_declared),
+            Resolution::DeclaredUntracked(right_declared),
         ) => {
             if left_declared == right_declared {
                 (TargetChange::Equal, equal_impact)
@@ -287,10 +287,10 @@ fn derive(
             }
         }
         (
-            WireResolution::TypeMismatch {
+            Resolution::TypeMismatch {
                 target: left_target,
             },
-            WireResolution::TypeMismatch {
+            Resolution::TypeMismatch {
                 target: right_target,
             },
         ) => {
@@ -300,33 +300,31 @@ fn derive(
                 (TargetChange::NotComparable, Impact::NotApplicable)
             }
         }
+        (Resolution::Missing(_) | Resolution::TypeMismatch { .. }, Resolution::Resolved { .. }) => {
+            (TargetChange::NewlyResolved, Impact::ReferenceResolved)
+        }
+        (Resolution::Resolved { .. }, Resolution::Missing(_) | Resolution::TypeMismatch { .. }) => {
+            (TargetChange::BecameMissing, Impact::NotApplicable)
+        }
         (
-            WireResolution::Missing(_) | WireResolution::TypeMismatch { .. },
-            WireResolution::Resolved { .. },
-        ) => (TargetChange::NewlyResolved, Impact::ReferenceResolved),
-        (
-            WireResolution::Resolved { .. },
-            WireResolution::Missing(_) | WireResolution::TypeMismatch { .. },
-        ) => (TargetChange::BecameMissing, Impact::NotApplicable),
-        (
-            WireResolution::Resolved { .. }
-            | WireResolution::Missing(_)
-            | WireResolution::TypeMismatch { .. }
-            | WireResolution::DeclaredUntracked(_)
-            | WireResolution::UnsupportedTarget(_)
-            | WireResolution::UnsupportedSemantics(_)
-            | WireResolution::UnsupportedVersion { .. }
-            | WireResolution::Invalid { .. }
-            | WireResolution::External { .. },
-            WireResolution::Resolved { .. }
-            | WireResolution::Missing(_)
-            | WireResolution::TypeMismatch { .. }
-            | WireResolution::DeclaredUntracked(_)
-            | WireResolution::UnsupportedTarget(_)
-            | WireResolution::UnsupportedSemantics(_)
-            | WireResolution::UnsupportedVersion { .. }
-            | WireResolution::Invalid { .. }
-            | WireResolution::External { .. },
+            Resolution::Resolved { .. }
+            | Resolution::Missing(_)
+            | Resolution::TypeMismatch { .. }
+            | Resolution::DeclaredUntracked(_)
+            | Resolution::UnsupportedTarget(_)
+            | Resolution::UnsupportedSemantics(_)
+            | Resolution::UnsupportedVersion { .. }
+            | Resolution::Invalid { .. }
+            | Resolution::External { .. },
+            Resolution::Resolved { .. }
+            | Resolution::Missing(_)
+            | Resolution::TypeMismatch { .. }
+            | Resolution::DeclaredUntracked(_)
+            | Resolution::UnsupportedTarget(_)
+            | Resolution::UnsupportedSemantics(_)
+            | Resolution::UnsupportedVersion { .. }
+            | Resolution::Invalid { .. }
+            | Resolution::External { .. },
         ) => (TargetChange::NotComparable, Impact::NotApplicable),
     }
 }

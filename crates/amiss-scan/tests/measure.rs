@@ -6,12 +6,13 @@ use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::RequestDigests;
 use amiss_scan::resolve::{Resolver, TargetCache};
-use amiss_scan::{Resolution, ScanLimits, ScanResources, SnapshotDiscovery};
+use amiss_scan::{ScanLimits, ScanResources, SnapshotDiscovery};
 use amiss_wire::controls::GitMode;
 use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::resolution::Missing;
+use amiss_wire::resolution::Resolution;
 
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;

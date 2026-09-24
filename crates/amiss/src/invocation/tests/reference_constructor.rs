@@ -5,12 +5,11 @@ use std::path::Path;
 
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository, parse_commit};
 use amiss_scan::resolve::{ForgeContext, Resolver, TargetCache};
-use amiss_scan::{
-    DocumentStatus, Intent, Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover,
-};
+use amiss_scan::{DocumentStatus, Intent, ScanLimits, ScanResources, SnapshotDiscovery, discover};
 use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
+use amiss_wire::resolution::Resolution;
 use amiss_wire::resolution::{
     ExternalReference, InvalidReference, Missing, Target, UnsupportedSemantics, VersionScope,
 };
@@ -80,7 +79,7 @@ impl Bed {
         source: &str,
         is_image: bool,
         destination: &str,
-    ) -> (Intent, Resolution) {
+    ) -> (Intent, Resolution<RepoPath>) {
         let document = RepoPath::new(source.to_owned()).unwrap();
         Resolver::new(
             &self.repo,
@@ -215,7 +214,7 @@ fn split_input(case: &Value) -> (ForgeContext, String) {
     (run_context, url)
 }
 
-fn assert_split_outcome(intent: &Intent, row: &Resolution, expected: &Value, id: &str) {
+fn assert_split_outcome(intent: &Intent, row: &Resolution<RepoPath>, expected: &Value, id: &str) {
     let expected_path = expected.get("path").and_then(Value::as_str);
     let expected_commit = expected.get("commit_oid").and_then(Value::as_str);
     match text(expected, "status") {

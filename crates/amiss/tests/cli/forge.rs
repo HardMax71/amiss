@@ -3,7 +3,7 @@ use std::path::Path;
 
 use amiss_wire::model::RepoPath;
 use amiss_wire::repo_path_text;
-use amiss_wire::report::model::{Resolution, occurrences};
+use amiss_wire::report::model::{ReportResolution, occurrences};
 use amiss_wire::resolution::VersionScope;
 
 use crate::support::{amiss, payload, report};
@@ -120,18 +120,18 @@ fn a_declared_forge_host_is_recognized_and_reported_end_to_end() {
         .iter()
         .filter_map(|row| occurrences(row).candidate)
         .find_map(|side| match &side.resolution {
-            Resolution::UnsupportedVersion {
+            ReportResolution::UnsupportedVersion {
                 scope: VersionScope::KnownCommit { commit_oid, path },
             } => Some((side, commit_oid, path)),
-            Resolution::UnsupportedVersion { .. }
-            | Resolution::DeclaredUntracked { .. }
-            | Resolution::External { .. }
-            | Resolution::Invalid { .. }
-            | Resolution::Missing(_)
-            | Resolution::Resolved { .. }
-            | Resolution::TypeMismatch { .. }
-            | Resolution::UnsupportedSemantics(_)
-            | Resolution::UnsupportedTarget { .. } => None,
+            ReportResolution::UnsupportedVersion { .. }
+            | ReportResolution::DeclaredUntracked { .. }
+            | ReportResolution::External { .. }
+            | ReportResolution::Invalid { .. }
+            | ReportResolution::Missing(_)
+            | ReportResolution::Resolved { .. }
+            | ReportResolution::TypeMismatch { .. }
+            | ReportResolution::UnsupportedSemantics(_)
+            | ReportResolution::UnsupportedTarget { .. } => None,
         })
         .unwrap_or_else(|| panic!("the immutable scope is reported"));
     assert_eq!(

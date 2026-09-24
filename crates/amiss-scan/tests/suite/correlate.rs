@@ -3,12 +3,13 @@ use amiss_scan::correlate::{
     Comparison, Impact, Observation, Outcome, Reason, Side, SourceChange, TargetChange, correlate,
 };
 use amiss_scan::observe::{ObservationIdentity, observation_input};
-use amiss_scan::resolve::{Intent, Resolution};
+use amiss_scan::resolve::Intent;
 use amiss_scan::scanned::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{GitMode, TargetKind};
 use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
+use amiss_wire::resolution::Resolution;
 use amiss_wire::resolution::{
     BlobContent, BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, Missing, Target,
 };
@@ -44,7 +45,7 @@ fn repo_intent(path: &str) -> Intent {
     }
 }
 
-fn resolved(path: &str, body: &[u8]) -> Resolution {
+fn resolved(path: &str, body: &[u8]) -> Resolution<RepoPath> {
     let raw = amiss_wire::model::Digest::from(
         sha2::Sha256::new_with_prefix("amiss/raw-evidence")
             .chain_update([0_u8])
@@ -70,7 +71,7 @@ fn resolved(path: &str, body: &[u8]) -> Resolution {
     }
 }
 
-fn missing(path: &str) -> Resolution {
+fn missing(path: &str) -> Resolution<RepoPath> {
     Resolution::Missing(Missing::PathNotFound {
         path: rp(path),
         near: None,
@@ -78,7 +79,7 @@ fn missing(path: &str) -> Resolution {
     })
 }
 
-fn declared(path: &str, declared_by: &str) -> Resolution {
+fn declared(path: &str, declared_by: &str) -> Resolution<RepoPath> {
     Resolution::DeclaredUntracked(DeclaredUntracked {
         path: rp(path),
         declared_by: rp(declared_by),
@@ -92,7 +93,7 @@ struct Spec {
     raw_destination: String,
     block: String,
     intent: Intent,
-    resolution: Resolution,
+    resolution: Resolution<RepoPath>,
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture identity")]

@@ -9,7 +9,7 @@ use std::process::{Command, Stdio};
 use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::RepoPath;
 use amiss_wire::repo_path_text;
-use amiss_wire::report::model::{Occurrence, Resolution};
+use amiss_wire::report::model::{Occurrence, ReportResolution};
 use amiss_wire::resolution::{BlobTarget, Target};
 
 use crate::support::{amiss, fixture};
@@ -65,7 +65,7 @@ fn json_returns_exact_candidate_occurrences_without_revising_the_verdict() {
         identity.extracted_intent.repository_path,
         Some(RepoPath::from(&repo_path_text!("docs/guide.md")))
     );
-    let Resolution::Resolved {
+    let ReportResolution::Resolved {
         target: Target::Tree { path: target } | Target::Blob(BlobTarget { path: target, .. }),
     } = &row.resolution
     else {

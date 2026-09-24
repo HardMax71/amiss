@@ -9,7 +9,9 @@ pub use amiss_wire::report::model::{
     Correlation as Outcome, CorrelationReason as Reason, Impact, SourceChange, TargetChange,
 };
 
-use crate::resolve::{Intent, Resolution};
+use crate::resolve::Intent;
+
+use amiss_wire::resolution::Resolution;
 
 /// One side's occurrence as correlation sees it: its identity, where it
 /// lives, what it extracted, and how it resolved.
@@ -32,7 +34,7 @@ pub struct Observation {
     pub raw_destination: String,
     pub raw_destination_digest: Digest,
     pub projection_digest: Digest,
-    pub resolution: Resolution,
+    pub resolution: Resolution<RepoPath>,
     pub fragment_span: Option<(usize, usize)>,
     pub path_span: Option<(usize, usize)>,
 }

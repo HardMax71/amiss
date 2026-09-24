@@ -15,7 +15,8 @@ use crate::resources::{Aggregate, ScanResources};
 use super::content::{Content, content_cache};
 use super::line::{line_fragment, line_resolution};
 use super::transclusion::{Source, expand, templated};
-use super::{Anchors, Intent, Resolution, Resolver, lookup};
+use super::{Anchors, Intent, Resolver, lookup};
+use amiss_wire::resolution::Resolution;
 
 #[derive(Debug)]
 pub(super) struct AnchorIndex {
@@ -63,7 +64,7 @@ pub(super) fn fragment_resolution(
     entry: Target<RepoPath>,
     forge: Option<ForgeDialect>,
     decoded: &str,
-) -> Result<Resolution, Error> {
+) -> Result<Resolution<RepoPath>, Error> {
     if mode == GitMode::Tree {
         return Ok(Resolution::UnsupportedSemantics(
             UnsupportedSemantics::CodeFragment(entry),
@@ -102,7 +103,7 @@ fn anchor_resolution(
     blob: BlobTarget<RepoPath>,
     adapter: Adapter,
     fragment: &str,
-) -> Result<Resolution, Error> {
+) -> Result<Resolution<RepoPath>, Error> {
     let unsupported = Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(
         TaggedBlobTarget::Blob(blob.clone()),
     ));
@@ -216,7 +217,10 @@ fn fold_typography(text: &str) -> String {
 /// What the snapshot's own label table answers for one name: the declaring
 /// document, or the ambiguity two declarations leave. A name nobody declares
 /// is not answered here, so each caller keeps the reading it already had.
-fn label_target(resolver: &mut Resolver<'_>, label: &str) -> Result<Option<Resolution>, Error> {
+fn label_target(
+    resolver: &mut Resolver<'_>,
+    label: &str,
+) -> Result<Option<Resolution<RepoPath>>, Error> {
     let normalized = amiss_rst::normalized_label(label);
     let owner = match resolver.snapshot.labels.get(&normalized) {
         None => return Ok(None),
@@ -241,8 +245,8 @@ pub(super) fn linked_label(
     adapter: Adapter,
     document: &RepoPath,
     label: Option<&str>,
-    row: Resolution,
-) -> Result<Resolution, Error> {
+    row: Resolution<RepoPath>,
+) -> Result<Resolution<RepoPath>, Error> {
     let Some(label) = label else { return Ok(row) };
     if !crate::anchor::MYST_LINK.adapters.contains(&adapter)
         || !crate::discovery::sphinx_governed(resolver.snapshot, document)
@@ -259,7 +263,7 @@ impl Resolver<'_> {
         &mut self,
         label: &str,
         semantic: crate::semantic::View<'_>,
-    ) -> Result<(Intent, Resolution, Option<String>), Error> {
+    ) -> Result<(Intent, Resolution<RepoPath>, Option<String>), Error> {
         let intent = Intent {
             kind: IntentKind::Label,
             commit_oid: None,
