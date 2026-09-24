@@ -13,7 +13,7 @@ use amiss_git::Repository;
 use amiss_scan::pipeline::commit_pair;
 use amiss_scan::route::{DECLARABLE, ROUTERS, RouteRule, Spelling, candidates, spellings};
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
-use amiss_wire::report::model::{Occurrence, occurrences};
+use amiss_wire::report::model::{ObservedOccurrence, occurrences};
 use amiss_wire::resolution::{Missing, Resolution, ResolutionTag, Target};
 use serde_json::Value;
 
@@ -210,7 +210,7 @@ fn outcomes(chain: &CommitChain) -> Vec<Outcome> {
     rows
 }
 
-fn outcome(occurrence: &Occurrence<RepoPath, Resolution<RepoPath>>) -> Outcome {
+fn outcome(occurrence: &ObservedOccurrence<RepoPath, Resolution<RepoPath>>) -> Outcome {
     let text = |path: &RepoPath| path.as_str().map(str::to_owned);
     let answered = if let Resolution::Resolved {
         target: Target::Blob(blob),

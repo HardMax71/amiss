@@ -5,8 +5,8 @@ use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::ReportDefect;
 use amiss_wire::report::model::{
-    MissingResolution, Occurrence, ReportPayload, ReportResolution, UnsupportedSemanticsResolution,
-    occurrences,
+    MissingResolution, ObservedOccurrence, ReportPayload, ReportResolution,
+    UnsupportedSemanticsResolution, occurrences,
 };
 use amiss_wire::resolution::{BlobTarget, Target, VersionScope};
 
@@ -39,7 +39,10 @@ pub(crate) fn run(invocation: &RefsInvocation) -> ExitCode {
     ExitCode::from(ExitClass::Success.code())
 }
 
-fn matching_occurrences(bytes: &[u8], target: &RepoPath) -> Result<Vec<Occurrence>, String> {
+fn matching_occurrences(
+    bytes: &[u8],
+    target: &RepoPath,
+) -> Result<Vec<ObservedOccurrence>, String> {
     let payload = <ReportPayload>::parse(bytes)
         .map_err(|error| error.to_string())?
         .payload;

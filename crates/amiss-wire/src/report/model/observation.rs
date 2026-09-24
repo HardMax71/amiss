@@ -125,7 +125,7 @@ pub enum ReportResolution<P = RepoPath> {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Occurrence<P = RepoPath, R = ReportResolution<P>> {
+pub struct ObservedOccurrence<P = RepoPath, R = ReportResolution<P>> {
     pub block_kind: BlockKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_destination: Option<String>,
@@ -140,8 +140,8 @@ pub struct Occurrence<P = RepoPath, R = ReportResolution<P>> {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Sides<P = RepoPath, R = ReportResolution<P>> {
-    Each(Box<Pair<Occurrence<P, R>>>),
-    Same(Box<Occurrence<P, R>>),
+    Each(Box<Pair<ObservedOccurrence<P, R>>>),
+    Same(Box<ObservedOccurrence<P, R>>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -153,7 +153,9 @@ pub struct Pair<T> {
 
 /// The occurrence each side holds; a same row holds one for both.
 #[must_use]
-pub fn occurrences<P, R>(comparison: &ObservationComparison<P, R>) -> Pair<&Occurrence<P, R>> {
+pub fn occurrences<P, R>(
+    comparison: &ObservationComparison<P, R>,
+) -> Pair<&ObservedOccurrence<P, R>> {
     match &comparison.sides {
         Sides::Each(pair) => Pair {
             base: pair.base.as_ref(),
@@ -191,8 +193,8 @@ pub fn comparisons_valid<P: PartialEq, R: PartialEq>(
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CorrelationAlternatives<P = RepoPath, R = ReportResolution<P>> {
-    pub base: Vec<Occurrence<P, R>>,
-    pub candidate: Vec<Occurrence<P, R>>,
+    pub base: Vec<ObservedOccurrence<P, R>>,
+    pub candidate: Vec<ObservedOccurrence<P, R>>,
 }
 
 #[derive(

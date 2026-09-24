@@ -22,7 +22,7 @@ use amiss_wire::model::RepoPath;
 use amiss_wire::model::{ArtifactId, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::IntentKind;
 use amiss_wire::report::model::{
-    MissingResolution, ObservationComparison, Occurrence, ReportEnvelope, ReportPayload,
+    MissingResolution, ObservationComparison, ObservedOccurrence, ReportEnvelope, ReportPayload,
     ReportResolution, UnsupportedSemanticsResolution, occurrences,
 };
 use amiss_wire::requests::{
@@ -376,7 +376,7 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     let output = run(Some(&fixture.repo), &framed(&streams));
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
     let (envelope, report) = contract_report(&output.stdout);
-    let labels: Vec<&Occurrence> = report
+    let labels: Vec<&ObservedOccurrence> = report
         .payload
         .observations
         .iter()
@@ -518,7 +518,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
 }
 
 fn assert_site_routes(payload: &ReportPayload) {
-    let routes: Vec<(&ObservationComparison, &Occurrence)> = payload
+    let routes: Vec<(&ObservationComparison, &ObservedOccurrence)> = payload
         .observations
         .iter()
         .filter_map(|row| occurrences(row).candidate.map(|side| (row, side)))
@@ -575,7 +575,7 @@ fn assert_site_routes(payload: &ReportPayload) {
             .count(),
         9
     );
-    let sides: Vec<&Occurrence> = routes.iter().map(|(_, side)| *side).collect();
+    let sides: Vec<&ObservedOccurrence> = routes.iter().map(|(_, side)| *side).collect();
     assert_generated_routes(&sides);
     assert_eq!(
         sides
@@ -595,8 +595,8 @@ fn assert_site_routes(payload: &ReportPayload) {
     assert_eq!(payload.summary.references.unsupported, 11);
 }
 
-fn assert_generated_routes(sides: &[&Occurrence]) {
-    let generated: Vec<&&Occurrence> = sides
+fn assert_generated_routes(sides: &[&ObservedOccurrence]) {
+    let generated: Vec<&&ObservedOccurrence> = sides
         .iter()
         .filter(|side| {
             matches!(

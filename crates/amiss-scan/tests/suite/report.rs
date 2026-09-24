@@ -20,7 +20,7 @@ use amiss_wire::controls::GitMode;
 use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model::{
-    DocumentCounts, FindingCounts, FindingFactEvidence, ObservationComparison, Occurrence,
+    DocumentCounts, FindingCounts, FindingFactEvidence, ObservationComparison, ObservedOccurrence,
     ReferenceCounts, Sides, Summary, occurrences,
 };
 use amiss_wire::report::{
@@ -326,11 +326,12 @@ fn assert_external_destinations(
 ) {
     let mut external = 0_usize;
     for row in rows {
-        let carried: Vec<&Occurrence<RepoPath, amiss_wire::resolution::Resolution<RepoPath>>> =
-            match &row.sides {
-                Sides::Each(pair) => pair.base.iter().chain(&pair.candidate).collect(),
-                Sides::Same(occurrence) => vec![occurrence.as_ref()],
-            };
+        let carried: Vec<
+            &ObservedOccurrence<RepoPath, amiss_wire::resolution::Resolution<RepoPath>>,
+        > = match &row.sides {
+            Sides::Each(pair) => pair.base.iter().chain(&pair.candidate).collect(),
+            Sides::Same(occurrence) => vec![occurrence.as_ref()],
+        };
         for side in carried {
             if matches!(
                 side.resolution,

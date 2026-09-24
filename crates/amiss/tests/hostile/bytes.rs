@@ -324,7 +324,7 @@ fn a_percent_escaped_byte_reference_resolves_against_the_byte_named_target() {
             "json",
         ]);
         assert_eq!(query_code, 0);
-        let rows: Vec<amiss_wire::report::model::Occurrence> =
+        let rows: Vec<amiss_wire::report::model::ObservedOccurrence> =
             serde_json::from_slice(&query).unwrap();
         let [row] = rows.as_slice() else {
             panic!("one occurrence: {rows:?}");

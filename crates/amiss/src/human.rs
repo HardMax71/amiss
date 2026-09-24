@@ -4,7 +4,7 @@ use amiss_wire::human::{atom, atom_bytes};
 use amiss_wire::model::{Digest, RepoPath};
 use amiss_wire::report::model::{
     Attribution, Evaluation, Feedback, FeedbackAction, FeedbackItem, FindingFactEvidence, Impact,
-    LocationSide, Occurrence, ReportPayload, SourceSpan, occurrences,
+    LocationSide, ObservedOccurrence, ReportPayload, SourceSpan, occurrences,
 };
 use amiss_wire::report::{Disposition, FindingKind};
 use amiss_wire::resolution::{
@@ -160,7 +160,7 @@ pub(crate) fn engine_path(path: &RepoPath) -> String {
         .map_or_else(|| atom_bytes(path.as_bytes()), atom)
 }
 
-pub(crate) fn references(target: &RepoPath, occurrences: &[Occurrence]) {
+pub(crate) fn references(target: &RepoPath, occurrences: &[ObservedOccurrence]) {
     let mut out = Channel {
         out: std::io::stdout(),
         open: true,
