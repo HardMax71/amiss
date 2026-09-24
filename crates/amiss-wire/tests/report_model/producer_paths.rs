@@ -48,8 +48,10 @@ fn report_producers_can_borrow_validated_text_and_byte_paths() {
             let resolution = &fact["evidence"]["resolution"];
             for accepts_path in [
                 serde_json::from_value::<amiss_wire::controls::Fact>(fact.clone()).is_ok(),
-                serde_json::from_value::<amiss_wire::controls::TargetIntent>(intent.clone())
-                    .is_ok(),
+                serde_json::from_value::<amiss_wire::controls::RepositoryTargetIntent>(
+                    intent.clone(),
+                )
+                .is_ok(),
                 serde_json::from_value::<amiss_wire::controls::StructuralResolution>(
                     resolution.clone(),
                 )
@@ -114,7 +116,7 @@ fn producer_payload<R>(
         schema: FindingKeyInputSchema::Current,
         scope: report::FindingKeyScope::Reference {
             document: path,
-            normalized_target_intent: report::RepositoryTargetIntent {
+            normalized_target_intent: amiss_wire::controls::RepositoryTargetIntent {
                 commit_oid: None,
                 fragment_digest: None,
                 kind: amiss_wire::controls::TargetIntentKind::RepositoryPath,

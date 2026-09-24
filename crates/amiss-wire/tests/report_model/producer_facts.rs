@@ -20,7 +20,7 @@ fn fact_producers_borrow_the_key_and_actual_resolution() -> Result<(), serde_jso
             schema: FindingKeyInputSchema::Current,
             scope: report::FindingKeyScope::Reference {
                 document: &path,
-                normalized_target_intent: report::RepositoryTargetIntent {
+                normalized_target_intent: amiss_wire::controls::RepositoryTargetIntent {
                     commit_oid: None,
                     fragment_digest: None,
                     kind: amiss_wire::controls::TargetIntentKind::RepositoryPath,
@@ -78,7 +78,7 @@ fn fact_producers_borrow_the_key_and_actual_resolution() -> Result<(), serde_jso
             assert!(matches!(
                 decoded.key_input.scope,
                 report::FindingKeyScope::Reference {
-                    normalized_target_intent: report::RepositoryTargetIntent {
+                    normalized_target_intent: amiss_wire::controls::RepositoryTargetIntent {
                         commit_oid: None,
                         ..
                     },

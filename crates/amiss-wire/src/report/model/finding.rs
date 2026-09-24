@@ -3,7 +3,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::controls::{
-    ProjectionKind, ProjectionSink, ProjectionSource, WaiverResidualDisposition,
+    ProjectionKind, ProjectionSink, ProjectionSource, RepositoryTargetIntent,
+    WaiverResidualDisposition,
 };
 
 use crate::extraction::SourceConstruct;
@@ -33,9 +34,6 @@ pub enum RepositoryIntentPath<P = RepoPath> {
     Path(P),
 }
 
-pub type RepositoryTargetIntent<P = RepoPath> =
-    crate::controls::TargetIntent<RepositoryIntentPath<P>>;
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum FindingKeyScope<P = RepoPath> {
@@ -51,7 +49,7 @@ pub enum FindingKeyScope<P = RepoPath> {
     },
     Reference {
         document: P,
-        normalized_target_intent: RepositoryTargetIntent<P>,
+        normalized_target_intent: RepositoryTargetIntent<RepositoryIntentPath<P>>,
         occurrence: FindingOccurrence,
         source_construct: SourceConstruct,
     },

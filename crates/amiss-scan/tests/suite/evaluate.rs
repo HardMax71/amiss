@@ -804,7 +804,7 @@ fn waived_fact() -> amiss_wire::controls::Fact {
                 kind: amiss_wire::controls::ReferenceScopeKind::Reference,
                 document: repo_path_text!("d.md"),
                 source_construct: SourceConstruct::InlineLink,
-                normalized_target_intent: amiss_wire::controls::TargetIntent {
+                normalized_target_intent: amiss_wire::controls::RepositoryTargetIntent {
                     kind: amiss_wire::controls::TargetIntentKind::RepositoryPath,
                     commit_oid: None,
                     path: repo_path_text!("absent.md"),

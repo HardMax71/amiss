@@ -4,13 +4,14 @@ use std::collections::BTreeMap;
 
 use amiss_wire::controls::FindingOccurrence;
 use amiss_wire::controls::OccurrenceKind;
+use amiss_wire::controls::RepositoryTargetIntent;
 use amiss_wire::controls::TargetIntentKind;
 use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, Profile, TargetKind};
 use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
     EmptyRepositoryPath, FindingFactEvidence, FindingFactInput, FindingKeyInput, PolicySource,
-    RepositoryIntentPath, RepositoryTargetIntent,
+    RepositoryIntentPath,
 };
 use amiss_wire::report::{Disposition, FindingKind};
 

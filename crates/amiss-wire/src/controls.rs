@@ -25,7 +25,7 @@ pub use execution_constraint::{
 pub use fact::{
     Fact, FactEvidence, FactEvidenceKind, FactSchema, FindingKeyInput, FindingKeyInputSchema,
     FindingOccurrence, MissingResolution, OccurrenceKind, ReferenceScope, ReferenceScopeKind,
-    StructuralResolution, TargetIntent, TargetIntentKind,
+    RepositoryTargetIntent, StructuralResolution, TargetIntentKind,
 };
 pub use floor::{
     FloorDefect, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor, OrganizationFloorSchema,
