@@ -16,14 +16,15 @@ use std::process::{Command, Stdio};
 
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_wire::assessment::Nullable;
+use amiss_wire::controls::MissingResolution;
 use amiss_wire::controls::Profile;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::RepoPath;
 use amiss_wire::model::{ArtifactId, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::IntentKind;
 use amiss_wire::report::model::{
-    MissingResolution, ObservationComparison, ObservedOccurrence, ReportEnvelope, ReportPayload,
-    ReportResolution, UnsupportedSemanticsResolution, occurrences,
+    ObservationComparison, ObservedOccurrence, ReportEnvelope, ReportPayload, ReportResolution,
+    UnsupportedSemanticsResolution, occurrences,
 };
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestStreams, RequestTrust, SEALED_ENGINE_ARGUMENT,

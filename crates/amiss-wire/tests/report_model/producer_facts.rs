@@ -15,7 +15,7 @@ fn fact_producers_borrow_the_key_and_actual_resolution() -> Result<(), serde_jso
         [b"docs/".as_slice(), &vec![0xff; 4091]].concat(),
     ] {
         let path = RepoPath::from_bytes(raw).unwrap();
-        let key = report::FindingKeyInput {
+        let key = report::ReportFindingKeyInput {
             finding_kind: FindingKind::ExplicitTargetMissing,
             schema: FindingKeyInputSchema::Current,
             scope: report::FindingKeyScope::Reference {
@@ -69,11 +69,13 @@ fn fact_producers_borrow_the_key_and_actual_resolution() -> Result<(), serde_jso
             assert_eq!(decoded.schema, FactSchema::Current);
             assert!(matches!(
                 observed_resolution,
-                report::ReportResolution::Missing(report::MissingResolution::PathNotFound {
-                    near: None,
-                    same_object_at: Some(_),
-                    ..
-                })
+                report::ReportResolution::Missing(
+                    amiss_wire::controls::MissingResolution::PathNotFound {
+                        near: None,
+                        same_object_at: Some(_),
+                        ..
+                    }
+                )
             ));
             assert!(matches!(
                 decoded.key_input.scope,

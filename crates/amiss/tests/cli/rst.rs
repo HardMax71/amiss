@@ -1,9 +1,8 @@
+use amiss_wire::controls::MissingResolution;
 use amiss_wire::model::RepoPath;
 use amiss_wire::repo_path_text;
 use amiss_wire::report::IntentKind;
-use amiss_wire::report::model::{
-    MissingResolution, ReportResolution, UnsupportedSemanticsResolution, occurrences,
-};
+use amiss_wire::report::model::{ReportResolution, UnsupportedSemanticsResolution, occurrences};
 use amiss_wire::resolution::UnsupportedSemanticsReason;
 use amiss_wire::resolution::{BlobTarget, Target};
 

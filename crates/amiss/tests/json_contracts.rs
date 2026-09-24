@@ -2,14 +2,12 @@ use amiss_wire::repo_path_text;
 use sha2::Digest as _;
 use std::{fs, process::Command};
 
+use amiss_wire::controls::MissingResolution;
 use amiss_wire::{
     model::RepoPath,
     report::{
         PAYLOAD_SCHEMA,
-        model::{
-            MissingResolution, ObservedOccurrence, Pair, ReportEnvelope, ReportResolution, Sides,
-            occurrences,
-        },
+        model::{ObservedOccurrence, Pair, ReportEnvelope, ReportResolution, Sides, occurrences},
     },
     resolution::{Target, VersionScope},
 };

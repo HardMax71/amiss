@@ -7,7 +7,7 @@ use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::model::ProjectionDifference;
 use amiss_wire::report::model::RowsProjectionDifference;
 use amiss_wire::report::model::{
-    FindingFactEvidence, FindingFactInput, FindingKeyInput, PolicySource,
+    FindingFactEvidence, FindingFactInput, PolicySource, ReportFindingKeyInput,
 };
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 use amiss_wire::resolution::{Missing, Resolution};
@@ -20,7 +20,7 @@ use super::{
 };
 
 pub(crate) fn fact(
-    key: &FindingKeyInput<RepoPath>,
+    key: &ReportFindingKeyInput<RepoPath>,
     evidence: FindingFactEvidence<
         RepoPath,
         Resolution<RepoPath>,
@@ -40,7 +40,7 @@ pub(crate) fn fact(
 }
 
 pub(super) fn reference_fact(
-    key: &FindingKeyInput<RepoPath>,
+    key: &ReportFindingKeyInput<RepoPath>,
     observation: &Observation,
     multiplicity: u64,
 ) -> Result<FindingFact, crate::Error> {
@@ -159,7 +159,7 @@ pub(super) fn simple(
     location: Location,
     profile: Profile,
 ) -> Result<Finding, crate::Error> {
-    let key_input = FindingKeyInput {
+    let key_input = ReportFindingKeyInput {
         finding_kind: kind,
         schema: FindingKeyInputSchema::Current,
         scope,

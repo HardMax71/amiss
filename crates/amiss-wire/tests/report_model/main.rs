@@ -3,9 +3,11 @@ mod producer_paths;
 mod projection;
 
 use amiss_wire::report::model::{
-    BaseSnapshot, Evaluation, FindingFactEvidence, FindingKeyScope, MissingResolution,
-    ReportEnvelope, ReportResolution, Snapshot,
+    BaseSnapshot, Evaluation, FindingFactEvidence, FindingKeyScope, ReportEnvelope,
+    ReportResolution, Snapshot,
 };
+
+use amiss_wire::controls::MissingResolution;
 
 use amiss_wire::model::RepoPath;
 use amiss_wire::requests::CandidateSnapshot;
@@ -78,7 +80,7 @@ fn every_report_variant_streams_in_canonical_order() -> Result<(), Box<dyn std::
         r#"{"path":"a.md","reason":"line-fragment-out-of-range"}"#,
         r#"{"near":null,"path":"a.md","reason":"path-not-found"}"#,
     ] {
-        assert_canonical::<MissingResolution>(wire)?;
+        assert_canonical::<MissingResolution<RepoPath>>(wire)?;
     }
     for template in [
         r#"{"commit_oid":"$oid","kind":"known-commit","path":"a.md"}"#,

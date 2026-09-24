@@ -10,6 +10,7 @@ use crate::model::Digest;
 use crate::model::{Adapter, AddressKind, Oid};
 use crate::resolution::{Target, VersionScope};
 
+use crate::controls::MissingResolution;
 use crate::model::RepoPath;
 use crate::report::ReportDefect;
 use crate::resolution::{
@@ -79,8 +80,6 @@ pub struct ObservationIdInput<P = RepoPath> {
     pub source_projection_digest: Digest,
     pub structural_address: StructuralAddress,
 }
-
-pub type MissingResolution<P = RepoPath> = crate::controls::MissingResolution<P>;
 
 /// One unevaluated meaning: the reason it was left, and the target the reason
 /// located when it located one.

@@ -203,7 +203,8 @@ fn optional_report_members_preserve_digest_bound_presence() {
         r#"{"reason":"path-not-found","near":null,"path":"docs/missing.md","same_object_at":null}"#,
         r#"{"reason":"path-not-found","near":null,"path":"docs/missing.md","same_object_at":"docs/moved.md"}"#,
     ] {
-        let resolution: report::model::MissingResolution = serde_json::from_str(document).unwrap();
+        let resolution: amiss_wire::controls::MissingResolution<amiss_wire::model::RepoPath> =
+            serde_json::from_str(document).unwrap();
         assert_eq!(
             serde_json_canonicalizer::to_vec(&resolution).unwrap(),
             serde_json_canonicalizer::to_vec(
