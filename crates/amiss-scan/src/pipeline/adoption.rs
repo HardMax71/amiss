@@ -4,7 +4,7 @@ use amiss_git::{GitResources, Repository};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::{EngineProvenance, ErrorDetail, model::AnalysisErrorCode};
 
-use crate::pipeline::{ObservationContext, detail, side_observations};
+use super::{ObservationContext, detail, side_observations};
 use crate::policy::DebtContext;
 use crate::resolve::ForgeContext;
 use crate::resources::{ScanLimits, ScanResources};
@@ -30,7 +30,7 @@ const fn mismatch() -> ErrorDetail {
 /// # Errors
 ///
 /// One typed detail: the binding mismatch or the first ordinary defect.
-pub fn reproduce(
+pub(super) fn reproduce(
     repo: &Repository,
     git: &mut GitResources,
     engine: &EngineProvenance,

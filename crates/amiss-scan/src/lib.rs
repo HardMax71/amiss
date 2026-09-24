@@ -1,4 +1,3 @@
-pub mod adoption;
 pub mod anchor;
 pub mod claim;
 pub mod correlate;

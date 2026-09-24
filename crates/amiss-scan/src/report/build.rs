@@ -63,7 +63,7 @@ pub(crate) fn construct_with_site(
     ) {
         Ok(evaluated) => evaluated,
         Err(defect) => {
-            return construct_incomplete(setup, &[crate::pipeline::detail(&defect, None)]);
+            return construct_incomplete(setup, &[super::detail(&defect, None)]);
         }
     };
 
