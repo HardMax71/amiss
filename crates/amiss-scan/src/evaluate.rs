@@ -23,7 +23,6 @@ pub use model::{
     LocationSide, PolicyStep,
 };
 pub use references::structural_facts;
-use run::candidate_digest_of;
 pub(crate) use run::{GovernedInputs, evaluate_with_site};
 pub use run::{evaluate, evaluate_with_policy};
 

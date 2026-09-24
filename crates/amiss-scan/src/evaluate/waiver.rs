@@ -6,8 +6,8 @@ use amiss_wire::model::UtcInstant;
 use amiss_wire::report::FindingKind;
 use amiss_wire::report::model::ExceptionDiagnostic;
 
+use super::Finding;
 use super::control::control_row;
-use super::{Finding, candidate_digest_of};
 
 fn waiver_diagnostic(
     item: &amiss_wire::controls::WaiverItem,
@@ -51,7 +51,11 @@ pub(super) fn waiver_pass(
             continue;
         }
         let target = targets.get(&item.finding_key).copied();
-        let current = target.and_then(|found| findings.get(found).and_then(candidate_digest_of));
+        let current = target.and_then(|found| {
+            findings
+                .get(found)
+                .and_then(|finding| finding.candidate_fact.as_ref().map(|fact| fact.digest))
+        });
         let mut defects: Vec<&'static str> = Vec::new();
         if *instant < item.not_before {
             defects.push("not-yet");
