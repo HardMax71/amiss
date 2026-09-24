@@ -1,7 +1,7 @@
 use amiss_git::{GitResources, Repository};
 use amiss_wire::model::{Oid, RepoPath};
 use amiss_wire::report::model::SnapshotUnavailableReason;
-use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail};
+use amiss_wire::report::{EngineProvenance, ErrorDetail, model::AnalysisErrorCode};
 
 use crate::Error;
 use crate::correlate::Side;

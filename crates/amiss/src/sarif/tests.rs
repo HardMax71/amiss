@@ -6,7 +6,7 @@ use amiss_wire::report::model::{
     AnalysisError, AnalysisPhase, ByteSpan, FindingFix, RepoPath, RepoPathBytes, ReportEnvelope,
     ReportStatus, SourceSpan,
 };
-use amiss_wire::report::{AnalysisErrorCode, Disposition, FindingKind};
+use amiss_wire::report::{Disposition, FindingKind, model::AnalysisErrorCode};
 
 fn projection_payload() -> amiss_wire::report::model::ReportPayload {
     let mut report: ReportEnvelope =

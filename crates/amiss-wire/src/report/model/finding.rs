@@ -8,7 +8,7 @@ use crate::controls::{
 use crate::model::Digest;
 use crate::model::{ArtifactId, OwnerId, RepoPathText, TreeIdentity, UtcInstant};
 
-use super::super::{Disposition, FindingKind};
+use super::super::{Disposition, EvidenceClass, FindingKind, InvariantClass};
 use super::{
     DocumentGitMode, DocumentResult, DocumentSide, ObservationComparison, RepoPath, Resolution,
     SourceSpan,
@@ -304,48 +304,6 @@ pub enum CoverageRequirement {
     ExternallyProtected,
     None,
     RepositoryRequested,
-}
-
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Display,
-    EnumString,
-    SerializeDisplay,
-    DeserializeFromStr,
-    strum::AsRefStr,
-)]
-#[strum(serialize_all = "kebab-case")]
-pub enum EvidenceClass {
-    AnalysisIntegrity,
-    ControlPlane,
-    CoverageBoundary,
-    DeterministicStructural,
-    ImpactObservation,
-    Unsupported,
-}
-
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Display,
-    EnumString,
-    SerializeDisplay,
-    DeserializeFromStr,
-    strum::AsRefStr,
-)]
-#[strum(serialize_all = "kebab-case")]
-pub enum InvariantClass {
-    Absolute,
-    Advisory,
-    AnalysisIntegrity,
-    Ratcheted,
 }
 
 #[derive(

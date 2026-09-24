@@ -1,6 +1,6 @@
 use amiss_md::{AnalyzeError, Fault, Work, charge};
 use amiss_wire::model::Adapter;
-use amiss_wire::report::AnalysisErrorCode;
+use amiss_wire::report::model::AnalysisErrorCode;
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn markdown(source: &[u8]) -> Work {

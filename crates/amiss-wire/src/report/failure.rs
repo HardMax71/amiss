@@ -7,7 +7,9 @@ use crate::model::{Adapter, RepoPath};
 use strum::IntoEnumIterator;
 
 use super::model;
-use super::{ADAPTER_CONTRACT_SCHEMA, AnalysisErrorCode, ErrorDetail, PAYLOAD_SCHEMA, error_row};
+use super::{
+    ADAPTER_CONTRACT_SCHEMA, ErrorDetail, PAYLOAD_SCHEMA, error_row, model::AnalysisErrorCode,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EngineProvenance {

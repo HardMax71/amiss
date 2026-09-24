@@ -147,7 +147,7 @@ fn projection_difference<'a>(
 
 #[test]
 fn resolved_commit_identities_survive_discovery_failures() {
-    use amiss_wire::report::AnalysisErrorCode;
+    use amiss_wire::report::model::AnalysisErrorCode;
     use amiss_wire::report::model::{BaseSnapshot, Evaluation, Snapshot};
     use amiss_wire::requests::CandidateSnapshot;
 

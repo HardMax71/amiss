@@ -23,8 +23,8 @@ use amiss_wire::report::model::{
     ReferenceCounts, Sides, Summary, occurrences,
 };
 use amiss_wire::report::{
-    AnalysisErrorCode, EngineProvenance, ErrorDetail, FindingKind, MACHINE_JSON_BYTES,
-    adapter_contract,
+    EngineProvenance, ErrorDetail, FindingKind, MACHINE_JSON_BYTES, adapter_contract,
+    model::AnalysisErrorCode,
 };
 use tempfile::TempDir;
 

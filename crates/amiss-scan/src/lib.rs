@@ -23,7 +23,7 @@ pub mod semantic;
 
 use amiss_md::Fault;
 use amiss_wire::controls::ResourceName;
-use amiss_wire::report::AnalysisErrorCode;
+use amiss_wire::report::model::AnalysisErrorCode;
 
 pub use correlate::{Comparison, Impact, Observation, Outcome, Side, correlate};
 pub use discovery::{

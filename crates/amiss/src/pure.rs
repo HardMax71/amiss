@@ -24,7 +24,7 @@ pub(crate) fn run<T, E: std::fmt::Display>(
     let Some(engine) = crate::engine_provenance() else {
         eprintln!(
             "amiss: {}",
-            amiss_wire::report::AnalysisErrorCode::InternalError.as_ref()
+            amiss_wire::report::model::AnalysisErrorCode::InternalError.as_ref()
         );
         return failure;
     };

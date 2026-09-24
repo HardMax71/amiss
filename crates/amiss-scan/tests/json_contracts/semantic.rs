@@ -12,7 +12,7 @@ use amiss_wire::{
     assessment::Nullable,
     controls::Profile,
     model::{ObjectFormat, Oid},
-    report::{AnalysisErrorCode, EngineProvenance, FindingKind},
+    report::{EngineProvenance, FindingKind, model::AnalysisErrorCode},
     requests::{
         ControlsRequest, EvaluationRequest, SuppliedSemanticEvidence,
         commit_candidate_identity_digest,

@@ -14,7 +14,7 @@ use std::sync::Arc;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPath};
 pub use amiss_wire::report::model::SemanticEvidenceProvenance as Provenance;
-use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
+use amiss_wire::report::{ErrorDetail, model::AnalysisErrorCode};
 
 pub(crate) use parse::{parse, validated_envelope};
 pub(crate) use site::{fragment_target, navigation_contains};

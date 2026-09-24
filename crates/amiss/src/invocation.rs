@@ -14,7 +14,7 @@ use amiss_wire::model::{
 use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
 
 /// The canonical analysis-error taxonomy used by invocation refusals.
-pub(crate) use amiss_wire::report::AnalysisErrorCode as Code;
+pub(crate) use amiss_wire::report::model::AnalysisErrorCode as Code;
 
 /// One refused contract: the wire code and the human line naming the option.
 pub(crate) type Refusal = (Code, String);

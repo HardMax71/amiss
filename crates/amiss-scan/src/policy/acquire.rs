@@ -9,7 +9,7 @@ use amiss_wire::de::ErrorKind;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{Adapter, Oid, RepoPath};
-use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
+use amiss_wire::report::{ErrorDetail, model::AnalysisErrorCode};
 
 use crate::resources::ScanResources;
 use crate::{Error, lfs};

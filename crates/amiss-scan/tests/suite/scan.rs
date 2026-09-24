@@ -314,7 +314,7 @@ fn reference_budgets_and_destination_bytes_charge_in_document_order() {
 
 #[test]
 fn errors_map_to_their_analysis_codes() {
-    use amiss_wire::report::AnalysisErrorCode;
+    use amiss_wire::report::model::AnalysisErrorCode;
     assert_eq!(
         Error::Parse(Fault::DocumentInvalid).code(),
         AnalysisErrorCode::DocumentInvalid

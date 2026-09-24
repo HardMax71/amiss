@@ -85,7 +85,7 @@ fn template_intake_enforces_the_bound_envelope_ceiling_not_only_the_source_size(
                     .map(drop)
                     .expect_err("binding must account for the envelope metadata")
                     .code,
-                amiss_wire::report::AnalysisErrorCode::ConfigurationInvalid
+                amiss_wire::report::model::AnalysisErrorCode::ConfigurationInvalid
             );
         }
         let Observation::Record(observation) =

@@ -6,7 +6,7 @@ mod floor;
 
 use amiss_wire::controls::ResourceName;
 use amiss_wire::model::Digest;
-use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
+use amiss_wire::report::{ErrorDetail, model::AnalysisErrorCode};
 use amiss_wire::requests::RequestTrust;
 
 pub use acquire::{Includes, PolicySide, acquire, acquire_entry};
