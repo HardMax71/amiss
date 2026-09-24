@@ -13,13 +13,13 @@ pub(super) enum RootSchema {
 use sha2::Digest as _;
 use std::time::Duration;
 
+use amiss_wire::assessment::AssessmentVerdict;
 use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::locale::{
     ASSESSMENT_DOCUMENT_BYTES as LOCALE_AUDIT_DOCUMENT_BYTES, LOCALE_DOCUMENT_BYTES,
-    LocaleCoverageVerdict,
 };
 use amiss_wire::model::Digest;
-use amiss_wire::publication::{PUBLICATION_DOCUMENT_BYTES, PublicationVerdict};
+use amiss_wire::publication::PUBLICATION_DOCUMENT_BYTES;
 use amiss_wire::relation::{RELATION_DOCUMENT_BYTES, RelationVerdict};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -95,11 +95,11 @@ pub(super) struct Record {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) semantic: Option<Blob>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(super) publication_audit: Option<SidecarAudit<PublicationVerdict>>,
+    pub(super) publication_audit: Option<SidecarAudit<AssessmentVerdict>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) relation_audit: Option<SidecarAudit<RelationVerdict>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(super) locale_audit: Option<SidecarAudit<LocaleCoverageVerdict>>,
+    pub(super) locale_audit: Option<SidecarAudit<AssessmentVerdict>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -120,9 +120,9 @@ pub(super) struct RecordInput {
     pub(super) external_tally: Option<ExternalTally>,
     pub(super) external_incomplete: bool,
     pub(super) semantic: Option<Blob>,
-    pub(super) publication_audit: Option<SidecarAudit<PublicationVerdict>>,
+    pub(super) publication_audit: Option<SidecarAudit<AssessmentVerdict>>,
     pub(super) relation_audit: Option<SidecarAudit<RelationVerdict>>,
-    pub(super) locale_audit: Option<SidecarAudit<LocaleCoverageVerdict>>,
+    pub(super) locale_audit: Option<SidecarAudit<AssessmentVerdict>>,
 }
 
 impl Record {
@@ -174,7 +174,7 @@ impl Record {
                     audit,
                     PUBLICATION_DOCUMENT_BYTES,
                     PUBLICATION_DOCUMENT_BYTES,
-                    &PublicationVerdict::Unproven,
+                    &AssessmentVerdict::Unproven,
                 )
             }),
             self.relation_audit.as_ref().map(|audit| {
@@ -190,7 +190,7 @@ impl Record {
                     audit,
                     LOCALE_DOCUMENT_BYTES,
                     LOCALE_AUDIT_DOCUMENT_BYTES,
-                    &LocaleCoverageVerdict::Unproven,
+                    &AssessmentVerdict::Unproven,
                 )
             }),
         ];
@@ -205,7 +205,7 @@ impl Record {
                 && self.external_tally.is_none()
                 && !self.external_incomplete;
         if self.schema != RECORD_SCHEMA
-            || !valid_id(&self.id)
+            || !valid_artifact_id(&self.id)
             || self.created_at_unix_millis < 0
             || self.created_at_unix_millis.checked_add(retention_millis)
                 != Some(self.expires_at_unix_millis)
@@ -295,11 +295,11 @@ impl Record {
             #[serde(skip_serializing_if = "Option::is_none")]
             semantic: &'a Option<Blob>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            publication_audit: &'a Option<SidecarAudit<PublicationVerdict>>,
+            publication_audit: &'a Option<SidecarAudit<AssessmentVerdict>>,
             #[serde(skip_serializing_if = "Option::is_none")]
             relation_audit: &'a Option<SidecarAudit<RelationVerdict>>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            locale_audit: &'a Option<SidecarAudit<LocaleCoverageVerdict>>,
+            locale_audit: &'a Option<SidecarAudit<AssessmentVerdict>>,
         }
         let identity = Identity {
             evaluation_id: &self.evaluation_id,
@@ -417,7 +417,7 @@ pub(super) fn millis(duration: Duration) -> Result<u64, ArtifactError> {
     u64::try_from(duration.as_millis()).map_err(|_defect| ArtifactError::Configuration)
 }
 
-pub(crate) fn valid_id(id: &str) -> bool {
+pub(crate) fn valid_artifact_id(id: &str) -> bool {
     id.len() == 64
         && id
             .bytes()

@@ -999,7 +999,7 @@ fn side_status(
         let byte_count = u64::try_from(object.body.len()).unwrap_or(u64::MAX);
         scan.charge_document_bytes(byte_count)?;
         let raw = amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix(crate::resolve::RAW_EVIDENCE_DOMAIN)
+            sha2::Sha256::new_with_prefix(amiss_wire::model::RAW_EVIDENCE_DOMAIN)
                 .chain_update([0_u8])
                 .chain_update(&object.body)
                 .finalize()

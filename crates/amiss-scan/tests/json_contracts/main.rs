@@ -3,11 +3,9 @@ use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::{
     Includes, ScanLimits, ScanResources, discover,
     policy::{PROTECTED_CONTROL_EVIDENCE_DOMAIN, ProtectedState, protected_state},
-    resolve::{
-        RAW_EVIDENCE_DOMAIN, Resolver, TARGET_LINE_PROJECTION_DOMAIN, TARGET_PROJECTION_DOMAIN,
-        TargetCache,
-    },
+    resolve::{Resolver, TARGET_LINE_PROJECTION_DOMAIN, TARGET_PROJECTION_DOMAIN, TargetCache},
 };
+use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 use amiss_wire::{
     model::{Adapter, ObjectFormat, Oid, RepoPath},
     resolution::{BlobContent, Resolution, Target},

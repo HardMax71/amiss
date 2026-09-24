@@ -76,9 +76,9 @@ pub fn gitea_fetch_plan(request: &RunRequest) -> Result<GiteaFetchPlan, GiteaPla
 
     Ok(GiteaFetchPlan {
         integration_id,
-        repository_url: repository_url(repository),
+        repository_url: gitea_repository_url(repository),
         repository_oids: [run.commits.base.clone(), run.commits.candidate.clone()],
-        action_url: repository_url(action),
+        action_url: gitea_repository_url(action),
         action_oid: request.plan.execution.action_commit_oid.clone(),
     })
 }
@@ -112,7 +112,7 @@ fn exact_sha1(oid: &Oid) -> bool {
     Oid::new(ObjectFormat::Sha1, oid.as_str().to_owned()).as_ref() == Some(oid)
 }
 
-pub fn repository_url(repository: &RepositoryIdentity) -> String {
+pub fn gitea_repository_url(repository: &RepositoryIdentity) -> String {
     format!(
         "https://{}/{}/{}.git",
         repository.host(),

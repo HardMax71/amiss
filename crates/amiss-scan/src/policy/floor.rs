@@ -70,7 +70,7 @@ pub fn protected_state(
         return Ok(ProtectedState::Unsupported);
     }
     let raw = Digest::from(
-        sha2::Sha256::new_with_prefix(crate::resolve::RAW_EVIDENCE_DOMAIN)
+        sha2::Sha256::new_with_prefix(amiss_wire::model::RAW_EVIDENCE_DOMAIN)
             .chain_update([0_u8])
             .chain_update(&object.body)
             .finalize()

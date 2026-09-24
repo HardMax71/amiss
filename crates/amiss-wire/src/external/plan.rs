@@ -10,12 +10,14 @@ use crate::envelope::{Envelope, Payload, Sealing};
 use crate::model::Digest;
 use crate::model::ForgeDialect;
 use crate::report::model::{
-    Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence, RepoPath,
-    ReportPayload, Resolution, occurrences,
+    Evaluation, ObservationComparison, Occurrence, RepoPath, ReportPayload, Resolution, occurrences,
 };
+use crate::resolution::ExternalReference;
 use crate::resolution::VersionScope;
 
-use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA, PlanDefect};
+use crate::report::ReportDefect;
+
+use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA};
 
 #[derive(
     Default,
@@ -104,24 +106,24 @@ struct Entry {
 ///
 /// # Errors
 ///
-/// Returns the first [`PlanDefect`] when the bytes are not a report envelope,
+/// Returns the first [`ReportDefect`] when the bytes are not a report envelope,
 /// its digest does not hold, it is incomplete, or a delegated occurrence
 /// lacks a field the exactly-when contract promises.
 pub fn plan(
     envelope: &[u8],
     engine_version: &str,
     engine_digest: Digest,
-) -> Result<Vec<u8>, PlanDefect> {
+) -> Result<Vec<u8>, ReportDefect> {
     let Envelope {
         payload,
         payload_digest: recorded,
         ..
     } = <ReportPayload>::parse(envelope)?;
     if !payload.result.complete {
-        return Err(PlanDefect::Incomplete);
+        return Err(ReportDefect::Incomplete);
     }
     let Evaluation::Resolved(evaluation) = &payload.evaluation else {
-        return Err(PlanDefect::NotAReport);
+        return Err(ReportDefect::NotAReport);
     };
 
     let base = collect(&payload.observations, |comparison| {
@@ -157,7 +159,7 @@ pub fn plan(
     };
     payload
         .emit()
-        .map_err(|_defect| PlanDefect::MalformedExternal)
+        .map_err(|_defect| ReportDefect::MalformedExternal)
 }
 
 impl Payload for ExternalPlan {
@@ -173,11 +175,11 @@ impl Payload for ExternalPlan {
 }
 
 /// A report block as the plan carries it: the object its type serializes to.
-fn object<T: Serialize>(block: &T) -> Result<BTreeMap<String, serde_json::Value>, PlanDefect> {
+fn object<T: Serialize>(block: &T) -> Result<BTreeMap<String, serde_json::Value>, ReportDefect> {
     serde_json::to_value(block)
         .ok()
         .and_then(|value| serde_json::from_value(value).ok())
-        .ok_or(PlanDefect::MalformedExternal)
+        .ok_or(ReportDefect::MalformedExternal)
 }
 
 fn validate_plan(plan: &ExternalPlan) -> Result<(), Error> {
@@ -265,7 +267,7 @@ fn validate_repository(path: &str, repository: &ExternalRepository) -> Result<()
 fn collect<'report>(
     observations: &'report [ObservationComparison],
     side: impl Fn(&'report ObservationComparison) -> Option<&'report Occurrence>,
-) -> Result<BTreeMap<String, Entry>, PlanDefect> {
+) -> Result<BTreeMap<String, Entry>, ReportDefect> {
     let mut entries: BTreeMap<String, Entry> = BTreeMap::new();
     for row in observations {
         let Some(occurrence) = side(row) else {
@@ -274,7 +276,7 @@ fn collect<'report>(
         let external = matches!(
             &occurrence.resolution,
             Resolution::External {
-                reason: ExternalResolutionReason::Url | ExternalResolutionReason::ForeignRepository,
+                reason: ExternalReference::Url | ExternalReference::ForeignRepository,
                 ..
             }
         );
@@ -289,8 +291,7 @@ fn collect<'report>(
             || matches!(
                 &occurrence.resolution,
                 Resolution::External {
-                    reason: ExternalResolutionReason::IntersphinxInventory
-                        | ExternalResolutionReason::SiteBuild,
+                    reason: ExternalReference::IntersphinxInventory | ExternalReference::SiteBuild,
                     ..
                 }
             )
@@ -317,7 +318,7 @@ fn collect<'report>(
         };
         let (Some(destination), Some(document), Some(scheme)) = (destination, document, scheme)
         else {
-            return Err(PlanDefect::MalformedExternal);
+            return Err(ReportDefect::MalformedExternal);
         };
         let entry = entries
             .entry(destination.to_owned())
@@ -326,7 +327,7 @@ fn collect<'report>(
                 documents: BTreeSet::new(),
             });
         if entry.scheme != scheme {
-            return Err(PlanDefect::MalformedExternal);
+            return Err(ReportDefect::MalformedExternal);
         }
         entry.documents.insert(document.to_owned());
     }

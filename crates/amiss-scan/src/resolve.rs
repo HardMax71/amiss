@@ -41,7 +41,6 @@ use anchor::{fragment_resolution, linked_label};
 use content::{CachedContent, read_target};
 use syntax::{same_repo_suffix, split_components, unreadable, unsupported_intent};
 
-pub use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 pub const TARGET_PROJECTION_DOMAIN: &str = "amiss/scanner-target-projection";
 pub const TARGET_LINE_PROJECTION_DOMAIN: &str = "amiss/scanner-target-line-projection";
 

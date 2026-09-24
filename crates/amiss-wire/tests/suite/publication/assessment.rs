@@ -6,10 +6,11 @@ use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::envelope::{Envelope, Payload as _};
 
+use amiss_wire::assessment::AssessmentVerdict;
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::publication::{
     ASSESSMENT_PAYLOAD_SCHEMA, PublicationAssessment, PublicationEvidence, PublicationPlan,
-    PublicationReason, PublicationVerdict, assess,
+    PublicationReason, assess,
 };
 
 fn plan_envelope() -> Envelope<PublicationPlan> {
@@ -35,7 +36,7 @@ fn exact_provider_facts_match_the_publication_plan() {
     let evidence = evidence_envelope(&publication_evidence());
     let assessment = assessed(&plan, Some(&evidence));
 
-    assert_eq!(assessment.verdict, PublicationVerdict::Matched);
+    assert_eq!(assessment.verdict, AssessmentVerdict::Matched);
     assert_eq!(assessment.reasons, Vec::new());
     assert_eq!(
         assessment.subject.report_payload_digest,
@@ -52,7 +53,7 @@ fn exact_provider_facts_match_the_publication_plan() {
 fn absent_unbound_and_foreign_producers_stay_unproven() {
     let plan = plan_envelope();
     let absent = assessed(&plan, None);
-    assert_eq!(absent.verdict, PublicationVerdict::Unproven);
+    assert_eq!(absent.verdict, AssessmentVerdict::Unproven);
     assert_eq!(absent.reasons, vec![PublicationReason::EvidenceAbsent]);
     assert_eq!(absent.subject.evidence_payload_digest, Nullable::Null);
 
@@ -87,7 +88,7 @@ fn bound_disagreements_are_one_sorted_refutation() {
     let evidence = evidence_envelope(&mismatched);
     let assessment = assessed(&plan, Some(&evidence));
 
-    assert_eq!(assessment.verdict, PublicationVerdict::Refuted);
+    assert_eq!(assessment.verdict, AssessmentVerdict::Refuted);
     assert_eq!(
         assessment.reasons,
         vec![

@@ -1,6 +1,7 @@
-use amiss_scan::resolve::{RAW_EVIDENCE_DOMAIN, TARGET_LINE_PROJECTION_DOMAIN};
+use amiss_scan::resolve::TARGET_LINE_PROJECTION_DOMAIN;
 use amiss_scan::{Error, Resolution, ScanLimits};
 use amiss_wire::controls::{GitMode, ResourceName};
+use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 use amiss_wire::model::{Adapter, ForgeDialect};
 use amiss_wire::resolution::{BlobContent, BlobMode, Missing, Target, UnsupportedSemantics};
 use sha2::Digest as _;

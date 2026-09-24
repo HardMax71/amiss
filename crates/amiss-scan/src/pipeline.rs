@@ -286,7 +286,7 @@ fn document_claims(
             path: claim.path.clone(),
             line: claim.line,
             expected_digest: amiss_wire::model::Digest::from(
-                sha2::Sha256::new_with_prefix(crate::resolve::RAW_EVIDENCE_DOMAIN)
+                sha2::Sha256::new_with_prefix(amiss_wire::model::RAW_EVIDENCE_DOMAIN)
                     .chain_update([0_u8])
                     .chain_update(claim.expected.as_bytes())
                     .finalize()

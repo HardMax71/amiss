@@ -20,7 +20,7 @@ use secrecy::{ExposeSecret as _, SecretString};
 use crate::identity::canonical_host;
 use crate::{
     DedicatedReviewer, GiteaApi, GiteaObjectRequest, GiteaObjects, GiteaPullRequest,
-    fetch_plan::repository_url,
+    fetch_plan::gitea_repository_url,
 };
 
 use self::model::{CommitRecord, RefreshData};
@@ -204,7 +204,7 @@ impl<R: GiteaRest> Client<R> {
         .ok_or(ProviderError::InvalidResponse)?;
         let objects = self.objects.resolve(&GiteaObjectRequest {
             repository_id: pull_request.pull_request.repository_id.get(),
-            repository_url: repository_url(&repository),
+            repository_url: gitea_repository_url(&repository),
             candidate_commit: pull_request.candidate_commit.clone(),
             base_commit: exact_oid(&data.target.sha)?,
             timeout: deadline.remaining()?,

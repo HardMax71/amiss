@@ -21,14 +21,16 @@ use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::{ArtifactId, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::IntentKind;
 use amiss_wire::report::model::{
-    ExternalResolutionReason, InvalidResolutionReason, MissingResolution, ObservationComparison,
-    Occurrence, RepoPath, ReportEnvelope, ReportPayload, Resolution, UnsupportedSemanticsReason,
-    UnsupportedSemanticsResolution, occurrences,
+    MissingResolution, ObservationComparison, Occurrence, RepoPath, ReportEnvelope, ReportPayload,
+    Resolution, UnsupportedSemanticsResolution, occurrences,
 };
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestStreams, RequestTrust, SEALED_ENGINE_ARGUMENT,
     SnapshotRequest, SuppliedControl, SuppliedSemanticEvidence, commit_candidate_identity_digest,
 };
+use amiss_wire::resolution::ExternalReference;
+use amiss_wire::resolution::InvalidReference;
+use amiss_wire::resolution::UnsupportedSemanticsReason;
 use amiss_wire::resolution::{BlobTarget, Target};
 use amiss_wire::semantic::{
     Observation,
@@ -385,7 +387,7 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
         matches!(
             row.resolution,
             Resolution::External {
-                reason: ExternalResolutionReason::IntersphinxInventory
+                reason: ExternalReference::IntersphinxInventory
             }
         ) && row.external_destination.as_deref()
             == Some("https://docs.python.org/3/reference/compound_stmts.html#except-star")
@@ -546,7 +548,7 @@ fn assert_site_routes(payload: &ReportPayload) {
                 |(row, _)| occurrences(row).base.is_some_and(|base| matches!(
                     base.resolution,
                     Resolution::Invalid {
-                        reason: InvalidResolutionReason::FragmentEncoding
+                        reason: InvalidReference::FragmentEncoding
                     }
                 ))
             )
@@ -599,7 +601,7 @@ fn assert_generated_routes(sides: &[&Occurrence]) {
             matches!(
                 side.resolution,
                 Resolution::External {
-                    reason: ExternalResolutionReason::SiteBuild
+                    reason: ExternalReference::SiteBuild
                 }
             )
         })

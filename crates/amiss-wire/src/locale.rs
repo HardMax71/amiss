@@ -18,7 +18,6 @@ use crate::semantic::producer_version_valid;
 mod assessment;
 mod evidence;
 
-pub use crate::assessment::AssessmentVerdict as LocaleCoverageVerdict;
 pub use assessment::{
     ASSESSMENT_DOCUMENT_BYTES, ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAGE_ITEMS_LIMIT,
     ASSESSMENT_PAYLOAD_SCHEMA, AssessmentEnvelopeSchema, AssessmentPayloadSchema,

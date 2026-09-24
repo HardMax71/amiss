@@ -1,10 +1,11 @@
 #![cfg(test)]
 
 use amiss_fixtures::{LocaleAuditFixture, locale_audit};
+use amiss_wire::assessment::AssessmentVerdict;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::locale::{
     ASSESSMENT_DOCUMENT_BYTES, LOCALE_DOCUMENT_BYTES, LocaleCoverageEvidence, LocaleCoveragePlan,
-    LocaleCoverageVerdict, assess,
+    assess,
 };
 use amiss_wire::model::Digest;
 use sha2::Digest as _;
@@ -36,7 +37,7 @@ fn one_exact_chain_binds_every_retained_byte_to_the_report() -> Result<(), Artif
         audit.assessment_digest,
         Digest::from(sha2::Sha256::digest(&fixture.assessment).0)
     );
-    assert_eq!(audit.verdict, LocaleCoverageVerdict::Matched);
+    assert_eq!(audit.verdict, AssessmentVerdict::Matched);
     Ok(())
 }
 
@@ -46,7 +47,7 @@ fn absent_evidence_remains_a_replayable_unproven_audit() -> Result<(), ArtifactE
     let audit = validate_locale_audit(bundle(&fixture))?;
 
     assert_eq!(audit.evidence_digest, None);
-    assert_eq!(audit.verdict, LocaleCoverageVerdict::Unproven);
+    assert_eq!(audit.verdict, AssessmentVerdict::Unproven);
     Ok(())
 }
 

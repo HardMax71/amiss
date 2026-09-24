@@ -1,10 +1,11 @@
 #![cfg(test)]
 
 use amiss_fixtures::{PublicationAuditFixture, publication_audit};
+use amiss_wire::assessment::AssessmentVerdict;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::model::Digest;
-use amiss_wire::publication::{PublicationEvidence, PublicationPlan, PublicationVerdict, assess};
+use amiss_wire::publication::{PublicationEvidence, PublicationPlan, assess};
 use serde_json::Value;
 use sha2::Digest as _;
 
@@ -36,7 +37,7 @@ fn one_exact_chain_binds_every_retained_byte_to_the_report() -> Result<(), Artif
         audit.assessment_digest,
         Digest::from(sha2::Sha256::digest(&fixture.assessment).0)
     );
-    assert_eq!(audit.verdict, PublicationVerdict::Matched);
+    assert_eq!(audit.verdict, AssessmentVerdict::Matched);
     Ok(())
 }
 
@@ -107,7 +108,7 @@ fn absent_evidence_remains_a_replayable_unproven_audit() -> Result<(), ArtifactE
     let audit = validate_publication_audit(bundle(&fixture))?;
 
     assert_eq!(audit.evidence_digest, None);
-    assert_eq!(audit.verdict, PublicationVerdict::Unproven);
+    assert_eq!(audit.verdict, AssessmentVerdict::Unproven);
     Ok(())
 }
 

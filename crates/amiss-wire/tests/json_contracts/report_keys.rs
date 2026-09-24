@@ -1,7 +1,7 @@
+use amiss_wire::controls::TargetIntentKind;
 use amiss_wire::controls::TargetKind;
 use amiss_wire::report::model::{
-    EmptyRepositoryPath, FindingKeyScope, RepositoryIntentKind, RepositoryIntentPath,
-    RepositoryTargetIntent,
+    EmptyRepositoryPath, FindingKeyScope, RepositoryIntentPath, RepositoryTargetIntent,
 };
 
 #[test]
@@ -21,7 +21,7 @@ fn finding_key_intents_reject_wrong_field_types() {
     let intent: RepositoryTargetIntent = RepositoryTargetIntent {
         commit_oid: None,
         fragment_digest: None,
-        kind: RepositoryIntentKind::RepositoryPath,
+        kind: TargetIntentKind::RepositoryPath,
         path: RepositoryIntentPath::Empty(EmptyRepositoryPath::Empty),
         query_digest: None,
         target_kind: TargetKind::Either,

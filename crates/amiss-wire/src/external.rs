@@ -2,7 +2,6 @@ mod assessment;
 mod evidence;
 mod plan;
 
-pub use crate::report::ReportDefect as PlanDefect;
 pub use assessment::{
     AssessDefect, AssessmentDefect, ExternalAssessment, ExternalAssessmentEnvelopeSchema,
     ExternalAssessmentPayloadSchema, ExternalAssessmentSubject, ExternalReason, ExternalVerdict,
