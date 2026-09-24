@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 
 use amiss_wire::controls::{DOCUMENT_SUFFIX_BYTES, SOURCE_MARKER_BYTES};
 use amiss_wire::model::BranchRef;
-use amiss_wire::report::{AnalysisErrorCode, ENVELOPE_SCHEMA, FindingKind, PAYLOAD_SCHEMA};
+use amiss_wire::report::{ENVELOPE_SCHEMA, FindingKind, PAYLOAD_SCHEMA, model::AnalysisErrorCode};
 use amiss_wire::requests::{ControlsRequest, EvaluationRequest, SnapshotRequest};
 use amiss_wire::semantic::{RECORD_KEY_BYTES, RECORD_VALUE_BYTES};
 

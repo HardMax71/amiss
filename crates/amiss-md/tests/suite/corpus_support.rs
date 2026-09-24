@@ -1,5 +1,5 @@
 use amiss_wire::model::Adapter;
-use amiss_wire::report::AnalysisErrorCode;
+use amiss_wire::report::model::AnalysisErrorCode;
 use serde_json::{Value, json};
 use sha2::Digest as _;
 

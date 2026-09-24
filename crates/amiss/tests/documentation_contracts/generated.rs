@@ -16,8 +16,8 @@ use amiss_scan::route::{
 use amiss_wire::controls::{ORGANIZATION_POLICY_ENTRIES_LIMIT, ResourceName};
 use amiss_wire::model::ForgeDialect;
 use amiss_wire::report::{
-    AnalysisErrorCode, EVALUATOR_MANAGED_MEMORY_BYTES, FindingKind, MACHINE_JSON_BYTES,
-    PRIVATE_TEMPORARY_STORAGE_BYTES,
+    EVALUATOR_MANAGED_MEMORY_BYTES, FindingKind, MACHINE_JSON_BYTES,
+    PRIVATE_TEMPORARY_STORAGE_BYTES, model::AnalysisErrorCode,
 };
 use strum::IntoEnumIterator;
 

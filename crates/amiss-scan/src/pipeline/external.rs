@@ -1,6 +1,6 @@
 use amiss_wire::model::BranchRef;
 use amiss_wire::report::model::ControlsUnavailableReason;
-use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
+use amiss_wire::report::{ErrorDetail, model::AnalysisErrorCode};
 
 use crate::report::Setup;
 use crate::resources::ScanLimits;
@@ -166,7 +166,7 @@ fn waiver_authority(
 /// binding mismatches and invalid controls name themselves, and any other
 /// defect leaves the stage merely not parsed.
 pub(super) fn external_reason(row: &ErrorDetail) -> ControlsUnavailableReason {
-    use amiss_wire::report::AnalysisErrorCode as Code;
+    use amiss_wire::report::model::AnalysisErrorCode as Code;
     if row.code == Code::ControlBindingMismatch {
         ControlsUnavailableReason::ControlBindingMismatch
     } else if row.code == Code::TrustedTimeInvalid || row.code == Code::ConfigurationInvalid {

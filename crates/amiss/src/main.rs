@@ -31,7 +31,7 @@ use amiss_wire::report::model::{
     ControlsUnavailableReason, FindingFactEvidence, ReportEnvelope, ReportPayload,
     SnapshotUnavailableReason,
 };
-use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail};
+use amiss_wire::report::{self, EngineProvenance, ErrorDetail, model::AnalysisErrorCode};
 use amiss_wire::requests::{
     CONTROLS_REQUEST_SCHEMA, ControlsRequest, EVALUATION_REQUEST_SCHEMA, EvaluationRequest,
     RequestMode, RequestStreams, SEALED_ENGINE_ARGUMENT, SNAPSHOT_REQUEST_SCHEMA,

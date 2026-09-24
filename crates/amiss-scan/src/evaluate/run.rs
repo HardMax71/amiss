@@ -223,7 +223,7 @@ fn apply_exceptions(
     let overlap = apply_valid_exceptions(findings, policy, &debt_valid, &waiver_valid);
     let errors = if overlap {
         vec![ErrorDetail {
-            code: amiss_wire::report::AnalysisErrorCode::ExceptionOverlap,
+            code: amiss_wire::report::model::AnalysisErrorCode::ExceptionOverlap,
             path: None,
             path_bytes: None,
             resource: None,

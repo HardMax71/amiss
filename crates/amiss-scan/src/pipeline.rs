@@ -4,7 +4,9 @@ use std::collections::BTreeMap;
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
 use amiss_wire::model::{Adapter, ArtifactId, BranchRef, Oid, RepoPath};
 use amiss_wire::report::model::ControlsUnavailableReason;
-use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, adapter_contract};
+use amiss_wire::report::{
+    EngineProvenance, ErrorDetail, adapter_contract, model::AnalysisErrorCode,
+};
 use amiss_wire::resolution::{Missing, Resolution};
 
 use crate::Error;

@@ -1,8 +1,6 @@
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{AsRefStr, Display, EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
-use super::model::{EvidenceClass, InvariantClass};
-
 #[derive(
     Clone,
     Copy,
@@ -61,6 +59,48 @@ pub enum Disposition {
     Record,
     Warn,
     Fail,
+}
+
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
+#[strum(serialize_all = "kebab-case")]
+pub enum EvidenceClass {
+    AnalysisIntegrity,
+    ControlPlane,
+    CoverageBoundary,
+    DeterministicStructural,
+    ImpactObservation,
+    Unsupported,
+}
+
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
+#[strum(serialize_all = "kebab-case")]
+pub enum InvariantClass {
+    Absolute,
+    Advisory,
+    AnalysisIntegrity,
+    Ratcheted,
 }
 
 /// The immutable policy and report classification assigned to one finding

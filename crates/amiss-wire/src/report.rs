@@ -75,12 +75,15 @@ mod sandbox;
 
 use crate::ExitClass;
 
-pub use error::{AnalysisErrorCode, ErrorDetail, error_row};
+pub use error::{ErrorDetail, error_row};
 pub use failure::{
     EngineProvenance, adapter_contract, engine_block, invocation_failure_envelope,
     invocation_failure_wire, unavailable_evaluation_envelope, unavailable_evaluation_wire,
 };
-pub use finding::{Disposition, FindingKind, FindingMetadata, FindingScope, FixKind, IntentKind};
+pub use finding::{
+    Disposition, EvidenceClass, FindingKind, FindingMetadata, FindingScope, FixKind, IntentKind,
+    InvariantClass,
+};
 pub use output::{emit_report, emit_sealed};
 pub use sandbox::sandbox_descriptor;
 

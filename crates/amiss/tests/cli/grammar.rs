@@ -1,6 +1,6 @@
 use std::process::{Command, Stdio};
 
-use amiss_wire::report::AnalysisErrorCode;
+use amiss_wire::report::model::AnalysisErrorCode;
 
 use crate::support::{amiss, declined_fixture, fixture, payload, report};
 

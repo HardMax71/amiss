@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use amiss_wire::model::Digest;
-use amiss_wire::report::{AnalysisErrorCode, FindingKind};
+use amiss_wire::report::{FindingKind, model::AnalysisErrorCode};
 
 #[derive(Serialize)]
 pub(crate) struct Log<'report> {

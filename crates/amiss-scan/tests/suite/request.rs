@@ -16,7 +16,7 @@ use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_scan::request::controls;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::model::Digest;
-use amiss_wire::report::AnalysisErrorCode;
+use amiss_wire::report::model::AnalysisErrorCode;
 use amiss_wire::requests::{
     ControlsRequest, ControlsRequestSchema, RequestTrust, SuppliedControl,
     SuppliedSemanticEvidence, SuppliedTime,

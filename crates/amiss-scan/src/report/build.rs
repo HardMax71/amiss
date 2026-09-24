@@ -3,8 +3,8 @@ use amiss_wire::envelope::{Payload as _, sealed_digest};
 use amiss_wire::model::{Digest, RepoPath};
 use amiss_wire::report::model;
 use amiss_wire::report::{
-    AnalysisErrorCode, Disposition, ErrorDetail, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, engine_block,
-    error_row,
+    Disposition, ErrorDetail, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, engine_block, error_row,
+    model::AnalysisErrorCode,
 };
 
 use crate::correlate::Comparison;

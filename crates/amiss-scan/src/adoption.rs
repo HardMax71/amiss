@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use amiss_git::{GitResources, Repository};
 use amiss_wire::model::RepoPath;
-use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail};
+use amiss_wire::report::{EngineProvenance, ErrorDetail, model::AnalysisErrorCode};
 
 use crate::pipeline::{ObservationContext, detail, side_observations};
 use crate::policy::DebtContext;

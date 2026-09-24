@@ -53,7 +53,7 @@ fn unavailable_report_blocks_match_the_shared_models() {
                 let built = amiss_scan::report::construct_incomplete(
                     &setup,
                     &[amiss_wire::report::ErrorDetail {
-                        code: amiss_wire::report::AnalysisErrorCode::InternalError,
+                        code: amiss_wire::report::model::AnalysisErrorCode::InternalError,
                         path: None,
                         path_bytes: None,
                         resource: None,

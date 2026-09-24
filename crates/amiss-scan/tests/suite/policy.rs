@@ -17,7 +17,7 @@ use amiss_wire::controls::{
 };
 
 use amiss_wire::model::{RepoPath, RepoPathText, UtcInstant};
-use amiss_wire::report::AnalysisErrorCode;
+use amiss_wire::report::model::AnalysisErrorCode;
 use amiss_wire::requests::RequestTrust;
 
 #[expect(clippy::expect_used, reason = "test fixture paths are valid")]

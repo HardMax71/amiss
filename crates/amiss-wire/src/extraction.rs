@@ -1,5 +1,5 @@
 use crate::controls::SourceConstruct;
-use crate::report::AnalysisErrorCode;
+use crate::report::model::AnalysisErrorCode;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 

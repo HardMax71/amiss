@@ -164,7 +164,7 @@ fn overlapping_exceptions_carry_neither_application() {
     assert_eq!(errors.len(), 1);
     assert_eq!(
         errors[0].code,
-        amiss_wire::report::AnalysisErrorCode::ExceptionOverlap
+        amiss_wire::report::model::AnalysisErrorCode::ExceptionOverlap
     );
     let finding = only(findings, FindingKind::ExplicitTargetMissing);
     assert_eq!((finding.debt, finding.waiver), (None, None));

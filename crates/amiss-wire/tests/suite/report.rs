@@ -1,6 +1,6 @@
 use amiss_wire::report::{
-    AnalysisErrorCode, Disposition, ENGINE_DOMAIN, ENVELOPE_SCHEMA, EngineProvenance, FindingKind,
-    FixKind, PAYLOAD_SCHEMA, invocation_failure_wire,
+    Disposition, ENGINE_DOMAIN, ENVELOPE_SCHEMA, EngineProvenance, FindingKind, FixKind,
+    PAYLOAD_SCHEMA, invocation_failure_wire, model::AnalysisErrorCode,
 };
 use serde_json::Value;
 use sha2::Digest as _;
