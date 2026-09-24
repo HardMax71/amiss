@@ -242,10 +242,12 @@ runs:
             def html: gsub("&"; "&amp;") | gsub("<"; "&lt;")
               | gsub(">"; "&gt;") | gsub("\""; "&quot;");
             def code: "<code>" + (tojson | .[1:-1] | html) + "</code>";
+            def hex: map((. / 16 | floor) as $h | (. % 16) as $l
+              | "0123456789abcdef"[$h:$h + 1] + "0123456789abcdef"[$l:$l + 1]) | join("");
             def target:
               if type == "string" then code
-              elif type == "object" and .bytes_hex != null then
-                "<code>bytes " + (.bytes_hex | html) + "</code>"
+              elif type == "object" and .bytes != null then
+                "<code>bytes " + (.bytes | hex) + "</code>"
               else "an unresolved destination"
               end;
             def where:
@@ -303,9 +305,11 @@ runs:
         jq -r '
           def d: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
           def p: d | gsub(":"; "%3A") | gsub(","; "%2C");
+          def hex: map((. / 16 | floor) as $h | (. % 16) as $l
+            | "0123456789abcdef"[$h:$h + 1] + "0123456789abcdef"[$l:$l + 1]) | join("");
           def spelled:
             if type == "string" then d
-            elif type == "object" and .bytes_hex != null then "bytes \(.bytes_hex)"
+            elif type == "object" and .bytes != null then "bytes \(.bytes | hex)"
             else empty end;
           def why($text): ($text // "") as $m
             | if $m == "" then "" else "; " + ($m|d) end;
@@ -328,7 +332,7 @@ runs:
                $p.errors[:10][]
                | "::error title=amiss \(.code|d)::\(.code) in phase \(.phase)"
                  + (if (.path | type) == "string" then " at \(.path|d)"
-                    elif .path_bytes_hex != null then " at bytes \(.path_bytes_hex)"
+                    elif .path_bytes != null then " at bytes \(.path_bytes | hex)"
                     else "" end)
                  + (if .resource != null then
                       " \(.resource|d) \(.configured_limit)/\(.observed_lower_bound)"
