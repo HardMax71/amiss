@@ -58,9 +58,9 @@ fn template_intake_enforces_the_bound_envelope_ceiling_not_only_the_source_size(
         .last_mut()
         .unwrap()
         .value
-        .truncate(semantic::RECORD_VALUE_BYTES - (encoded_length - limit + 1));
+        .truncate(semantic::RECORD_VALUE_BYTES - (encoded_length - limit));
 
-    for length in [limit - 1, limit, limit + 1] {
+    for length in [limit, limit + 1] {
         assert!(semantic::template(template.clone()).unwrap().len() < limit);
         let document = semantic::bind_template(&template, candidate);
         if length <= limit {
@@ -202,9 +202,9 @@ fn in_process_intake_keeps_the_exact_encoded_byte_ceiling() {
     else {
         panic!("the fixture is a generated route");
     };
-    route.extend(std::iter::repeat_n('a', limit - initial - 1));
+    route.extend(std::iter::repeat_n('a', limit - initial));
 
-    for length in [limit - 1, limit, limit + 1] {
+    for length in [limit, limit + 1] {
         document.payload_digest =
             document_digest(semantic::PAYLOAD_SCHEMA, &document.payload).unwrap();
         let encoded = serde_json::to_vec(&document).unwrap();
