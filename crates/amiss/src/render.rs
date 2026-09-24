@@ -3,9 +3,10 @@ use std::io::{BufWriter, Stdout};
 use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
+use amiss_wire::controls::MissingResolution;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::human::atom;
-use amiss_wire::report::model::{MissingResolution, ReportPayload, ReportResolution};
+use amiss_wire::report::model::{ReportPayload, ReportResolution};
 use amiss_wire::report::result_verdict;
 use amiss_wire::resolution::{MissingTag, ResolutionTag, VersionScopeTag};
 

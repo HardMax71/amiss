@@ -20,12 +20,13 @@ fn report_producers_can_borrow_validated_text_and_byte_paths() {
             let relocation_value = relocation
                 .as_ref()
                 .map(|value| serde_json::to_value(value).unwrap());
-            let resolution =
-                report::ReportResolution::Missing(report::MissingResolution::PathNotFound {
+            let resolution = report::ReportResolution::Missing(
+                amiss_wire::controls::MissingResolution::PathNotFound {
                     near: Some(&path),
                     path: &path,
                     same_object_at: relocation,
-                });
+                },
+            );
             let payload = producer_payload(&path, resolution).unwrap();
             let payload_bytes = serde_json_canonicalizer::to_vec(&payload).unwrap();
             let envelope = report::ReportEnvelope {
@@ -111,7 +112,7 @@ fn producer_payload<R>(
     let mut template = template.payload;
     let finding = template.findings.remove(0);
     let digest: Digest = Digest::from([18; 32]);
-    let key_input = report::FindingKeyInput {
+    let key_input = report::ReportFindingKeyInput {
         finding_kind: FindingKind::ExplicitTargetMissing,
         schema: FindingKeyInputSchema::Current,
         scope: report::FindingKeyScope::Reference {

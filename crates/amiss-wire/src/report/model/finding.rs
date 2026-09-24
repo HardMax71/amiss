@@ -55,7 +55,7 @@ pub enum FindingKeyScope<P = RepoPath> {
     },
 }
 
-pub type FindingKeyInput<P = RepoPath> =
+pub type ReportFindingKeyInput<P = RepoPath> =
     crate::controls::FindingKeyInput<FindingKind, FindingKeyScope<P>>;
 
 #[derive(
@@ -288,7 +288,7 @@ pub enum FindingFactEvidence<
     },
 }
 
-pub type FindingFactInput<K = FindingKeyInput, E = FindingFactEvidence> =
+pub type FindingFactInput<K = ReportFindingKeyInput, E = FindingFactEvidence> =
     crate::controls::Fact<K, E, FindingKind>;
 
 #[derive(
@@ -460,9 +460,9 @@ pub struct WaiverApplication {
 pub struct Finding<P = RepoPath, E = FindingFactEvidence<P>> {
     pub aggregation: FindingAggregation,
     pub attribution: Attribution,
-    pub base_fact: Option<FindingFactInput<FindingKeyInput<P>, E>>,
+    pub base_fact: Option<FindingFactInput<ReportFindingKeyInput<P>, E>>,
     pub base_fact_digest: Option<Digest>,
-    pub candidate_fact: Option<FindingFactInput<FindingKeyInput<P>, E>>,
+    pub candidate_fact: Option<FindingFactInput<ReportFindingKeyInput<P>, E>>,
     pub candidate_fact_digest: Option<Digest>,
     pub configured_disposition: Disposition,
     pub coverage_requirement: CoverageRequirement,
@@ -473,7 +473,7 @@ pub struct Finding<P = RepoPath, E = FindingFactEvidence<P>> {
     pub finding_key: Digest,
     pub fix: Option<FindingFix>,
     pub invariant_class: InvariantClass,
-    pub key_input: FindingKeyInput<P>,
+    pub key_input: ReportFindingKeyInput<P>,
     pub kind: FindingKind,
     pub location: FindingLocation<P>,
     pub observation_ids: Vec<Digest>,

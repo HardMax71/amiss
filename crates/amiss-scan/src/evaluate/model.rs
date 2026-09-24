@@ -5,8 +5,8 @@ use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::model::DebtApplication;
 use amiss_wire::report::model::FindingFactEvidence;
 use amiss_wire::report::model::FindingFactInput;
-use amiss_wire::report::model::FindingKeyInput;
 use amiss_wire::report::model::ProjectionDifference;
+use amiss_wire::report::model::ReportFindingKeyInput;
 use amiss_wire::report::model::RowsProjectionDifference;
 use amiss_wire::report::model::WaiverApplication;
 pub use amiss_wire::report::model::{Attribution, LocationSide, PolicyStep};
@@ -57,7 +57,7 @@ pub struct FindingFact<
         GitMode,
     >,
 > {
-    pub input: FindingFactInput<FindingKeyInput<RepoPath>, E>,
+    pub input: FindingFactInput<ReportFindingKeyInput<RepoPath>, E>,
     pub digest: Digest,
 }
 
@@ -83,7 +83,7 @@ pub struct Finding<
         GitMode,
     >,
 > {
-    pub key_input: FindingKeyInput<RepoPath>,
+    pub key_input: ReportFindingKeyInput<RepoPath>,
     pub finding_key: Digest,
     pub attribution: Attribution,
     pub base_fact: Option<FindingFact<E>>,

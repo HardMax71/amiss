@@ -10,8 +10,8 @@ use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, Profile, TargetKin
 use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
-    EmptyRepositoryPath, FindingFactEvidence, FindingFactInput, FindingKeyInput, PolicySource,
-    RepositoryIntentPath,
+    EmptyRepositoryPath, FindingFactEvidence, FindingFactInput, PolicySource,
+    ReportFindingKeyInput, RepositoryIntentPath,
 };
 use amiss_wire::report::{Disposition, FindingKind};
 
@@ -59,7 +59,7 @@ pub fn structural_facts(
 }
 
 struct KeyGroup<'a> {
-    key: FindingKeyInput<RepoPath>,
+    key: ReportFindingKeyInput<RepoPath>,
     base: Vec<&'a Observation>,
     candidate: Vec<&'a Observation>,
 }
@@ -73,7 +73,7 @@ fn collect_structural<'a>(
         return Ok(());
     };
     let intent = &observation.intent;
-    let key = FindingKeyInput {
+    let key = ReportFindingKeyInput {
         finding_kind: kind,
         schema: FindingKeyInputSchema::Current,
         scope: FindingKeyScope::Reference {
