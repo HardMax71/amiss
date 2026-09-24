@@ -138,11 +138,11 @@ Paths are treated as bytes. Amiss does not fold case and does not normalize Unic
 because Git addresses files by exact bytes, and a checker that guesses two names are
 equivalent will eventually insist that two different files are the same file. A name whose
 bytes are not valid UTF-8 is still a name: the entry is classified by the same suffix
-rules, scanned, and reported, with its path written as a `bytes_hex` object naming the raw
-bytes as lowercase hex, since JSON text cannot carry them directly. Only a name outside
+rules, scanned, and reported, with its path written as a `bytes` object holding the raw
+bytes as an array of byte values, since JSON text cannot carry them directly. Only a name outside
 the path grammar itself, one containing a backslash or a NUL byte, or a bare `.` or `..`
 segment, is refused. That refusal is never quiet: the run stops as incomplete, the error
-is recorded as `UNREPRESENTABLE_PATH` with the exact bytes in `path_bytes_hex`, and the
+is recorded as `UNREPRESENTABLE_PATH` with the exact bytes in `path_bytes`, and the
 exit is 2. Dropping such an entry silently would be the worst bug this tool could have:
 the report would come back green with a document missing from it, and a missing row is
 the one defect no reader can notice.

@@ -160,15 +160,6 @@ pub(crate) fn engine_path(path: &RepoPath) -> String {
         .map_or_else(|| atom_bytes(path.as_bytes()), atom)
 }
 
-/// A wire path, spelled the same way from the form a report carries.
-pub(crate) fn wire_path(path: &amiss_wire::report::model::RepoPath) -> String {
-    match path {
-        amiss_wire::report::model::RepoPath::Text(path) => atom(path.as_str()),
-        amiss_wire::report::model::RepoPath::Bytes(path) => hex::decode(&path.bytes_hex)
-            .map_or_else(|_defect| atom(&path.bytes_hex), |bytes| atom_bytes(&bytes)),
-    }
-}
-
 pub(crate) fn references(target: &RepoPath, occurrences: &[Occurrence]) {
     let mut out = Channel {
         out: std::io::stdout(),
@@ -184,7 +175,7 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[Occurrence]) {
         say!(
             &mut out,
             "reference {}:{}:{} {} {} {}",
-            wire_path(&row.observation_id_input.document),
+            engine_path(&row.observation_id_input.document),
             row.source_span.start_line,
             row.source_span.start_column,
             atom(row.observation_id_input.source_construct.as_ref()),

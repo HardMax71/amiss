@@ -7,7 +7,8 @@ use strum::{Display, EnumString};
 use crate::model::RepoPathText;
 
 use super::super::{Disposition, FindingKind};
-use super::{RepoPath, SourceSpan, UnavailableStatus};
+use super::{SourceSpan, UnavailableStatus};
+use crate::model::RepoPath;
 
 #[derive(
     Clone,

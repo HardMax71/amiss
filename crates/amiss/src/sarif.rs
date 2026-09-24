@@ -120,7 +120,7 @@ fn fix(fix: &FindingFix) -> Fix<'_> {
 }
 
 /// A location renders only when the wire path is printable text; a
-/// `bytes_hex` path names no artifact URI, and the row still carries it.
+/// byte-form path names no artifact URI, and the row still carries it.
 fn location<P>(
     location: &FindingLocation<P>,
     path_text: impl Fn(&P) -> Option<&str>,

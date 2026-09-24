@@ -11,7 +11,7 @@ fn reference_keys_preserve_normalization_and_optional_identity_fields() {
         (Some(repo_path("dir/é.md")), r#""dir/é.md""#),
         (
             RepoPath::from_bytes(b"dir/\xff.md".to_vec()),
-            r#"{"bytes_hex":"6469722fff2e6d64"}"#,
+            r#"{"bytes":[100,105,114,47,255,46,109,100]}"#,
         ),
     ] {
         for (oid, commit_json) in [

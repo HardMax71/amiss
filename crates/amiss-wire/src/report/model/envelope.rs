@@ -9,9 +9,11 @@ use crate::report::{PAYLOAD_SCHEMA, ReportDefect, result_verdict};
 
 use super::{
     AnalysisError, Controls, DocumentGitMode, DocumentResult, DocumentSide, Engine, Evaluation,
-    Feedback, Finding, FindingFactEvidence, ObservationComparison, ProjectionDifference, RepoPath,
+    Feedback, Finding, FindingFactEvidence, ObservationComparison, ProjectionDifference,
     Resolution, Summary,
 };
+
+use crate::model::RepoPath;
 
 #[derive(
     Clone,

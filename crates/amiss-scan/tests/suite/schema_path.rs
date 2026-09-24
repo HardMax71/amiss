@@ -1,11 +1,10 @@
 use std::{fs, path::Path};
 
 /// The union path definition, exercised through the same validator the suite
-/// uses, so the pair-aligned lookahead pattern is proven under this exact
-/// jsonschema engine: forbidden bytes are caught at pair offsets and their
-/// odd-offset lookalikes stay legal.
+/// uses: text, or the raw bytes as an array of byte values. The byte grammar
+/// is the writer's law, since an array admits no pattern.
 #[test]
-fn the_schema_path_union_accepts_and_refuses_at_pair_alignment() {
+fn the_schema_path_union_accepts_text_or_a_byte_array() {
     let schema_text = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
@@ -19,9 +18,9 @@ fn the_schema_path_union_accepts_and_refuses_at_pair_alignment() {
 
     let accepted = [
         serde_json::json!("docs/guide.md"),
-        serde_json::json!({"bytes_hex": "f2f2"}),
-        serde_json::json!({"bytes_hex": "646f63732f62ff2e6d64"}),
-        serde_json::json!({"bytes_hex": "a2f5c0"}),
+        serde_json::json!({"bytes": [242, 242]}),
+        serde_json::json!({"bytes": b"docs/b\xff.md"}),
+        serde_json::json!({"bytes": vec![255_u8; 4096]}),
     ];
     for value in accepted {
         assert!(validator.iter_errors(&value).next().is_none(), "{value}");
@@ -30,19 +29,14 @@ fn the_schema_path_union_accepts_and_refuses_at_pair_alignment() {
         serde_json::json!(""),
         serde_json::json!("/absolute"),
         serde_json::json!("a\\b"),
-        serde_json::json!({"bytes_hex": "2f2f"}),
-        serde_json::json!({"bytes_hex": "2fab"}),
-        serde_json::json!({"bytes_hex": "ab2f"}),
-        serde_json::json!({"bytes_hex": "ab2f2fcd"}),
-        serde_json::json!({"bytes_hex": "005c"}),
-        serde_json::json!({"bytes_hex": "ab00"}),
-        serde_json::json!({"bytes_hex": "2e2e"}),
-        serde_json::json!({"bytes_hex": "2e2e2fab"}),
-        serde_json::json!({"bytes_hex": "ab2f2e2e"}),
-        serde_json::json!({"bytes_hex": "F2F2"}),
-        serde_json::json!({"bytes_hex": "abc"}),
-        serde_json::json!({"bytes_hex": ""}),
-        serde_json::json!({"bytes_hex": "f2f2", "extra": 1}),
+        serde_json::json!({"bytes": []}),
+        serde_json::json!({"bytes": [256]}),
+        serde_json::json!({"bytes": [-1]}),
+        serde_json::json!({"bytes": [1.5]}),
+        serde_json::json!({"bytes": "f2f2"}),
+        serde_json::json!({"bytes": vec![255_u8; 4097]}),
+        serde_json::json!({"bytes_hex": "f2f2"}),
+        serde_json::json!({"bytes": [242], "extra": 1}),
         serde_json::json!({}),
     ];
     for value in refused {

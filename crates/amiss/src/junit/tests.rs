@@ -1,10 +1,9 @@
 #![cfg(test)]
 
 use amiss_wire::controls::AnalysisPhase;
+use amiss_wire::model::RepoPath;
 use amiss_wire::repo_path_text;
-use amiss_wire::report::model::{
-    AnalysisError, RepoPath, ReportEnvelope, ReportPayload, ReportStatus,
-};
+use amiss_wire::report::model::{AnalysisError, ReportEnvelope, ReportPayload, ReportStatus};
 use amiss_wire::report::{Disposition, model::AnalysisErrorCode};
 use quick_xml::Reader;
 use quick_xml::events::Event;
@@ -13,11 +12,7 @@ use super::write;
 
 fn render(value: &ReportPayload) -> String {
     let mut bytes = Vec::new();
-    write(value, &mut bytes, |path| match path {
-        RepoPath::Text(text) => Some(text.as_str()),
-        RepoPath::Bytes(_) => None,
-    })
-    .expect("write JUnit");
+    write(value, &mut bytes, RepoPath::as_str).expect("write JUnit");
     let mut reader = Reader::from_reader(bytes.as_slice());
     loop {
         match reader.read_event().expect("read produced XML") {
@@ -49,14 +44,14 @@ fn dispositions_and_analysis_errors_keep_their_report_meaning() {
     {
         finding.description = "the target is missing".to_owned();
         finding.effective_disposition = disposition;
-        finding.location.path = Some(RepoPath::Text(repo_path_text!("docs/guide.md")));
+        finding.location.path = Some(RepoPath::from(&repo_path_text!("docs/guide.md")));
     }
     payload.errors = vec![AnalysisError {
         code: AnalysisErrorCode::ResourceLimitExceeded,
         description: "a resource limit was exceeded".to_owned(),
         phase: AnalysisPhase::Internal,
         path: None,
-        path_bytes_hex: None,
+        path_bytes: None,
         resource: None,
         configured_limit: None,
         observed_lower_bound: None,
@@ -104,7 +99,7 @@ fn empty_success_and_hostile_xml_scalars_stay_well_formed() {
 
     hostile.effective_disposition = Disposition::Fail;
     hostile.description = "bad\u{1} description <&\"".to_owned();
-    hostile.location.path = Some(RepoPath::Text(repo_path_text!("docs/bad\u{1}.md")));
+    hostile.location.path = Some(RepoPath::from(&repo_path_text!("docs/bad\u{1}.md")));
     payload.findings.push(hostile);
     let xml = render(payload);
     assert!(xml.contains("bad\u{fffd} description &lt;&amp;&quot;"));

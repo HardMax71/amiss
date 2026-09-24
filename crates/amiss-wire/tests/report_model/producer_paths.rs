@@ -57,7 +57,7 @@ fn report_producers_can_borrow_validated_text_and_byte_paths() {
                 assert_eq!(accepts_path, path.as_str().is_some());
             }
             let expected = path.as_str().map_or_else(
-                || serde_json::json!({"bytes_hex": hex::encode(&raw)}),
+                || serde_json::json!({ "bytes": &raw }),
                 serde_json::Value::from,
             );
             for pointer in [

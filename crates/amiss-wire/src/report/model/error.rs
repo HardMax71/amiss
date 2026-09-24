@@ -4,7 +4,9 @@ use strum::{AsRefStr, Display, EnumIter, EnumString, IntoEnumIterator, IntoStati
 
 use crate::controls::{AnalysisPhase, ResourceName};
 
-use super::{EvaluationUnavailableReason, RepoPath};
+use super::EvaluationUnavailableReason;
+
+use crate::model::RepoPath;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -14,7 +16,7 @@ pub struct AnalysisError<P = RepoPath> {
     pub description: String,
     pub observed_lower_bound: Option<u64>,
     pub path: Option<P>,
-    pub path_bytes_hex: Option<String>,
+    pub path_bytes: Option<Vec<u8>>,
     pub phase: AnalysisPhase,
     pub resource: Option<ResourceName>,
 }

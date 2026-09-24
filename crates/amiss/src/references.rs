@@ -46,7 +46,6 @@ fn matching_occurrences(bytes: &[u8], target: &RepoPath) -> Result<Vec<Occurrenc
     if !payload.result.complete {
         return Err(ReportDefect::Incomplete.to_string());
     }
-    let target_hex = hex::encode(target.as_bytes());
     Ok(payload
         .observations
         .into_iter()
@@ -93,14 +92,7 @@ fn matching_occurrences(bytes: &[u8], target: &RepoPath) -> Result<Vec<Occurrenc
                         .repository_path
                         .as_ref(),
                 )
-                .any(|path| match path {
-                    amiss_wire::report::model::RepoPath::Text(path) => {
-                        Some(path.as_str()) == target.as_str()
-                    }
-                    amiss_wire::report::model::RepoPath::Bytes(path) => {
-                        target.as_str().is_none() && path.bytes_hex == target_hex
-                    }
-                })
+                .any(|path| path == target)
         })
         .collect())
 }

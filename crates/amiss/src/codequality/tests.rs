@@ -1,7 +1,8 @@
 #![cfg(test)]
 
+use amiss_wire::model::RepoPath;
 use amiss_wire::repo_path_text;
-use amiss_wire::report::model::{RepoPath, RepoPathBytes, ReportEnvelope};
+use amiss_wire::report::model::ReportEnvelope;
 use amiss_wire::report::{Disposition, FindingKind};
 
 use super::issues;
@@ -20,10 +21,10 @@ fn a_global_finding_yields_a_valid_placeholder_location() {
     let fingerprint = finding.finding_key.to_string();
 
     let projected = issues(&report.payload, |path| {
-        std::borrow::Cow::Borrowed(match path {
-            RepoPath::Text(text) => text.as_str(),
-            RepoPath::Bytes(bytes) => &bytes.bytes_hex,
-        })
+        path.as_str().map_or_else(
+            || std::borrow::Cow::Owned(hex::encode(path.as_bytes())),
+            std::borrow::Cow::Borrowed,
+        )
     });
     let bytes = serde_json::to_vec(&projected).unwrap();
     assert_eq!(bytes, serde_json_canonicalizer::to_vec(&projected).unwrap());
@@ -46,7 +47,7 @@ fn paths_and_dispositions_keep_their_projection_without_owned_json_rows() {
     report.payload.findings.truncate(1);
     for (path, line, disposition, expected_path, expected_line, severity) in [
         (
-            RepoPath::Text(repo_path_text!("docs/a\"b\n.md")),
+            RepoPath::from(&repo_path_text!("docs/a\"b\n.md")),
             7,
             Disposition::Warn,
             "docs/a\"b\n.md",
@@ -54,9 +55,7 @@ fn paths_and_dispositions_keep_their_projection_without_owned_json_rows() {
             "minor",
         ),
         (
-            RepoPath::Bytes(RepoPathBytes {
-                bytes_hex: "646f63732fff2e6d64".to_owned(),
-            }),
+            RepoPath::from_bytes(b"docs/\xff.md".to_vec()).unwrap(),
             0,
             Disposition::Record,
             "646f63732fff2e6d64",
@@ -70,10 +69,10 @@ fn paths_and_dispositions_keep_their_projection_without_owned_json_rows() {
         finding.effective_disposition = disposition;
         finding.description = "a \"missing\" target\n".to_owned();
         let projected = issues(&report.payload, |path| {
-            std::borrow::Cow::Borrowed(match path {
-                RepoPath::Text(text) => text.as_str(),
-                RepoPath::Bytes(bytes) => &bytes.bytes_hex,
-            })
+            path.as_str().map_or_else(
+                || std::borrow::Cow::Owned(hex::encode(path.as_bytes())),
+                std::borrow::Cow::Borrowed,
+            )
         });
         let bytes = serde_json::to_vec(&projected).unwrap();
         assert_eq!(bytes, serde_json_canonicalizer::to_vec(&projected).unwrap());

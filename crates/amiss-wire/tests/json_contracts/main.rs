@@ -89,14 +89,15 @@ fn document_row_enums_match_the_report_schema() {
 
 #[test]
 fn resolver_reasons_fill_report_rows_without_changing_the_contract() {
-    use amiss_wire::report::model::{RepoPath, Resolution};
+    use amiss_wire::model::RepoPath;
+    use amiss_wire::report::model::Resolution;
     use amiss_wire::resolution::{ExternalReference, InvalidReference, UnsupportedTargetTag};
 
     let schema: serde_json::Value = serde_json::from_slice(include_bytes!(
         "../../../../spec/scanner-report.schema.json"
     ))
     .unwrap();
-    let path = RepoPath::Text(repo_path_text!("docs/target.md"));
+    let path = RepoPath::from(&repo_path_text!("docs/target.md"));
     for (definition, rows) in [
         (
             "InvalidResolution",

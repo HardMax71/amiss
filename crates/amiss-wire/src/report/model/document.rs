@@ -4,20 +4,7 @@ use strum::{Display, EnumString};
 
 use crate::controls::ContentAvailability;
 use crate::model::Digest;
-use crate::model::{Adapter, Oid, RepoPathText};
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RepoPathBytes {
-    pub bytes_hex: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum RepoPath {
-    Text(RepoPathText),
-    Bytes(RepoPathBytes),
-}
+use crate::model::{Adapter, Oid, RepoPath};
 
 #[derive(
     Clone,

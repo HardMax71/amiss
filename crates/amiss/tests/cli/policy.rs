@@ -1,7 +1,8 @@
 use std::fs;
 
+use amiss_wire::model::RepoPath;
 use amiss_wire::repo_path_text;
-use amiss_wire::report::model::{RepoPath, occurrences};
+use amiss_wire::report::model::occurrences;
 
 use crate::support::{amiss, fixture, git, payload, report};
 
@@ -74,7 +75,7 @@ fn policy_include_authors_one_row_and_previews_the_exact_staged_matches() {
     assert_eq!(code, 0, "{stderr}");
     assert_eq!(
         stdout,
-        br#"[{"bytes_hex":"6d616e75616c2fff2e747874"}]
+        br#"[{"bytes":[109,97,110,117,97,108,47,255,46,116,120,116]}]
 "#,
         "raw Git paths keep the report's canonical bytes form"
     );
@@ -401,7 +402,7 @@ fn reserved_directives_are_boundary_incomplete_with_full_details() {
         .filter_map(|row| occurrences(row).candidate)
         .filter(|side| {
             side.observation_id_input.document
-                == RepoPath::Text(repo_path_text!("docs/governed.md"))
+                == RepoPath::from(&repo_path_text!("docs/governed.md"))
         })
         .count();
     assert_eq!(

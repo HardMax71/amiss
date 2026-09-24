@@ -136,8 +136,8 @@ The sealed commit-pair path, including every provider lane, still reports
 the engine report.
 
 A repository path anywhere in the payload has exactly one spelling. Valid UTF-8 bytes
-travel as a plain string; anything else travels as `{"bytes_hex": "..."}` naming the raw
-bytes as lowercase hex. A writer never uses the object form for bytes that decode as
+travel as a plain string; anything else travels as `{"bytes": [...]}`, the raw bytes as an
+array of byte values. A writer never uses the object form for bytes that decode as
 text, so every derived digest stays whole.
 
 `external_destination` holds the URL retained by an external or unavailable historical resolution.

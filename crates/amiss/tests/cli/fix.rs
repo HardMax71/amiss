@@ -90,12 +90,13 @@ fn byte_named_documents_keep_findings_without_invalid_fixes() {
             .collect();
         assert_eq!(rows.len(), 2, "{input}");
         assert_eq!(rows.iter().filter(|row| row.fix.is_some()).count(), 1);
-        assert!(
-            rows.iter()
-                .any(|row| row.location.path.as_ref().is_some_and(|path| {
-                    matches!(path, amiss_wire::report::model::RepoPath::Bytes(_))
-                }) && row.fix.is_none())
-        );
+        assert!(rows.iter().any(|row| {
+            row.location
+                .path
+                .as_ref()
+                .is_some_and(|path| path.as_str().is_none())
+                && row.fix.is_none()
+        }));
         let (code, stdout) = run_fix(root, &base);
         assert_eq!(code, 0, "{stdout}");
         assert!(stdout.contains("fixed guide.md"), "{stdout}");

@@ -12,10 +12,10 @@ use crate::model::{ArtifactId, OwnerId, RepoPathText, TreeIdentity, UtcInstant};
 
 use super::super::{Disposition, EvidenceClass, FindingKind, InvariantClass};
 use super::{
-    DocumentGitMode, DocumentResult, DocumentSide, ObservationComparison, RepoPath, Resolution,
-    SourceSpan,
+    DocumentGitMode, DocumentResult, DocumentSide, ObservationComparison, Resolution, SourceSpan,
 };
 use crate::controls::FindingOccurrence;
+use crate::model::RepoPath;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,

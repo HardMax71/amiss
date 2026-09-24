@@ -5,13 +5,12 @@ use tempfile::TempDir;
 use crate::support::{amiss, byte_named_index, git, hidden_entry, payload};
 
 /// A name that is raw bytes rather than text is a document, not a defect. The
-/// entry is scanned, the report carries its path as the `bytes_hex` object,
+/// entry is scanned, the report carries its path as the `bytes` object,
 /// the run completes, and nothing is hidden; re-adding a spelling gate
 /// anywhere in discovery fails this test.
 #[test]
 fn a_document_named_in_bytes_is_scanned_not_refused() {
     let name = b"docs/bad-\xff-name.md".as_slice();
-    let hex = "646f63732f6261642dff2d6e616d652e6d64";
     for index_mode in [false, true] {
         let (code, payload) = hidden_entry(name, index_mode);
         let where_from = if index_mode { "index" } else { "tree" };
@@ -27,7 +26,7 @@ fn a_document_named_in_bytes_is_scanned_not_refused() {
         let documents = payload["documents"].as_array().unwrap();
         let row = documents
             .iter()
-            .find(|row| row["path"]["bytes_hex"] == hex)
+            .find(|row| row["path"]["bytes"] == serde_json::json!(name))
             .unwrap_or_else(|| panic!("{where_from}: the byte-named document is published"));
         assert_eq!(
             row["classification"], "structured-markdown",
@@ -93,16 +92,19 @@ fn every_unnameable_entry_is_disclosed_separately() {
     ]);
     assert_eq!(code, 2);
     let payload = payload(&stdout);
-    let disclosed: Vec<&str> = payload["errors"]
+    let disclosed: Vec<serde_json::Value> = payload["errors"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|row| row["code"] == "UNREPRESENTABLE_PATH")
-        .map(|row| row["path_bytes_hex"].as_str().unwrap())
+        .map(|row| row["path_bytes"].clone())
         .collect();
     assert_eq!(
         disclosed,
-        vec!["6261645c6f6e652e6d64", "6261645c74776f2e6d64"],
+        vec![
+            serde_json::json!(b"bad\\one.md"),
+            serde_json::json!(b"bad\\two.md")
+        ],
         "two hidden entries are two rows, in byte order, each naming its bytes"
     );
 
@@ -131,16 +133,19 @@ fn every_unnameable_entry_is_disclosed_separately() {
     ]);
     assert_eq!(code, 2);
     let staged = serde_json::from_slice::<serde_json::Value>(&stdout).unwrap()["payload"].clone();
-    let disclosed: Vec<&str> = staged["errors"]
+    let disclosed: Vec<serde_json::Value> = staged["errors"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|row| row["code"] == "UNREPRESENTABLE_PATH")
-        .map(|row| row["path_bytes_hex"].as_str().unwrap())
+        .map(|row| row["path_bytes"].clone())
         .collect();
     assert_eq!(
         disclosed,
-        vec!["6261645c6f6e652e6d64", "6261645c74776f2e6d64"],
+        vec![
+            serde_json::json!(b"bad\\one.md"),
+            serde_json::json!(b"bad\\two.md")
+        ],
         "the staged gate discloses every unspellable row too, not just the first"
     );
 }
@@ -200,7 +205,7 @@ fn an_over_length_unspellable_name_is_a_crossing_with_no_bytes() {
     assert_eq!(row["configured_limit"], 4096);
     assert_eq!(row["observed_lower_bound"], 5007);
     assert_eq!(
-        row["path_bytes_hex"],
+        row["path_bytes"],
         serde_json::Value::Null,
         "bytes past the ceiling are stated by figure, never by hex the schema forbids"
     );
@@ -244,7 +249,7 @@ fn an_over_length_unspellable_name_is_a_crossing_with_no_bytes() {
         .find(|row| row["code"] == "UNREPRESENTABLE_PATH")
         .unwrap();
     assert_eq!(
-        row["path_bytes_hex"],
+        row["path_bytes"],
         serde_json::Value::Null,
         "the identity gate answers the spelling question, and omits hex past the field's cap"
     );
@@ -326,7 +331,7 @@ fn a_percent_escaped_byte_reference_resolves_against_the_byte_named_target() {
         };
         assert_eq!(
             row.observation_id_input.document,
-            amiss_wire::report::model::RepoPath::Text(amiss_wire::repo_path_text!("README.md"))
+            amiss_wire::model::RepoPath::from(&amiss_wire::repo_path_text!("README.md"))
         );
         assert_eq!(row.resolution.as_ref(), resolution);
     }
@@ -344,8 +349,8 @@ fn a_percent_escaped_byte_reference_resolves_against_the_byte_named_target() {
         .find(|row| row["kind"] == "explicit-target-missing")
         .unwrap();
     assert_eq!(
-        finding["key_input"]["scope"]["normalized_target_intent"]["path"]["bytes_hex"],
-        "646f63732f6261642dfe2d6e616d652e6d64",
+        finding["key_input"]["scope"]["normalized_target_intent"]["path"]["bytes"],
+        serde_json::json!(b"docs/bad-\xfe-name.md"),
         "the missing target's identity names the bytes exactly"
     );
 }
@@ -414,7 +419,7 @@ fn a_policy_tree_include_covers_byte_named_documents() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|row| row["path"]["bytes_hex"] == "73706563732f64657369676e2dff2e746578")
+        .find(|row| row["path"]["bytes"] == serde_json::json!(b"specs/design-\xff.tex"))
         .expect("the included byte-named document is published");
     assert_eq!(row["classification"], "policy-included");
 }
@@ -471,10 +476,9 @@ fn byte_and_text_paths_interleave_deterministically_in_byte_order() {
         .unwrap()
         .iter()
         .map(|row| {
-            row["path"].as_str().map_or_else(
-                || format!("hex:{}", row["path"]["bytes_hex"].as_str().unwrap()),
-                str::to_owned,
-            )
+            row["path"]
+                .as_str()
+                .map_or_else(|| format!("bytes:{}", row["path"]["bytes"]), str::to_owned)
         })
         .collect();
     assert_eq!(
@@ -482,9 +486,9 @@ fn byte_and_text_paths_interleave_deterministically_in_byte_order() {
         vec![
             "README.md".to_owned(),
             "docs/a.md".to_owned(),
-            "hex:646f63732f6d2dfe2e6d64".to_owned(),
+            "bytes:[100,111,99,115,47,109,45,254,46,109,100]".to_owned(),
             "docs/z.md".to_owned(),
-            "hex:646f63732fff2e6d64".to_owned(),
+            "bytes:[100,111,99,115,47,255,46,109,100]".to_owned(),
         ],
         "raw byte order, not form-clustered"
     );

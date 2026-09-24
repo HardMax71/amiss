@@ -156,7 +156,7 @@ fn available_action_payload() -> serde_json::Value {
     for index in 0_usize..8 {
         let target = match index {
             0 => serde_json::json!("docs/</code>`x&%\n::error::forged.md"),
-            1 => serde_json::json!({ "bytes_hex": "ff" }),
+            1 => serde_json::json!({ "bytes": [255] }),
             _ => serde_json::json!(format!("docs/target-{index}.md")),
         };
         let path = if index == 0 {
@@ -180,8 +180,8 @@ fn available_action_payload() -> serde_json::Value {
                 &serde_json::json!({
                     "kind": "missing",
                     "reason": "path-not-found",
-                    "path": { "bytes_hex": "ff" },
-                    "near": { "bytes_hex": "fe" },
+                    "path": { "bytes": [255] },
+                    "near": { "bytes": [254] },
                     "same_object_at": "docs/moved.md"
                 }),
             )),
@@ -225,7 +225,7 @@ fn available_action_payload() -> serde_json::Value {
                 "code": "INVALID_JSON",
                 "description": "available errors stay out of annotations",
                 "path": "docs/error.md",
-                "path_bytes_hex": null,
+                "path_bytes": null,
                 "resource": null,
                 "configured_limit": null,
                 "observed_lower_bound": null
@@ -369,8 +369,8 @@ fn action_unavailable_feedback_groups_errors_and_caps_annotations() {
                     1 => serde_json::Value::Null,
                     _ => serde_json::json!(format!("docs/error-{index}.md")),
                 },
-                "path_bytes_hex": if index == 1 {
-                    serde_json::json!("ff")
+                "path_bytes": if index == 1 {
+                    serde_json::json!([255])
                 } else {
                     serde_json::Value::Null
                 },

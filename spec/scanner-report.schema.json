@@ -57,17 +57,21 @@
     },
     "RepoPathBytes": {
       "type": "object",
-      "description": "A path the report cannot hold as text: the raw bytes as lowercase hex. The pattern enforces the byte grammar pair-aligned (no NUL or backslash byte, no leading, doubled, or trailing slash, no dot or dot-dot segment). That the bytes do not decode as UTF-8 is the writer's canonical-form law, which no pattern can state.",
+      "description": "A path the report cannot hold as text: the raw bytes, one array element per byte. The byte grammar (no NUL or backslash byte, no leading, doubled, or trailing slash, no dot or dot-dot segment) and the rule that the bytes do not decode as UTF-8 are the writer's canonical-form law, which an array admits no pattern for.",
       "additionalProperties": false,
       "required": [
-        "bytes_hex"
+        "bytes"
       ],
       "properties": {
-        "bytes_hex": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 8192,
-          "pattern": "^(?!2f)(?!2e$)(?!2e2f)(?!2e2e$)(?!2e2e2f)(?!(?:[0-9a-f]{2})*(?:00|5c))(?!(?:[0-9a-f]{2})*2f2f)(?!(?:[0-9a-f]{2})*2f$)(?!(?:[0-9a-f]{2})*2f2e2f)(?!(?:[0-9a-f]{2})*2f2e$)(?!(?:[0-9a-f]{2})*2f2e2e2f)(?!(?:[0-9a-f]{2})*2f2e2e$)(?:[0-9a-f]{2})+$"
+        "bytes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          }
         }
       }
     },
@@ -5164,7 +5168,7 @@
         "code",
         "description",
         "path",
-        "path_bytes_hex",
+        "path_bytes",
         "resource",
         "configured_limit",
         "observed_lower_bound"
@@ -5195,13 +5199,18 @@
         "path": {
           "$ref": "#/$defs/NullableRepoPath"
         },
-        "path_bytes_hex": {
+        "path_bytes": {
           "type": [
-            "string",
+            "array",
             "null"
           ],
-          "maxLength": 8192,
-          "pattern": "^(?:[0-9a-f]{2})+$"
+          "minItems": 1,
+          "maxItems": 4096,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          }
         },
         "resource": {
           "$ref": "#/$defs/NullableResourceName"
@@ -5550,7 +5559,7 @@
             "phase",
             "code",
             "path",
-            "path_bytes_hex",
+            "path_bytes",
             "resource",
             "configured_limit",
             "observed_lower_bound"
