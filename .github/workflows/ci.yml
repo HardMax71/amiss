@@ -390,8 +390,9 @@ jobs:
         with:
           shared-key: module-cycles
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      # Warns while the cycles in #1133 remain; denies once they are gone.
       - run: cargo dylint --all -- --workspace --all-targets --locked
+        env:
+          DYLINT_RUSTFLAGS: -D module_cycles
 
   packaging:
     needs: changes
