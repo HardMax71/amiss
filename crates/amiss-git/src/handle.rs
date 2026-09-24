@@ -4,7 +4,8 @@ use std::fs::{File, Metadata, OpenOptions};
 use std::io;
 use std::path::Path;
 
-use crate::RepositoryOpenError;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RepositoryOpenError;
 
 /// The handle boundary, in safe Rust on every supported platform. The root's
 /// final entry is opened without following it, and every later entry is
