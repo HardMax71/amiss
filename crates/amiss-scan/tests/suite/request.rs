@@ -22,8 +22,9 @@ use amiss_wire::requests::{
     SuppliedSemanticEvidence, SuppliedTime,
 };
 use amiss_wire::semantic::{
-    PayloadSchema, SemanticEvidence, SemanticProducer, SemanticProducerKind, SemanticSubject,
-    observation::{Observation, SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation},
+    Observation, PayloadSchema, SemanticEvidence, SemanticProducer, SemanticProducerKind,
+    SemanticSubject,
+    observation::{SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation},
     record,
 };
 
@@ -274,7 +275,7 @@ fn record_sets_accept_complete_empty_and_partial_typed_rows() {
                     .0,
             ),
             None,
-            vec![Observation::Record(record::Observation {
+            vec![Observation::Record(record::RecordSetObservation {
                 kind: record::ObservationKind::Current,
                 name: artifact_id!("rust/public-api"),
                 records: records
@@ -306,7 +307,7 @@ fn malformed_record_sets_fail_closed() {
                 .0,
         ),
         None,
-        vec![Observation::Record(record::Observation {
+        vec![Observation::Record(record::RecordSetObservation {
             kind: record::ObservationKind::Current,
             name: artifact_id!("rust/public-api"),
             records: vec![record::Record {
@@ -328,11 +329,13 @@ fn malformed_record_sets_fail_closed() {
     let mut multiple_sets = valid.clone();
     multiple_sets
         .observations
-        .push(Cow::Owned(Observation::Record(record::Observation {
-            kind: record::ObservationKind::Current,
-            name: artifact_id!("rust/other"),
-            records: Vec::new(),
-        })));
+        .push(Cow::Owned(Observation::Record(
+            record::RecordSetObservation {
+                kind: record::ObservationKind::Current,
+                name: artifact_id!("rust/other"),
+                records: Vec::new(),
+            },
+        )));
     let mut invalid = vec![wrong_version, report_derived, multiple_sets];
     for rows in [
         &[("b", "B"), ("a", "A")][..],
@@ -341,17 +344,19 @@ fn malformed_record_sets_fail_closed() {
         &[("a", "")][..],
     ] {
         let mut evidence = valid.clone();
-        evidence.observations = vec![Cow::Owned(Observation::Record(record::Observation {
-            kind: record::ObservationKind::Current,
-            name: artifact_id!("rust/public-api"),
-            records: rows
-                .iter()
-                .map(|(key, value)| record::Record {
-                    key: (*key).to_owned(),
-                    value: (*value).to_owned(),
-                })
-                .collect(),
-        }))];
+        evidence.observations = vec![Cow::Owned(Observation::Record(
+            record::RecordSetObservation {
+                kind: record::ObservationKind::Current,
+                name: artifact_id!("rust/public-api"),
+                records: rows
+                    .iter()
+                    .map(|(key, value)| record::Record {
+                        key: (*key).to_owned(),
+                        value: (*value).to_owned(),
+                    })
+                    .collect(),
+            },
+        ))];
         invalid.push(evidence);
     }
 
@@ -382,7 +387,7 @@ fn two_envelopes_cannot_claim_the_same_record_set() {
                         .0,
                 ),
                 None,
-                vec![Observation::Record(record::Observation {
+                vec![Observation::Record(record::RecordSetObservation {
                     kind: record::ObservationKind::Current,
                     name: artifact_id!("rust/public-api"),
                     records: vec![record::Record {

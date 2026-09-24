@@ -12,7 +12,7 @@ use amiss_controller::{
     INTERSPHINX_INVENTORY_BYTES, IntersphinxError, IntersphinxInventory, bind_semantic_evidence,
     intersphinx_evidence,
 };
-use amiss_wire::semantic::observation::Observation;
+use amiss_wire::semantic::Observation;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 

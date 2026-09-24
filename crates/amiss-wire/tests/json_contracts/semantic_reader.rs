@@ -6,7 +6,7 @@ use sha2::Digest as _;
 use std::borrow::Cow;
 
 use amiss_wire::assessment::Nullable;
-use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
+use amiss_wire::semantic::{Observation, observation::SiteBuildObservation};
 use amiss_wire::{de::ErrorKind, semantic};
 
 #[test]

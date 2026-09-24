@@ -9,10 +9,7 @@ use amiss_wire::{
         model::{Controls, ReportEnvelope, SemanticEvidenceProducer, SemanticEvidenceProvenance},
     },
     requests::{ControlsRequest, SuppliedSemanticEvidence},
-    semantic::{
-        self, SemanticEvidence,
-        observation::{Observation, SiteBuildObservation},
-    },
+    semantic::{self, Observation, SemanticEvidence, observation::SiteBuildObservation},
 };
 use sha2::Digest as _;
 

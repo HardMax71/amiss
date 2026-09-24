@@ -5,15 +5,12 @@ use std::borrow::Cow;
 use amiss_controller::bind_semantic_evidence;
 use amiss_wire::{
     assessment::Nullable,
-    semantic::{
-        SemanticEvidenceTemplate, SemanticProducer, TemplateSchema, observation::Observation,
-        record,
-    },
+    semantic::{Observation, SemanticEvidenceTemplate, SemanticProducer, TemplateSchema, record},
 };
 
 #[test]
 fn controller_binding_preserves_candidate_context_and_typed_observations() {
-    let observation = Observation::Record(record::Observation {
+    let observation = Observation::Record(record::RecordSetObservation {
         kind: record::ObservationKind::Current,
         name: artifact_id!("rust/api"),
         records: vec![record::Record {

@@ -15,9 +15,9 @@ use std::borrow::Cow;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::semantic::{
-    PAYLOAD_SCHEMA, PayloadSchema, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence,
+    Observation, PAYLOAD_SCHEMA, PayloadSchema, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence,
     SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind, SemanticSubject,
-    TemplateSchema, bind_template, envelope, observation::Observation, record, template,
+    TemplateSchema, bind_template, envelope, record, template,
 };
 
 const A: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -25,7 +25,7 @@ const B: &str = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 const C: &str = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
 fn observation(name: &str) -> Observation {
-    Observation::Record(record::Observation {
+    Observation::Record(record::RecordSetObservation {
         kind: record::ObservationKind::Current,
         name: ArtifactId::try_from(name.to_owned()).unwrap(),
         records: Vec::new(),
@@ -244,7 +244,7 @@ fn semantic_readers_refuse_unknown_shapes_even_with_correct_payload_digests() {
 
 #[test]
 fn serialized_semantic_bytes_preserve_unicode_and_escaping() {
-    let row = Observation::Record(record::Observation {
+    let row = Observation::Record(record::RecordSetObservation {
         kind: record::ObservationKind::Current,
         name: artifact_id!("rust/api"),
         records: vec![record::Record {
@@ -276,7 +276,7 @@ fn serialized_semantic_bytes_preserve_unicode_and_escaping() {
 
 #[test]
 fn serialized_semantic_bytes_enforce_the_complete_document_ceiling() {
-    let mut records = record::Observation {
+    let mut records = record::RecordSetObservation {
         kind: record::ObservationKind::Current,
         name: artifact_id!("rust/api"),
         records: vec![record::Record {

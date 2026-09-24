@@ -8,8 +8,9 @@ use amiss_wire::de::{Error, ErrorKind, fail};
 use amiss_wire::model::Digest;
 use amiss_wire::report::model::SemanticEvidenceProducer;
 use amiss_wire::requests::SuppliedSemanticEvidence;
-use amiss_wire::semantic::observation::{
-    Observation, SITE_BUILD_VERSION, SPHINX_INVENTORY_VERSION, SphinxLabelObservation,
+use amiss_wire::semantic::{
+    Observation,
+    observation::{SITE_BUILD_VERSION, SPHINX_INVENTORY_VERSION, SphinxLabelObservation},
 };
 use amiss_wire::semantic::{SemanticEvidence, SemanticProducerKind};
 

@@ -9,7 +9,7 @@ use amiss_wire::report::{
         Controls, Feedback, ReportEnvelope, SemanticEvidenceProducer, SemanticEvidenceProvenance,
     },
 };
-use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
+use amiss_wire::semantic::{Observation, observation::SiteBuildObservation};
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.canonical.json");
 

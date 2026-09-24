@@ -46,7 +46,7 @@ pub struct Record {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Observation {
+pub struct RecordSetObservation {
     pub kind: ObservationKind,
     pub name: ArtifactId,
     pub records: Vec<Record>,
@@ -68,7 +68,7 @@ pub enum ObservationKind {
 /// contract is invalid, or the encoded template exceeds the semantic evidence bounds.
 pub fn template(input: Input) -> Result<Vec<u8>, Error> {
     validate_records("$.records", &input.records)?;
-    let observation = Observation {
+    let observation = RecordSetObservation {
         kind: ObservationKind::Current,
         name: input.name,
         records: input.records,
@@ -83,10 +83,7 @@ pub fn template(input: Input) -> Result<Vec<u8>, Error> {
             input_digest: input.input_digest,
         },
         complete: input.complete,
-        observations: vec![Cow::Owned(super::observation::Observation::Record(
-            observation,
-        ))]
-        .into(),
+        observations: vec![Cow::Owned(super::Observation::Record(observation))].into(),
     })
 }
 

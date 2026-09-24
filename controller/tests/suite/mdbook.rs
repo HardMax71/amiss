@@ -16,7 +16,7 @@ use amiss_controller::{
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::model::RepoPathText;
-use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
+use amiss_wire::semantic::{Observation, observation::SiteBuildObservation};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use serde_json::json;

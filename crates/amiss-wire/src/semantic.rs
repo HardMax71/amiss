@@ -13,8 +13,6 @@ use crate::model::Digest;
 pub mod observation;
 pub mod record;
 
-use observation::Observation;
-
 pub const ENVELOPE_SCHEMA: &str = "amiss/semantic-evidence-envelope";
 pub const PAYLOAD_SCHEMA: &str = "amiss/semantic-evidence-payload";
 pub const TEMPLATE_SCHEMA: &str = "amiss/semantic-evidence-template";
@@ -40,6 +38,14 @@ pub enum EnvelopeSchema {
     #[default]
     #[strum(serialize = "amiss/semantic-evidence-envelope")]
     Current,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Observation {
+    Site(observation::SiteBuildObservation),
+    Sphinx(observation::SphinxLabelObservation),
+    Record(record::RecordSetObservation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
