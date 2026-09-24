@@ -18,7 +18,10 @@ use amiss_wire::requests::{
 };
 
 use crate::ProviderRun;
-use crate::{OpaqueId, ProviderIdentity, RunRequest};
+use crate::{
+    ControllerEvaluationId, DeliveryIdentity, OpaqueId, ProviderIdentity, ProviderRunIdentity,
+    RunIdentity,
+};
 
 pub use amiss_wire::semantic::SemanticEvidenceTemplate;
 pub use controls::PolicyControls;
@@ -260,4 +263,14 @@ fn provider_run_id(run: &ProviderRun) -> String {
         ProviderRun::PullRequest(digest) => format!("pr:{digest}"),
         ProviderRun::Job(job) => format!("pipeline/{}/job/{}", job.pipeline_id, job.job_id),
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RunRequest {
+    pub delivery: DeliveryIdentity,
+    pub provider_run: ProviderRunIdentity,
+    pub evaluation_id: ControllerEvaluationId,
+    pub check: CheckBinding,
+    pub plan: Arc<CheckPlan>,
+    pub run: RunIdentity,
 }

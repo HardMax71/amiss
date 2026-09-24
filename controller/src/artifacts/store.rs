@@ -13,9 +13,10 @@ use amiss_wire::relation::RelationVerdict;
 use super::format::{Blob, Record, RecordInput, Root, SidecarAudit};
 use super::{
     ArtifactAuditBundle, ArtifactAuditDigests, ArtifactAuditReference, ArtifactBundle,
-    ArtifactCleanup, ArtifactComponent, ArtifactError, ArtifactReference, ArtifactStoreConfig,
+    ArtifactCleanup, ArtifactComponent, ArtifactReference, ArtifactStoreConfig,
     RetainedRelationAudit,
 };
+use crate::ArtifactError;
 use crate::{ControllerClock, ControllerEvaluationId};
 
 pub struct FileArtifactStore {

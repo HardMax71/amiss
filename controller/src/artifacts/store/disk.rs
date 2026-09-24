@@ -9,8 +9,9 @@ use atomicwrites::{AllowOverwrite, AtomicFile, DisallowOverwrite};
 use strum::IntoEnumIterator as _;
 
 use super::super::format::{self, Blob, Record, Root};
-use super::super::{ArtifactComponent, ArtifactError, ArtifactStoreConfig};
+use super::super::{ArtifactComponent, ArtifactStoreConfig};
 use super::{FileArtifactStore, State, StoredRecord, validate_config};
+use crate::ArtifactError;
 use crate::ControllerClock;
 use crate::atomic_write_recovery::{ATOMIC_WRITE_DIRECTORY_PREFIX, AtomicWriteDirectory};
 

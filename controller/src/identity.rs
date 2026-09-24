@@ -3,7 +3,7 @@ use std::num::NonZeroU64;
 
 use serde::{Deserialize, Serialize};
 
-use amiss_wire::model::{Digest, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, Digest, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 mod tests;
 
@@ -356,4 +356,66 @@ impl MergeRequestChange {
             iid: NonZeroU64::new(iid)?,
         })
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChangeState {
+    Active,
+    Superseded,
+    Closed,
+    AuthorizationRevoked,
+}
+
+/// The refs one run resolves against.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunRefs {
+    pub forge: ForgeDialect,
+    pub candidate: BranchRef,
+    pub target: BranchRef,
+    pub default_branch: BranchRef,
+}
+
+/// One base and candidate pair of object ids.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OidPair {
+    pub base: Oid,
+    pub candidate: Oid,
+}
+
+/// The exact identity one evaluation runs as. Everything here is data; the
+/// binding laws live in `validate_change` and the runner recheck.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RunIdentity {
+    pub change: ChangeLocator,
+    pub refs: RunRefs,
+    pub object_format: ObjectFormat,
+    pub commits: OidPair,
+    pub trees: OidPair,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChangeSnapshot {
+    pub state: ChangeState,
+    pub run: RunIdentity,
+    /// Provider revision to which the adapter binds this run's gate.
+    pub gate_commit: Oid,
+}
+
+/// What a provider authenticated about one delivery. Which delivery it is
+/// stays the ingress's to say, from the replay identity the proof carries.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProviderFacts {
+    pub provider: ProviderIdentity,
+    pub integration: IntegrationId,
+    pub change: ChangeLocator,
+    pub provider_run: ProviderRunIdentity,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuthenticatedDelivery {
+    pub identity: DeliveryIdentity,
+    pub change: ChangeLocator,
+    pub provider_run: ProviderRunIdentity,
 }
