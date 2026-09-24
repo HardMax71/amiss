@@ -12,7 +12,7 @@ use crate::resources::Aggregate;
 use crate::scan::SemanticCodeSink;
 
 use super::content::{Content, content_cache, read_target, target_projection};
-use super::{RAW_EVIDENCE_DOMAIN, Resolution, Resolver, TARGET_LINE_PROJECTION_DOMAIN};
+use super::{LineRange, RAW_EVIDENCE_DOMAIN, Resolution, Resolver, TARGET_LINE_PROJECTION_DOMAIN};
 
 const MAX_SAFE: u64 = 9_007_199_254_740_991;
 
@@ -277,13 +277,6 @@ fn line_content(selected: &[u8]) -> &[u8] {
         .or_else(|| selected.strip_suffix(b"\n"))
         .or_else(|| selected.strip_suffix(b"\r"))
         .unwrap_or(selected)
-}
-
-/// An inclusive, one-indexed selection of raw source lines.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct LineRange {
-    pub(crate) first: u64,
-    pub(crate) last: u64,
 }
 
 pub(super) fn line_resolution(
