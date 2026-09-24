@@ -190,6 +190,33 @@ fn rejects_a_delta_whose_base_is_its_own_offset() {
     );
 }
 
+/// An offset or a delta size that only fits by dropping bits past 64 is refused, not wrapped.
+#[test]
+fn rejects_lengths_past_sixty_four_bits() {
+    let base = ordinary(3, b"a");
+    let distance = u64::try_from(base.len()).unwrap_or(0);
+    let exact = pack([base.clone(), entry(6, 2, &[1, 1], &offset(distance))]);
+    validate(&exact, limits()).expect("the canonical offset and sizes name the base");
+
+    let mut wrapped = offset(u64::MAX >> 7);
+    if let Some(last) = wrapped.last_mut() {
+        *last |= 128;
+    }
+    wrapped.push(u8::try_from(distance).unwrap_or(0));
+    let bytes = pack([base.clone(), entry(6, 2, &[1, 1], &wrapped)]);
+    assert_eq!(
+        validate(&bytes, limits()).unwrap_err().to_string(),
+        "the delta base offset overflows"
+    );
+
+    let sizes = [129, 128, 128, 128, 128, 128, 128, 128, 128, 2, 1];
+    let bytes = pack([base, entry(6, 11, &sizes, &offset(distance))]);
+    assert_eq!(
+        validate(&bytes, limits()).unwrap_err().to_string(),
+        "a delta size overflows"
+    );
+}
+
 #[test]
 fn rejects_offset_delta_without_an_exact_prior_entry() {
     let bytes = pack([entry(6, 2, &[0, 0], &[1])]);

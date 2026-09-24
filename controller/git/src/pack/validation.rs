@@ -175,8 +175,9 @@ fn entry_header(
     let mut shift = 4_u32;
     while byte & 128 != 0 {
         byte = read_byte(input, cursor)?;
-        let part = u64::from(byte & 127)
+        let part = 1_u64
             .checked_shl(shift)
+            .and_then(|scale| u64::from(byte & 127).checked_mul(scale))
             .ok_or(PackError("the pack entry size overflows"))?;
         declared_size = declared_size
             .checked_add(part)
@@ -207,7 +208,7 @@ fn offset_base(
         byte = read_byte(input, cursor)?;
         distance = distance
             .checked_add(1)
-            .and_then(|value| value.checked_shl(7))
+            .and_then(|value| value.checked_mul(128))
             .and_then(|value| value.checked_add(u64::from(byte & 127)))
             .ok_or(PackError("the delta base offset overflows"))?;
     }
@@ -297,8 +298,9 @@ fn consume_delta(header: &mut DeltaHeader, bytes: &[u8]) -> Result<(), PackError
         if header.result.is_some() {
             break;
         }
-        let part = u64::from(byte & 127)
+        let part = 1_u64
             .checked_shl(header.shift)
+            .and_then(|scale| u64::from(byte & 127).checked_mul(scale))
             .ok_or(PackError("a delta size overflows"))?;
         header.value = header
             .value
