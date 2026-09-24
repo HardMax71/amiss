@@ -13,7 +13,7 @@ use sha2::Digest as _;
 mod semantic;
 mod support;
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
@@ -37,39 +37,113 @@ const INSTANT: &str = "2026-07-12T10:00:00Z";
 const VALID_UNTIL: &str = "2026-07-12T10:05:00Z";
 const ABSENT_COMMIT: &str = "6666666666666666666666666666666666666666";
 
+/// A scenario under the name nextest lists and runs it by, given the release
+/// that stages this binary as its engine and the release that refuses one.
+struct Scenario {
+    name: &'static str,
+    run: fn(&Release, &Release),
+}
+
+const SCENARIOS: &[Scenario] = &[
+    Scenario {
+        name: "pass_run",
+        run: |staged, _refused| pass_run(staged),
+    },
+    Scenario {
+        name: "block_run",
+        run: |staged, _refused| block_run(staged),
+    },
+    Scenario {
+        name: "absent_candidate",
+        run: |_staged, refused| absent_candidate(refused),
+    },
+    Scenario {
+        name: "silent_engine",
+        run: |staged, _refused| silent_engine(staged),
+    },
+    Scenario {
+        name: "garbage_engine",
+        run: |staged, _refused| garbage_engine(staged),
+    },
+    Scenario {
+        name: "identity_absent",
+        run: |_staged, refused| identity_absent(refused),
+    },
+    Scenario {
+        name: "invalid_supplied_controls",
+        run: |staged, _refused| {
+            invalid_supplied_controls(staged);
+        },
+    },
+    Scenario {
+        name: "semantic_capture",
+        run: |staged, _refused| semantic::capture(staged),
+    },
+    Scenario {
+        name: "wrong_result_name",
+        run: |_staged, refused| {
+            invalid_invocation_writes_nothing(refused, "result2", false, "wrong result name");
+        },
+    },
+    #[cfg(unix)]
+    Scenario {
+        name: "symlinked_scratch",
+        run: |_staged, refused| {
+            invalid_invocation_writes_nothing(refused, "result", true, "symlinked scratch");
+        },
+    },
+    Scenario {
+        name: "request_ceiling",
+        run: |staged, _refused| request_ceiling(staged),
+    },
+    Scenario {
+        name: "unread_requests",
+        run: |staged, _refused| unread_requests(staged),
+    },
+];
+
 /// One binary, two roles: the scenario runner, and the engine the wrapper
 /// launches from the validated tree when spawned with the sealed argument.
+/// Named scenarios run alone, so nextest spreads them over processes; no name
+/// runs them all.
 #[expect(
     clippy::print_stdout,
     reason = "the harness-free test protocol speaks on stdout"
 )]
 fn main() -> ExitCode {
-    if std::env::args_os().nth(1).as_deref() == Some(OsStr::new(SEALED_ENGINE_ARGUMENT)) {
+    let arguments: Vec<_> = std::env::args_os().skip(1).collect();
+    if arguments.first().map(OsString::as_os_str) == Some(OsStr::new(SEALED_ENGINE_ARGUMENT)) {
         return engine();
     }
-    if std::env::args_os().any(|argument| argument == OsStr::new("--list")) {
-        if !std::env::args_os().any(|argument| argument == OsStr::new("--ignored")) {
-            println!("wrapper: test");
+    if arguments
+        .iter()
+        .any(|argument| argument == OsStr::new("--list"))
+    {
+        if !arguments
+            .iter()
+            .any(|argument| argument == OsStr::new("--ignored"))
+        {
+            for scenario in SCENARIOS {
+                println!("{}: test", scenario.name);
+            }
         }
         return ExitCode::SUCCESS;
     }
+    let named = |name: &str| {
+        arguments
+            .iter()
+            .any(|argument| argument == OsStr::new(name))
+    };
+    let every = !SCENARIOS.iter().any(|scenario| named(scenario.name));
     let own = fs::read(std::env::current_exe().expect("own path")).expect("own bytes");
     let staged = release_with_engine(&own, |_root| {});
     let refused = release(|_root| {});
-    pass_run(&staged);
-    block_run(&staged);
-    absent_candidate(&refused);
-    silent_engine(&staged);
-    garbage_engine(&staged);
-    identity_absent(&refused);
-    invalid_supplied_controls(&staged);
-    semantic::capture(&staged);
-    invalid_invocation_writes_nothing(&refused, "result2", false, "wrong result name");
-    #[cfg(unix)]
-    invalid_invocation_writes_nothing(&refused, "result", true, "symlinked scratch");
-    request_ceiling(&staged);
-    unread_requests(&staged);
-    println!("wrapper: every scenario held");
+    for scenario in SCENARIOS {
+        if every || named(scenario.name) {
+            (scenario.run)(&staged, &refused);
+            println!("{}: held", scenario.name);
+        }
+    }
     ExitCode::SUCCESS
 }
 
