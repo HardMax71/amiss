@@ -14,8 +14,8 @@ use amiss_scan::scanned::SpanDisplay;
 use amiss_wire::controls::{
     DebtItem, EligibleFindingKind, Fact, FactEvidence, FactEvidenceKind, FactSchema,
     FindingKeyInput, FindingKeyInputSchema, FindingOccurrence, MissingResolution, OccurrenceKind,
-    ReferenceScope, ReferenceScopeKind, StructuralResolution, TargetIntent, TargetIntentKind,
-    TargetKind, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
+    ReferenceScope, ReferenceScopeKind, RepositoryTargetIntent, StructuralResolution,
+    TargetIntentKind, TargetKind, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
 };
 use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{
@@ -156,7 +156,7 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
                 kind: ReferenceScopeKind::Reference,
                 document: repo_path_text(document_text),
                 source_construct: SourceConstruct::InlineLink,
-                normalized_target_intent: TargetIntent {
+                normalized_target_intent: RepositoryTargetIntent {
                     kind: TargetIntentKind::RepositoryPath,
                     commit_oid: None,
                     path: repo_path_text(target_text.clone()),

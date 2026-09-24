@@ -63,7 +63,7 @@ pub enum FactEvidenceKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct TargetIntent<P = RepoPathText> {
+pub struct RepositoryTargetIntent<P = RepoPathText> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub commit_oid: Option<Oid>,
     pub fragment_digest: Option<Digest>,
@@ -85,7 +85,7 @@ pub struct FindingOccurrence {
 pub struct ReferenceScope {
     pub document: RepoPathText,
     pub kind: ReferenceScopeKind,
-    pub normalized_target_intent: TargetIntent,
+    pub normalized_target_intent: RepositoryTargetIntent,
     pub occurrence: FindingOccurrence,
     pub source_construct: SourceConstruct,
 }

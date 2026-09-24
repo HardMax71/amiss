@@ -1,8 +1,7 @@
+use amiss_wire::controls::RepositoryTargetIntent;
 use amiss_wire::controls::TargetIntentKind;
 use amiss_wire::controls::TargetKind;
-use amiss_wire::report::model::{
-    EmptyRepositoryPath, FindingKeyScope, RepositoryIntentPath, RepositoryTargetIntent,
-};
+use amiss_wire::report::model::{EmptyRepositoryPath, FindingKeyScope, RepositoryIntentPath};
 
 #[test]
 fn finding_keys_require_closed_scope_tags() {
@@ -18,7 +17,7 @@ fn finding_keys_require_closed_scope_tags() {
 
 #[test]
 fn finding_key_intents_reject_wrong_field_types() {
-    let intent: RepositoryTargetIntent = RepositoryTargetIntent {
+    let intent: RepositoryTargetIntent<RepositoryIntentPath> = RepositoryTargetIntent {
         commit_oid: None,
         fragment_digest: None,
         kind: TargetIntentKind::RepositoryPath,
@@ -27,21 +26,23 @@ fn finding_key_intents_reject_wrong_field_types() {
         target_kind: TargetKind::Either,
     };
     let encoded = serde_json::to_string(&intent).unwrap();
-    assert!(serde_json::from_str::<amiss_wire::controls::TargetIntent>(&encoded).is_err());
+    assert!(serde_json::from_str::<RepositoryTargetIntent>(&encoded).is_err());
     assert_eq!(
-        serde_json::from_str::<RepositoryTargetIntent>(&encoded).unwrap(),
+        serde_json::from_str::<RepositoryTargetIntent<RepositoryIntentPath>>(&encoded).unwrap(),
         intent
     );
     for field in ["fragment_digest", "query_digest"] {
         let member = format!("\"{field}\":null");
         let invalid = encoded.replace(&member, &format!("\"{field}\":{{}}"));
         assert_ne!(invalid, encoded);
-        assert!(serde_json::from_str::<RepositoryTargetIntent>(&invalid).is_err());
+        assert!(
+            serde_json::from_str::<RepositoryTargetIntent<RepositoryIntentPath>>(&invalid).is_err()
+        );
     }
     let invalid = encoded.replacen('{', "{\"commit_oid\":null,", 1);
     assert_ne!(invalid, encoded);
     assert_eq!(
-        serde_json::from_str::<RepositoryTargetIntent>(&invalid).unwrap(),
+        serde_json::from_str::<RepositoryTargetIntent<RepositoryIntentPath>>(&invalid).unwrap(),
         intent
     );
     assert!(
