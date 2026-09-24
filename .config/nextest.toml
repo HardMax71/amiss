@@ -7,6 +7,20 @@ command = ["/bin/sh", "-c", 'ulimit -v $((2 * 1024 * 1024)) && exec "$@"', "conf
 [profile.default]
 slow-timeout = { period = "30s", terminate-after = 4 }
 
+# The longest tests start first, or one that starts late sets the run's wall.
+[[profile.default.overrides]]
+filter = """
+test(=semantic::parse::tests::template_intake_enforces_the_bound_envelope_ceiling_not_only_the_source_size)
+| test(=renewal_keeps_a_long_controller_operation_owned)
+| (binary(=wrapper) & test(=request_ceiling))
+| (binary(=wrapper) & test(=semantic_capture))
+| test(=semantic::serialized_semantic_bytes_enforce_the_complete_document_ceiling)
+| test(=wall_timeout_stops_contained_descendants)
+| test(=the_maximal_fatal_envelope_fits_the_wire_reservation)
+| test(=bootstrap_job::plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling)
+"""
+priority = 100
+
 [profile.mutants]
 slow-timeout = { period = "30s", terminate-after = 1 }
 
