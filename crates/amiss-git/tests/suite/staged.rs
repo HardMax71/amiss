@@ -216,6 +216,32 @@ fn raw_index(entries: &[Vec<u8>], extensions: &[u8]) -> Vec<u8> {
     raw_index_v(2, entries, extensions)
 }
 
+fn v4_entry(strip: &[u8], suffix: &[u8]) -> Vec<u8> {
+    let field = [strip, suffix].concat();
+    let mut entry = entry_bytes(&field, 0, None);
+    entry.truncate(63_usize.saturating_add(field.len()));
+    entry
+}
+
+#[test]
+fn a_version_four_strip_past_sixty_four_bits_is_refused() {
+    let first = v4_entry(&[0], b"abcdef");
+    let canonical = raw_index_v(4, &[first.clone(), v4_entry(&[5], b"x")], b"");
+    let parsed = parse_index_file(ObjectFormat::Sha1, &canonical).expect("a canonical strip");
+    assert_eq!(
+        parsed.entries.last().map(|entry| entry.path.as_slice()),
+        Some(&b"ax"[..])
+    );
+
+    let overlong = [0x80, 0xfe, 0xfe, 0xfe, 0xfe, 0xfe, 0xfe, 0xfe, 0xff, 0x05];
+    let wrapped = raw_index_v(4, &[first, v4_entry(&overlong, b"x")], b"");
+    assert_eq!(
+        parse_index_file(ObjectFormat::Sha1, &wrapped).unwrap_err(),
+        Error::IndexInvalid,
+        "a strip that only fits by dropping high bits is refused, not read as five"
+    );
+}
+
 #[test]
 fn an_extended_entry_is_skip_worktree_only_by_its_bit() {
     let clear = raw_index_v(3, &[extended_entry(b"a", 0)], b"");

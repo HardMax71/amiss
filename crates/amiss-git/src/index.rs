@@ -252,7 +252,7 @@ fn varint(content: &[u8], at: usize) -> Result<(u64, usize), Error> {
         let byte = *content.get(cursor).ok_or(Error::IndexInvalid)?;
         cursor = cursor.saturating_add(1);
         value = value
-            .checked_shl(7)
+            .checked_mul(128)
             .and_then(|shifted| shifted.checked_add(u64::from(byte & 0x7f)))
             .ok_or(Error::IndexInvalid)?;
         if byte & 0x80 == 0 {
