@@ -16,7 +16,7 @@ pub struct RelationLimits {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelationSubject {
+pub struct RegisteredSubject {
     pub role: ArtifactId,
     pub scope: PlanScope,
     pub target: BranchRef,
@@ -34,18 +34,18 @@ pub struct RelationStatusDestination {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelationPlan {
+pub struct RegisteredRelation {
     pub identity: ArtifactId,
     pub context_digest: Digest,
     pub projection: ProjectionKind,
-    pub subjects: [RelationSubject; 2],
+    pub subjects: [RegisteredSubject; 2],
     pub aggregate_limits: RelationLimits,
     pub status_destinations: Vec<RelationStatusDestination>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TriggeredRelation {
-    pub plan: Arc<RelationPlan>,
+    pub plan: Arc<RegisteredRelation>,
     pub trigger_role: ArtifactId,
 }
 
@@ -69,7 +69,7 @@ pub enum RelationRegistryError {
     InvalidDestination,
 }
 
-pub(crate) fn validate_relation(plan: &RelationPlan) -> Result<(), RelationRegistryError> {
+pub(crate) fn validate_relation(plan: &RegisteredRelation) -> Result<(), RelationRegistryError> {
     let [left, right] = &plan.subjects;
     if left.role == right.role || left.scope.repository == right.scope.repository {
         return Err(RelationRegistryError::InvalidSubjects);
@@ -101,7 +101,7 @@ pub(crate) fn validate_relation(plan: &RelationPlan) -> Result<(), RelationRegis
     Ok(())
 }
 
-fn relation_limits_valid(plan: &RelationPlan) -> bool {
+fn relation_limits_valid(plan: &RegisteredRelation) -> bool {
     let [left, right] = &plan.subjects;
     [
         (

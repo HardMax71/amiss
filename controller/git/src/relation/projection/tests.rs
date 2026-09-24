@@ -4,8 +4,8 @@ use sha2::Digest as _;
 use std::sync::Arc;
 
 use amiss_controller::{
-    OidPair, OpaqueId, PlanScope, ProviderIdentity, RelationAcquiredRoot, RelationLimits,
-    RelationPlan, RelationStatusDestination, RelationSubject, RelationSubjectTransition,
+    OidPair, OpaqueId, PlanScope, ProviderIdentity, RegisteredRelation, RegisteredSubject,
+    RelationAcquiredRoot, RelationLimits, RelationStatusDestination, RelationSubjectTransition,
     RelationTransition, TriggeredRelation, relation_transition,
 };
 use amiss_controller::{opaque_id, provider_namespace};
@@ -15,8 +15,8 @@ use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
 use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 use amiss_wire::relation::{
-    RelationAssessment, RelationEvidence, RelationIdentity, RelationPlan as PlanPayload,
-    RelationSnapshot, RelationSubject as PlannedSubject, RelationVerdict, assess,
+    RelationAssessment, RelationEvidence, RelationIdentity, RelationPlan, RelationSnapshot,
+    RelationSubject, RelationVerdict, assess,
 };
 use amiss_wire::repo_path_text;
 use amiss_wire::required_status_name;
@@ -27,15 +27,15 @@ struct Fixture {
     source: amiss_fixtures::CommitPair,
     documentation: amiss_fixtures::CommitPair,
     transition: RelationTransition,
-    plan: Envelope<PlanPayload>,
+    plan: Envelope<RelationPlan>,
 }
 
 fn artifact(raw: &str) -> ArtifactId {
     ArtifactId::try_from(raw.to_owned()).expect("fixed artifact identity")
 }
 
-fn subject(role: &str, repository_name: &str, source_path: &str) -> RelationSubject {
-    RelationSubject {
+fn subject(role: &str, repository_name: &str, source_path: &str) -> RegisteredSubject {
+    RegisteredSubject {
         role: artifact(role),
         scope: PlanScope {
             provider: ProviderIdentity {
@@ -89,7 +89,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
     .expect("source repository");
     let documentation = amiss_fixtures::commit_pair(&[("mirror.txt", "timeout: u64\n")], &[])
         .expect("documentation repository");
-    let registered = Arc::new(RelationPlan {
+    let registered = Arc::new(RegisteredRelation {
         identity: artifact_id!("relation/api"),
         context_digest: amiss_wire::model::Digest::from(
             sha2::Sha256::digest(b"operator relation context").0,
@@ -128,7 +128,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
             .iter()
             .find(|subject| subject.role == frozen.role)
             .expect("registered role");
-        PlannedSubject {
+        RelationSubject {
             role: frozen.role,
             repository: configured.scope.repository.clone(),
             target: configured.target.clone(),
@@ -144,7 +144,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
             },
         }
     });
-    let value = amiss_wire::relation::RelationPlan {
+    let value = RelationPlan {
         schema: amiss_wire::relation::PlanPayloadSchema::Current,
         report_payload_digest: amiss_wire::model::Digest::from(
             sha2::Sha256::digest(b"accepted report payload").0,
@@ -160,7 +160,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
     }
     .emit()
     .expect("relation plan");
-    let plan = PlanPayload::parse(&value).expect("parsed relation plan");
+    let plan = RelationPlan::parse(&value).expect("parsed relation plan");
     Fixture {
         source,
         documentation,
@@ -230,7 +230,7 @@ fn changed_plan_fields_and_aliased_roots_are_refused_before_projection() {
         last_line: 1,
     });
     let changed = changed.emit().expect("rewritten plan");
-    let changed = PlanPayload::parse(&changed).expect("parsed rewritten plan");
+    let changed = RelationPlan::parse(&changed).expect("parsed rewritten plan");
     assert_eq!(
         project_relation_evidence(RelationProjectionRequest {
             transition: &fixture.transition,
@@ -246,7 +246,7 @@ fn changed_plan_fields_and_aliased_roots_are_refused_before_projection() {
         sha2::Sha256::digest(b"substituted operator relation context").0,
     );
     let changed = changed.emit().expect("rewritten plan");
-    let changed = PlanPayload::parse(&changed).expect("parsed rewritten plan");
+    let changed = RelationPlan::parse(&changed).expect("parsed rewritten plan");
     assert_eq!(
         project_relation_evidence(RelationProjectionRequest {
             transition: &fixture.transition,

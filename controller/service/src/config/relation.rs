@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use amiss_controller::{
-    OpaqueId, PlanScope, ProviderIdentity, RelationLimits, RelationPlan, RelationRegistry,
-    RelationStatusDestination, RelationSubject, relation_registry,
+    OpaqueId, PlanScope, ProviderIdentity, RegisteredRelation, RegisteredSubject, RelationLimits,
+    RelationRegistry, RelationStatusDestination, relation_registry,
 };
 use amiss_wire::controls::{ProjectionKind, ProjectionSource};
 use amiss_wire::model::Digest;
@@ -79,9 +79,9 @@ pub fn load_relation_registry(path: &Path) -> Result<RelationRegistry, ConfigErr
         .map_err(|defect| ConfigError::caused_by("relation registry is invalid", defect))
 }
 
-fn load_relation(raw: RelationFile) -> Result<RelationPlan, ConfigError> {
+fn load_relation(raw: RelationFile) -> Result<RegisteredRelation, ConfigError> {
     let [left, right] = raw.subjects;
-    Ok(RelationPlan {
+    Ok(RegisteredRelation {
         identity: raw.identity,
         context_digest: raw.context_digest,
         projection: raw.projection,
@@ -91,7 +91,7 @@ fn load_relation(raw: RelationFile) -> Result<RelationPlan, ConfigError> {
     })
 }
 
-fn load_subject(raw: SubjectFile) -> Result<RelationSubject, ConfigError> {
+fn load_subject(raw: SubjectFile) -> Result<RegisteredSubject, ConfigError> {
     let invalid = || ConfigError::invalid("relation subject identity is invalid");
     let provider = raw.scope.provider;
     let repository = RepositoryIdentity::new(
@@ -100,7 +100,7 @@ fn load_subject(raw: SubjectFile) -> Result<RelationSubject, ConfigError> {
         raw.scope.repository.name,
     )
     .ok_or_else(invalid)?;
-    Ok(RelationSubject {
+    Ok(RegisteredSubject {
         role: raw.role,
         scope: PlanScope {
             provider,

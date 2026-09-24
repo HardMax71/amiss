@@ -1,7 +1,7 @@
 use crate::states::CommitStatus;
 use amiss_controller::{
-    OpaqueId, PlanScope, ProviderError, RelationStatusRecord, RelationStatusTarget,
-    RelationSubject, RelationSubjectHead, relation_status_publication,
+    OpaqueId, PlanScope, ProviderError, RegisteredSubject, RelationStatusRecord,
+    RelationStatusTarget, RelationSubjectHead, relation_status_publication,
 };
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ObjectFormat, Oid};
@@ -24,7 +24,7 @@ pub(super) enum StatusDecision {
 impl<R: GiteaRest> Client<R> {
     pub(super) fn resolve_relation_head(
         &self,
-        subject: &RelationSubject,
+        subject: &RegisteredSubject,
     ) -> Result<RelationSubjectHead, ProviderError> {
         validate_relation_scope(&self.config, &subject.scope, subject.object_format)?;
         let deadline = self.rest.deadline()?;

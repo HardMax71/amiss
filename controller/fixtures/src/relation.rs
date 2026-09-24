@@ -2,15 +2,15 @@ use sha2::Digest as _;
 use std::sync::Arc;
 
 use amiss_controller::{
-    OidPair, OpaqueId, PlanScope, ProviderIdentity, ProviderNamespace, RelationLimits,
-    RelationPlan, RelationStatusDestination, RelationSubject, RelationSubjectTransition,
+    OidPair, OpaqueId, PlanScope, ProviderIdentity, ProviderNamespace, RegisteredRelation,
+    RegisteredSubject, RelationLimits, RelationStatusDestination, RelationSubjectTransition,
     RelationTransition, TriggeredRelation, relation_audit_plan, relation_transition,
 };
 use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
 use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
-    RelationEvidence, RelationEvidenceSubject, RelationPlan as PlanPayload, RelationProjectedValue,
+    RelationEvidence, RelationEvidenceSubject, RelationPlan, RelationProjectedValue,
     RelationProjectionSlot, assess,
 };
 use amiss_wire::required_status_name;
@@ -41,7 +41,7 @@ pub fn relation_audit_with_coordination(
     let report = report()?;
     let transition = transition(coordination)?;
     let plan = relation_audit_plan(&transition, &report).ok()?;
-    let parsed_plan = PlanPayload::parse(&plan).ok()?;
+    let parsed_plan = RelationPlan::parse(&plan).ok()?;
     let evidence = if with_evidence {
         Some(relation_evidence(&parsed_plan)?)
     } else {
@@ -96,8 +96,8 @@ fn transition(coordination: &str) -> Option<RelationTransition> {
     .ok()
 }
 
-fn registered_relation() -> Option<Arc<RelationPlan>> {
-    let registered = Arc::new(RelationPlan {
+fn registered_relation() -> Option<Arc<RegisteredRelation>> {
+    let registered = Arc::new(RegisteredRelation {
         identity: artifact_id!("relation/public-api"),
         context_digest: amiss_wire::model::Digest::from([
             0xf3, 0x56, 0xae, 0x83, 0xe3, 0x5d, 0xa8, 0xec, 0x17, 0xf6, 0xaf, 0x65, 0xba, 0xf3,
@@ -164,8 +164,8 @@ fn subject(
     instance: &str,
     repository: RepositoryIdentity,
     set: &str,
-) -> Option<RelationSubject> {
-    Some(RelationSubject {
+) -> Option<RegisteredSubject> {
+    Some(RegisteredSubject {
         role: ArtifactId::try_from(role.to_owned()).ok()?,
         scope: PlanScope {
             provider: ProviderIdentity {
@@ -210,7 +210,7 @@ fn frozen(
     })
 }
 
-fn relation_evidence(plan: &Envelope<PlanPayload>) -> Option<Vec<u8>> {
+fn relation_evidence(plan: &Envelope<RelationPlan>) -> Option<Vec<u8>> {
     let aligned = RelationProjectedValue {
         value_digest: amiss_wire::model::Digest::from([30; 32]),
         value_bytes: 12,

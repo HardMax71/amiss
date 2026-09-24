@@ -10,10 +10,10 @@ use amiss_controller::PullRequestChange;
 use amiss_controller::{
     AuthenticatedDelivery, Change, ChangeLocator, Delivery, DeliveryIdentity, LeaseFence, OidPair,
     OpaqueId, PendingRelation, PlanScope, ProviderIdentity, ProviderRun, ProviderRunAttempt,
-    ProviderRunIdentity, RELATION_REGISTRY_LIMIT, RelationAcquiredRoot, RelationAcquisitionError,
-    RelationAdmission, RelationCredentialError, RelationCredentialRoute, RelationLimits,
-    RelationPlan, RelationRegistryError, RelationScheduleError, RelationStatusDestination,
-    RelationStatusError, RelationSubject, RelationSubjectHead, RelationSubjectTransition,
+    ProviderRunIdentity, RELATION_REGISTRY_LIMIT, RegisteredRelation, RegisteredSubject,
+    RelationAcquiredRoot, RelationAcquisitionError, RelationAdmission, RelationCredentialError,
+    RelationCredentialRoute, RelationLimits, RelationRegistryError, RelationScheduleError,
+    RelationStatusDestination, RelationStatusError, RelationSubjectHead, RelationSubjectTransition,
     RelationTransition, relation_authority, relation_credential_router, relation_registry,
     relation_status_targets, relation_transition, relations_for_delivery, schedule_relation,
     verify_relation_acquired,
@@ -60,8 +60,8 @@ fn limits(objects: u64, bytes: u64) -> RelationLimits {
     }
 }
 
-fn subject(role: &str, repository: &str, set: &str) -> RelationSubject {
-    RelationSubject {
+fn subject(role: &str, repository: &str, set: &str) -> RegisteredSubject {
+    RegisteredSubject {
         role: artifact(role),
         scope: scope(repository),
         target: branch_ref!("refs/heads/main"),
@@ -72,8 +72,8 @@ fn subject(role: &str, repository: &str, set: &str) -> RelationSubject {
     }
 }
 
-fn plan(identity: &str, source: &str, documentation: &str) -> RelationPlan {
-    RelationPlan {
+fn plan(identity: &str, source: &str, documentation: &str) -> RegisteredRelation {
+    RegisteredRelation {
         identity: artifact(identity),
         context_digest: Digest::from(sha2::Sha256::digest(identity.as_bytes()).0),
         projection: ProjectionKind::SortedRowsV1,
@@ -90,7 +90,7 @@ fn plan(identity: &str, source: &str, documentation: &str) -> RelationPlan {
 }
 
 fn credential_route(
-    subject: &RelationSubject,
+    subject: &RegisteredSubject,
     authority: &'static str,
 ) -> RelationCredentialRoute<&'static str> {
     RelationCredentialRoute {

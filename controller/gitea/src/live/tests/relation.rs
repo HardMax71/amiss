@@ -8,8 +8,8 @@ use amiss_wire::{branch_ref, required_status_name};
 use amiss_controller::opaque_id;
 use amiss_controller::{
     ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, LeaseFence, PlanScope,
-    ProviderError, RelationAuditBundle, RelationStatusRecord, RelationStatusTarget,
-    RelationStatusTargets, RelationSubject, RelationSubjectHead, validate_relation_audit,
+    ProviderError, RegisteredSubject, RelationAuditBundle, RelationStatusRecord,
+    RelationStatusTarget, RelationStatusTargets, RelationSubjectHead, validate_relation_audit,
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::model::Digest;
@@ -346,7 +346,7 @@ fn the_relation_credential_must_authenticate_as_the_dedicated_reviewer() {
     );
 }
 
-fn subject_fixture(fixture: &Fixture) -> RelationSubject {
+fn subject_fixture(fixture: &Fixture) -> RegisteredSubject {
     let mut subject = relation_audit(true)
         .unwrap()
         .transition

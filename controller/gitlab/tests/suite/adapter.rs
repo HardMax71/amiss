@@ -12,8 +12,8 @@ use amiss_controller::MergeRequestChange;
 use amiss_controller::{
     ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, Change, ChangeState,
     CheckConclusion, HandleOutcome, LeaseFence, PlanScope, ProviderAdapter, ProviderError,
-    ProviderIdentity, ProviderRunAttempt, RelationAuditDigests, RelationLimits,
-    RelationStatusRecord, RelationStatusTarget, RelationStatusTargets, RelationSubject, RunFailure,
+    ProviderIdentity, ProviderRunAttempt, RegisteredSubject, RelationAuditDigests, RelationLimits,
+    RelationStatusRecord, RelationStatusTarget, RelationStatusTargets, RunFailure,
 };
 use amiss_controller::{PipelineJob, ProviderRun};
 use amiss_controller::{opaque_id, provider_namespace};
@@ -314,7 +314,7 @@ fn policy_job_resolves_only_its_ephemeral_relation_candidate() {
     let (source, delivery, valid) = fixture();
     let api = FakeApi::new([valid]);
     let adapter = GitLabMergeTrainAdapter::new(source, api.clone());
-    let mut subject = RelationSubject {
+    let mut subject = RegisteredSubject {
         role: artifact_id!("source"),
         scope: PlanScope {
             provider: delivery.identity.provider.clone(),

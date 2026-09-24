@@ -12,7 +12,7 @@ use crate::RelationTransition;
 
 use crate::TriggeredRelation;
 
-use crate::RelationPlan;
+use crate::RegisteredRelation;
 
 use crate::RelationStatusDestination;
 
@@ -143,7 +143,9 @@ pub(super) fn pending_from_binding(
     })
 }
 
-pub(super) fn plan_binding(plan: &RelationPlan) -> Result<Digest, RelationScheduleStoreError> {
+pub(super) fn plan_binding(
+    plan: &RegisteredRelation,
+) -> Result<Digest, RelationScheduleStoreError> {
     let [left, right] = plan.subjects.each_ref().map(|subject| {
         let source = document_digest(SOURCE_BINDING_SCHEMA, &subject.source)
             .ok_or(RelationScheduleStoreError::Corrupt)?;

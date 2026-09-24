@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use amiss_controller::{
     AcquiredSemanticTemplate, ChangeSnapshot, ProviderError, ProviderIdentity, Publication,
-    RelationStatusRecord, RelationStatusTarget, RelationSubject, RelationSubjectHead,
+    RegisteredSubject, RelationStatusRecord, RelationStatusTarget, RelationSubjectHead,
     WorkflowArtifactExpectation,
 };
 use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
@@ -148,7 +148,7 @@ impl GitHubApp {
     /// GitHub does not return one exact SHA-1 commit and tree.
     pub fn resolve_relation_head(
         &self,
-        subject: &RelationSubject,
+        subject: &RegisteredSubject,
     ) -> Result<RelationSubjectHead, ProviderError> {
         self.client.resolve_relation_head(subject)
     }

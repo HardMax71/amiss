@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use amiss_controller::{
-    OidPair, OpaqueId, PlanScope, ProviderIdentity, RelationAcquisitionError, RelationLimits,
-    RelationPlan, RelationStatusDestination, RelationSubject, RelationSubjectTransition,
+    OidPair, OpaqueId, PlanScope, ProviderIdentity, RegisteredRelation, RegisteredSubject,
+    RelationAcquisitionError, RelationLimits, RelationStatusDestination, RelationSubjectTransition,
     TriggeredRelation, relation_transition,
 };
 use amiss_controller::{opaque_id, provider_namespace};
@@ -27,8 +27,8 @@ fn artifact(raw: &str) -> ArtifactId {
     ArtifactId::try_from(raw.to_owned()).expect("fixed artifact identity")
 }
 
-fn subject(role: &str, repository: &str) -> RelationSubject {
-    RelationSubject {
+fn subject(role: &str, repository: &str) -> RegisteredSubject {
+    RegisteredSubject {
         role: artifact(role),
         scope: PlanScope {
             provider: ProviderIdentity {
@@ -73,7 +73,7 @@ fn revisions(role: &str, digit: char) -> RelationSubjectTransition {
 fn transition() -> amiss_controller::RelationTransition {
     let documentation = subject("documentation", "handbook");
     let source = subject("source", "service");
-    let plan = Arc::new(RelationPlan {
+    let plan = Arc::new(RegisteredRelation {
         identity: artifact_id!("relation/api"),
         context_digest: amiss_wire::model::Digest::from(
             sha2::Sha256::digest(b"operator relation context").0,

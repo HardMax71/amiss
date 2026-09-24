@@ -11,11 +11,11 @@ use super::PendingRelation;
 
 use crate::relation_transition;
 
-use crate::RelationSubject;
+use crate::RegisteredSubject;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationSubjectHead {
-    pub subject: RelationSubject,
+    pub subject: RegisteredSubject,
     pub candidate: RelationSnapshot,
 }
 
