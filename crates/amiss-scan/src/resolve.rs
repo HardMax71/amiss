@@ -18,10 +18,11 @@ use crate::Error;
 use crate::declared::Declarations;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::{Classification, classify};
+use crate::published::anchors;
+use crate::published::redirected;
+use crate::published::unplaced;
 use crate::resources::{Aggregate, ScanResources};
-use crate::route::{
-    anchors, candidates, directory, generator_alias, redirected, template_expression, unplaced,
-};
+use crate::route::{directory, generator_alias, template_expression};
 
 mod anchor;
 mod content;
@@ -33,13 +34,12 @@ pub(crate) mod syntax;
 mod transclusion;
 
 pub(crate) use line::{named_region_bytes, selected_line_bytes};
-pub(crate) use transclusion::included_documents;
 
+use crate::published::routed;
+use crate::route::normalized_path_under;
 use anchor::{fragment_resolution, linked_label};
 use content::{CachedContent, read_target};
-use syntax::{
-    normalized_path_under, same_repo_suffix, split_components, unreadable, unsupported_intent,
-};
+use syntax::{same_repo_suffix, split_components, unreadable, unsupported_intent};
 
 pub use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 pub const TARGET_PROJECTION_DOMAIN: &str = "amiss/scanner-target-projection";
@@ -513,37 +513,6 @@ fn awaits_attribute(semantic: &str) -> bool {
         rest = after;
     }
     false
-}
-
-/// The path this reference is answered against. A destination the tree holds
-/// is its own answer; otherwise the first router spelling that reaches an
-/// ordinary file stands in for it, and last the document published at that
-/// route. A promised directory is never re-spelled, and every spelling names
-/// a file the tree already holds, so this can only turn an absent target into
-/// a present one.
-pub(crate) fn routed(
-    snapshot: &SnapshotDiscovery,
-    path: &RepoPath,
-    target_kind: TargetKind,
-) -> RepoPath {
-    if target_kind == TargetKind::Tree || snapshot.locate(path).is_some() {
-        return path.clone();
-    }
-    candidates(path)
-        .into_iter()
-        .find(|(_, candidate)| {
-            matches!(
-                snapshot.locate(candidate),
-                Some(Located::Entry(
-                    GitMode::RegularFile | GitMode::ExecutableFile,
-                    _
-                ))
-            )
-        })
-        .map_or_else(
-            || snapshot.published_routes.get(path).unwrap_or(path).clone(),
-            |(_, candidate)| candidate,
-        )
 }
 
 /// The last question a path the tree does not hold is asked. Only ignore files

@@ -6,8 +6,10 @@ use amiss_wire::uri::decode_component;
 
 use crate::Error;
 
-use super::syntax::{invalid_path_byte, unsupported_intent};
+use super::syntax::unsupported_intent;
+
 use super::{ForgeContext, Intent, Resolution, Resolver, lookup};
+use crate::route::invalid_path_byte;
 
 pub(super) fn resolve(
     resolver: &mut Resolver<'_>,

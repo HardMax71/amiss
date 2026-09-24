@@ -11,11 +11,33 @@ use amiss_wire::model::{Adapter, Oid, RepoPath};
 use crate::document::{Classification, classify, excluded_by_built_in, native_adapter};
 use crate::policy::Includes;
 use crate::resources::{ScanIdentity, ScanMemo, ScanResources, crossing};
+use crate::route::DIRECTORY_PAGES;
 use crate::route::DOCUSAURUS;
+use crate::route::ROUTER_DECLARATION;
+use crate::route::ROUTERS;
+use crate::route::RouteRule;
+use crate::route::SHARED_CONFIGS;
+use crate::route::SPHINX;
+use crate::route::Spelling;
+use crate::route::ancestor_root;
+use crate::route::content_root;
+use crate::route::declarable;
+use crate::route::declaring_directory;
+use crate::route::directory;
+use crate::route::join;
+use crate::route::normalized_native_path;
+use crate::route::normalized_path_under;
+use crate::route::page_route;
+use crate::route::sole_claims;
 use crate::scan::{replay_scan_charges, scan_bytes};
 use crate::scanned::Scanned;
 use crate::scanned::ScannedOccurrence;
 use crate::{Error, GitDefect, lfs};
+use amiss_wire::controls::TargetKind;
+use amiss_wire::extraction::Transclusion;
+use amiss_wire::extraction::TransclusionKind;
+use amiss_wire::extraction::TransclusionRefusal;
+use amiss_wire::uri::scheme;
 
 /// The deliberate object and format boundaries a discovered document side can
 /// sit behind without failing the run.
@@ -66,8 +88,7 @@ fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> 
         .documents
         .iter()
         .map(|record| {
-            record.adapter == Some(Adapter::Markdown)
-                && crate::anchor::sphinx_governed(discovery, &record.path)
+            record.adapter == Some(Adapter::Markdown) && sphinx_governed(discovery, &record.path)
         })
         .collect();
     let SnapshotDiscovery {
@@ -168,7 +189,7 @@ fn settle_comments(discovery: &mut SnapshotDiscovery) {
         .enumerate()
         .filter(|(_, record)| {
             matches!(&record.status, DocumentStatus::Scanned(scanned) if scanned.commented)
-                && crate::route::site_root(discovery, record.path.as_bytes(), &DOCUSAURUS).is_none()
+                && site_root(discovery, record.path.as_bytes(), &DOCUSAURUS).is_none()
         })
         .map(|(index, _)| index)
         .collect();
@@ -186,7 +207,7 @@ fn settle_comments(discovery: &mut SnapshotDiscovery) {
 fn declaring(path: &RepoPath) -> bool {
     let router = path
         .as_bytes()
-        .strip_suffix(crate::route::ROUTER_DECLARATION.as_bytes())
+        .strip_suffix(ROUTER_DECLARATION.as_bytes())
         .is_some_and(|above| above.is_empty() || above.ends_with(b"/"));
     router
         || crate::route::declares(&crate::route::ANTORA, path)
@@ -196,7 +217,7 @@ fn declaring(path: &RepoPath) -> bool {
 }
 
 fn configures(path: &RepoPath) -> bool {
-    crate::route::declares(&crate::route::SPHINX, path) && !excluded_by_built_in(path.as_bytes())
+    crate::route::declares(&SPHINX, path) && !excluded_by_built_in(path.as_bytes())
 }
 
 fn publishes(path: &RepoPath) -> bool {
@@ -224,12 +245,12 @@ fn record_declaration(
         if !suffixes.is_empty() {
             declared
                 .source_suffixes
-                .insert(crate::route::directory(path.as_bytes()).to_vec(), suffixes);
+                .insert(directory(path.as_bytes()).to_vec(), suffixes);
         }
     } else if publishes(&path) {
         record_publication(discovery, declared, path, body);
     } else if binds_book(&path) {
-        let root = crate::route::directory(path.as_bytes());
+        let root = directory(path.as_bytes());
         if let Some(source) = crate::route::book_source(root, body) {
             declared.book_sources.insert(root.to_vec(), source);
         }
@@ -254,12 +275,12 @@ fn record_publication(
     let Some(name) = crate::route::HUGO
         .declared_by
         .iter()
-        .filter(|name| crate::route::declaring_directory(path.as_bytes(), name).is_some())
+        .filter(|name| declaring_directory(path.as_bytes(), name).is_some())
         .max_by_key(|name| name.len())
     else {
         return;
     };
-    let shared = crate::route::SHARED_CONFIGS.contains(name);
+    let shared = SHARED_CONFIGS.contains(name);
     let rule = if shared {
         crate::route::addressed_rule(body)
     } else {
@@ -268,12 +289,12 @@ fn record_publication(
     let Some(rule) = rule else {
         return;
     };
-    let project = crate::route::declaring_directory(path.as_bytes(), name)
+    let project = declaring_directory(path.as_bytes(), name)
         .unwrap_or_default()
         .to_vec();
     let roots: Vec<(Vec<u8>, String)> = crate::route::hugo_project(body)
         .into_iter()
-        .map(|(root, base)| (crate::route::join(&project, root.as_bytes()), base))
+        .map(|(root, base)| (join(&project, root.as_bytes()), base))
         .collect();
     let hugo = rule.name == crate::route::HUGO.name;
     let content = roots.iter().any(|(root, _)| {
@@ -320,14 +341,12 @@ fn sphinx_included(discovery: &SnapshotDiscovery) -> BTreeSet<RepoPath> {
     let mut frontier: Vec<RepoPath> = discovery
         .documents
         .iter()
-        .filter(|record| {
-            markdown(record) && crate::anchor::sphinx_governed(discovery, &record.path)
-        })
+        .filter(|record| markdown(record) && sphinx_governed(discovery, &record.path))
         .map(|record| record.path.clone())
         .collect();
     let mut found = BTreeSet::new();
     while let Some(document) = frontier.pop() {
-        for target in crate::resolve::included_documents(discovery, &document) {
+        for target in included_documents(discovery, &document) {
             if discovery.document(target.as_bytes()).is_some_and(markdown)
                 && found.insert(target.clone())
             {
@@ -536,7 +555,7 @@ fn declared_documents(
                 && context
                     .scope
                     .is_none_or(|documents| documents.contains(*path))
-                && crate::route::declared_source(discovery, path.as_bytes())
+                && declared_source(discovery, path.as_bytes())
         })
         .map(|(path, (mode, oid))| {
             (
@@ -801,7 +820,7 @@ pub(crate) fn discover_walk(
             }
         }
     }
-    discovery.sole_sites = crate::route::sole_sites(&discovery);
+    discovery.sole_sites = sole_sites(&discovery);
     if let WalkMode::Documents {
         scan,
         includes,
@@ -823,8 +842,7 @@ pub(crate) fn discover_walk(
         declared_documents(&context, git, scan, &mut discovery)?;
         settle_comments(&mut discovery);
     }
-    (discovery.published_routes, discovery.redirect_routes) =
-        crate::route::published_routes(&discovery);
+    (discovery.published_routes, discovery.redirect_routes) = published_routes(&discovery);
     if let WalkMode::Documents { scan, .. } = &mut mode {
         settle_roles(scan, &mut discovery)?;
     }
@@ -877,7 +895,7 @@ pub fn discover_index(
         };
         record_document(&context, git, scan, &mut discovery, path, &tree_entry, None)?;
     }
-    discovery.sole_sites = crate::route::sole_sites(&discovery);
+    discovery.sole_sites = sole_sites(&discovery);
     let declared = descriptors(repo, git, scan, &discovery)?;
     discovery.antora_components = declared.antora_components;
     discovery.source_suffixes = declared.source_suffixes;
@@ -887,8 +905,7 @@ pub fn discover_index(
     discovery.book_sources = declared.book_sources;
     declared_documents(&context, git, scan, &mut discovery)?;
     settle_comments(&mut discovery);
-    (discovery.published_routes, discovery.redirect_routes) =
-        crate::route::published_routes(&discovery);
+    (discovery.published_routes, discovery.redirect_routes) = published_routes(&discovery);
     settle_roles(scan, &mut discovery)?;
     Ok(discovery)
 }
@@ -1021,4 +1038,323 @@ fn side_status(
         Ok(scanned) => Ok((DocumentStatus::Scanned(scanned), byte_count, Some(raw))),
         Err(defect) => document_outcome(defect).map(|status| (status, byte_count, Some(raw))),
     }
+}
+
+/// Whether Sphinx parses this document, which is what turns the `MyST`
+/// spellings on. A declaration above the file is one way, and the route table
+/// reads the same file to anchor a source-root docname, so the answer is taken
+/// from there rather than spelled twice. A page of the tree including the file
+/// is the other way, and that one reaches outside the declared root.
+pub(crate) fn sphinx_governed(snapshot: &SnapshotDiscovery, document: &RepoPath) -> bool {
+    ROUTERS
+        .iter()
+        .filter(|rule| rule.serves(Spelling::SourceRoot))
+        .any(|rule| declared_root(snapshot, document.as_bytes(), rule.declared_by).is_some())
+        || snapshot.sphinx_included.contains(document)
+}
+
+/// The includes an expansion walks. A call a template answers is no edge at
+/// all, since nothing in the tree stands in for what it writes, so `templated`
+/// answers it instead and the walk passes it by.
+pub(crate) fn followed(transclusions: &[Transclusion]) -> Vec<&Transclusion> {
+    transclusions
+        .iter()
+        .filter(|entry| {
+            !matches!(
+                entry.kind,
+                Err(TransclusionRefusal::Template | TransclusionRefusal::Liquid)
+            )
+        })
+        .collect()
+}
+
+/// The documents one document renders in place of its own includes, which is
+/// the edge the Sphinx walk follows to decide what a tree parses. A call a
+/// template answers names no file at all, so it is no edge here either; an
+/// option block still renders part of the named file, so that one is.
+pub(crate) fn included_documents(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+) -> Vec<RepoPath> {
+    let Some(DocumentStatus::Scanned(scanned)) = snapshot
+        .document(document.as_bytes())
+        .map(|record| &record.status)
+    else {
+        return Vec::new();
+    };
+    let Some(source) = scanned.anchor_source.as_ref() else {
+        return Vec::new();
+    };
+    let root = snippet_root(snapshot, Adapter::Markdown, document);
+    followed(&source.transclusions)
+        .into_iter()
+        .filter(|entry| entry.kind != Ok(TransclusionKind::Literal))
+        .filter_map(|entry| local_target(root.as_deref(), document, &entry.target))
+        .collect()
+}
+
+pub(crate) fn local_target(
+    root: Option<&[u8]>,
+    document: &RepoPath,
+    target: &str,
+) -> Option<RepoPath> {
+    if target.starts_with('/') || target.contains(['%', '?', '#']) || scheme(target).is_some() {
+        return None;
+    }
+    let located = match root {
+        Some(root) => normalized_path_under(root, false, target),
+        None => normalized_native_path(document, false, target),
+    };
+    located
+        .ok()
+        .filter(|(_, kind)| *kind != TargetKind::Tree)
+        .map(|(path, _)| path)
+}
+
+/// The directory a mkdocs snippet is resolved from, which is the one holding
+/// the file that declares mkdocs above the document rather than the document's
+/// own. Every other include stays relative to the file that writes it, so no
+/// root applies to one.
+pub(crate) fn snippet_root(
+    snapshot: &SnapshotDiscovery,
+    adapter: Adapter,
+    document: &RepoPath,
+) -> Option<Vec<u8>> {
+    if adapter != Adapter::Markdown {
+        return None;
+    }
+    declared_root(
+        snapshot,
+        document.as_bytes(),
+        crate::route::MKDOCS.declared_by,
+    )
+}
+
+/// Whether a Sphinx root reads this path as one of its own source files,
+/// which is the nearest `conf.py` above it declaring the suffix it carries.
+#[must_use]
+fn declared_source(snapshot: &SnapshotDiscovery, path: &[u8]) -> bool {
+    let Some(root) = declared_root(snapshot, path, SPHINX.declared_by) else {
+        return false;
+    };
+    snapshot.source_suffixes.get(&root).is_some_and(|declared| {
+        declared
+            .iter()
+            .any(|suffix| path.ends_with(suffix.as_bytes()))
+    })
+}
+
+/// Every route the snapshot's documents claim and the document claiming each,
+/// as the routes pages are published at and, apart from them, the page URLs
+/// pages declare they moved away from. The two stay apart because a published
+/// route answers a path as well as a URL while a redirect answers only a URL.
+#[must_use]
+pub(crate) fn published_routes(
+    snapshot: &SnapshotDiscovery,
+) -> (BTreeMap<RepoPath, RepoPath>, BTreeMap<RepoPath, RepoPath>) {
+    let names = published_by(snapshot, &DOCUSAURUS);
+    let redirects = published_by(snapshot, &DIRECTORY_PAGES);
+    let mut published: Vec<(RepoPath, RepoPath)> = Vec::new();
+    let mut moved: Vec<(RepoPath, RepoPath)> = Vec::new();
+    if !names && !redirects {
+        return (sole_claims(published), sole_claims(moved));
+    }
+    for record in &snapshot.documents {
+        let DocumentStatus::Scanned(scanned) = &record.status else {
+            continue;
+        };
+        if !matches!(record.adapter, Some(Adapter::Markdown | Adapter::Mdx)) {
+            continue;
+        }
+        if names
+            && let Some(route) =
+                published_route(snapshot, &record.path, scanned.declared_name.as_deref())
+        {
+            published.push((route, record.path.clone()));
+        }
+        if redirects {
+            moved.extend(
+                moved_from(snapshot, &record.path, &scanned.declared_redirects)
+                    .into_iter()
+                    .map(|route| (route, record.path.clone())),
+            );
+        }
+    }
+    (sole_claims(published), sole_claims(moved))
+}
+
+/// Every page URL one document declares it moved away from. The block holds
+/// what a browser would ask for, so each entry is read against the directory
+/// the page's own URL sits in, which is one level above the route the page is
+/// published at. An entry opening with a slash names a site route, and stays
+/// where every site route stays. A router that serves no page URL above this
+/// document leaves the block meaning nothing.
+fn moved_from(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    declared: &[String],
+) -> Vec<RepoPath> {
+    if declared.is_empty() || site_root(snapshot, document.as_bytes(), &DIRECTORY_PAGES).is_none() {
+        return Vec::new();
+    }
+    let published = page_route(document.as_bytes(), true);
+    let parent = directory(&published).to_vec();
+    declared
+        .iter()
+        .filter(|entry| !entry.starts_with('/'))
+        .filter_map(|entry| normalized_path_under(&parent, false, entry).ok())
+        .map(|(route, _kind)| route)
+        .collect()
+}
+
+/// Where one document is published: the name it declares in place of its own
+/// file name, that name under the content root it sits in when it opens with
+/// a slash, and the route its own path spells when it declares nothing.
+fn published_route(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    declared: Option<&str>,
+) -> Option<RepoPath> {
+    let raw = document.as_bytes();
+    let Some(name) = declared else {
+        return RepoPath::from_bytes(page_route(raw, false));
+    };
+    let Some(absolute) = name.strip_prefix('/') else {
+        return RepoPath::from_bytes(join(directory(raw), name.as_bytes()));
+    };
+    let site = declared_root(snapshot, raw, DOCUSAURUS.declared_by)?;
+    let root = content_root(&site, raw).unwrap_or(site);
+    RepoPath::from_bytes(join(&root, absolute.as_bytes()))
+}
+
+/// Every directory this tree declares one rule's generator in. A declaration
+/// under a tree the scan excludes belongs to a fixture or a dependency rather
+/// than to a site the repository publishes, so it names no directory here.
+fn declaring_directories(snapshot: &SnapshotDiscovery, rule: &RouteRule) -> BTreeSet<Vec<u8>> {
+    snapshot
+        .entries
+        .iter()
+        .filter(|(path, (mode, _))| {
+            matches!(mode, GitMode::RegularFile | GitMode::ExecutableFile)
+                && !excluded_by_built_in(path.as_bytes())
+        })
+        .filter_map(|(path, _)| {
+            let name = rule
+                .declared_by
+                .iter()
+                .filter(|name| declaring_directory(path.as_bytes(), name).is_some())
+                .max_by_key(|name| name.len())?;
+            let bound = !SHARED_CONFIGS.contains(name)
+                || snapshot
+                    .bound_configs
+                    .get(path)
+                    .is_some_and(|owner| *owner == rule.declared_by);
+            declaring_directory(path.as_bytes(), name)
+                .filter(|_| bound)
+                .map(<[u8]>::to_vec)
+        })
+        .collect()
+}
+
+/// Whether the routes one rule serves are read for this tree at all: a
+/// configuration file selecting the rule somewhere in the tree, or a
+/// declaration naming it.
+fn published_by(snapshot: &SnapshotDiscovery, rule: &RouteRule) -> bool {
+    !declaring_directories(snapshot, rule).is_empty()
+        || snapshot
+            .declared_routers
+            .values()
+            .any(|(declared, _)| declared == rule.name)
+}
+
+/// The directory each generator this tree declares exactly once is configured
+/// in. Which sites a tree declares is a question about the whole tree, since
+/// a site under `website/` commonly reads `../docs` and the configuration
+/// naming that directory is one this engine does not read. A generator
+/// declared in several places fixes no owner for a document outside them all.
+#[must_use]
+pub(crate) fn sole_sites(snapshot: &SnapshotDiscovery) -> BTreeMap<&'static str, Vec<u8>> {
+    ROUTERS
+        .iter()
+        .filter_map(|rule| {
+            let mut declaring = declaring_directories(snapshot, rule).into_iter();
+            let root = declaring.next()?;
+            declaring.next().is_none().then_some((rule.name, root))
+        })
+        .collect()
+}
+
+/// Which site owns a document: the nearest configuration above it, the router
+/// the repository declares for the directory, and failing both the single
+/// site the tree declares. A rule serving a built page or a built route
+/// answers for the build rather than for the tree, so widening one would
+/// withhold an answer for a document no site publishes, and those keep the
+/// ancestor walk. The rest can only reach a file the tree already holds.
+pub fn site_root(snapshot: &SnapshotDiscovery, path: &[u8], rule: &RouteRule) -> Option<Vec<u8>> {
+    let widens = !rule.serves(Spelling::BuiltRoute) && !rule.serves(Spelling::BuiltPage);
+    let tree = snapshot.sole_sites.get(rule.name).filter(|_| widens);
+    declared_root(snapshot, path, rule.declared_by)
+        .or_else(|| declared_site(snapshot, path, rule))
+        .or_else(|| tree.cloned())
+}
+
+/// The nearest directory above the document whose own declaration names this
+/// rule's router. A repository may only name a rule whose every spelling
+/// resolves a destination against the tree, so what it declares widens what
+/// resolves and withholds no answer.
+fn declared_site(
+    snapshot: &SnapshotDiscovery,
+    document: &[u8],
+    rule: &RouteRule,
+) -> Option<Vec<u8>> {
+    if !declarable(rule) {
+        return None;
+    }
+    let root = ancestor_root(document, &|directory| {
+        declared_at(snapshot, directory).is_some()
+    })?;
+    (declared_at(snapshot, &root)?.0 == rule.name).then_some(root)
+}
+
+/// What a declaration sitting in this exact directory names. The declarations
+/// a comparison reads are the candidate's on both sides, so this asks what
+/// was declared rather than which tree holds the file.
+pub(crate) fn declared_at<'snapshot>(
+    snapshot: &'snapshot SnapshotDiscovery,
+    directory: &[u8],
+) -> Option<&'snapshot (String, Option<String>)> {
+    RepoPath::from_bytes(join(directory, ROUTER_DECLARATION.as_bytes()))
+        .and_then(|path| snapshot.declared_routers.get(&path))
+}
+
+/// The nearest directory on the document's ancestor chain holding one of the
+/// named files, which is where a generator's own configuration selects its
+/// rule and where a repository's own declaration sits.
+pub(crate) fn declared_root(
+    snapshot: &SnapshotDiscovery,
+    document: &[u8],
+    declared_by: &[&str],
+) -> Option<Vec<u8>> {
+    ancestor_root(document, &|directory| {
+        declared_by.iter().any(|name| {
+            let path = join(directory, name.as_bytes());
+            let bound = !SHARED_CONFIGS.contains(name)
+                || RepoPath::from_bytes(path.clone())
+                    .and_then(|path| snapshot.bound_configs.get(&path))
+                    .is_some_and(|owner| *owner == declared_by);
+            bound && regular_file(snapshot, path)
+        })
+    })
+}
+
+pub(crate) fn regular_file(snapshot: &SnapshotDiscovery, path: Vec<u8>) -> bool {
+    RepoPath::from_bytes(path).is_some_and(|path| {
+        matches!(
+            snapshot.locate(&path),
+            Some(Located::Entry(
+                GitMode::RegularFile | GitMode::ExecutableFile,
+                _
+            ))
+        )
+    })
 }
