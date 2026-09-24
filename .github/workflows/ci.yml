@@ -79,7 +79,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - id: similarity
         if: needs.changes.outputs.code == 'true'
-        name: Derive the similarity comparison
+        name: Derive the similarity base
         shell: bash
         env:
           BEFORE: ${{ github.event.before }}
@@ -94,36 +94,7 @@ jobs:
             schedule|workflow_dispatch) base="$(git rev-parse HEAD^)" ;;
             *) echo "unsupported similarity event: $EVENT" >&2; exit 1 ;;
           esac
-          if [[ ! "$base" =~ ^0+$ ]]; then
-            git cat-file -e "$base^{commit}"
-            base_tree="$(git rev-parse "$base^{tree}")"
-          else
-            base_tree=empty
-          fi
-          policy="$(scripts/similarity-gate.sh --policy)"
-          cache_safe=true
-          if [[ "$EVENT" == pull_request ]] || [[ "$base_tree" == empty ]]; then
-            cache_safe=false
-          elif ! git diff --quiet "$base" HEAD -- \
-            .github/workflows/ci.yml .pre-commit-config.yaml \
-            scripts/similarity-gate.sh Cargo.toml Cargo.lock; then
-            cache_safe=false
-          fi
-          {
-            echo "base=$base"
-            echo "base_tree=$base_tree"
-            echo "current_tree=$(git rev-parse HEAD^{tree})"
-            echo "policy=$policy"
-            echo "cache_safe=$cache_safe"
-          } >> "$GITHUB_OUTPUT"
-      - id: similarity-cache
-        name: Restore the base similarity manifest
-        if: steps.similarity.outputs.cache_safe == 'true'
-        continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/amiss-similarity/manifest
-          key: similarity-v1-${{ steps.similarity.outputs.policy }}-${{ steps.similarity.outputs.base_tree }}
+          echo "base=$base" >> "$GITHUB_OUTPUT"
       - run: prek run --all-files
       # prek runs zizmor offline; the audits that ask GitHub about a pin need a
       # token, so they run here whenever the workflows themselves change.
@@ -136,10 +107,6 @@ jobs:
         run: prek run --all-files --hook-stage pre-push
         env:
           AMISS_SIMILARITY_BASE: ${{ steps.similarity.outputs.base }}
-          AMISS_SIMILARITY_BASE_MANIFEST: ${{ runner.temp }}/amiss-similarity/manifest
-          AMISS_SIMILARITY_CURRENT_MANIFEST: ${{ runner.temp }}/amiss-similarity/current.manifest
-          AMISS_SIMILARITY_CURRENT_TREE: ${{ steps.similarity.outputs.current_tree }}
-          AMISS_SIMILARITY_POLICY: ${{ steps.similarity.outputs.policy }}
           SKIP: nextest
       - if: needs.changes.outputs.code == 'true'
         run: rustup toolchain install nightly-2026-08-28 --profile minimal
@@ -152,26 +119,6 @@ jobs:
           --locked -- --ignored --exact
         env:
           AMISS_RUSTDOC_TOOLCHAIN: nightly-2026-08-28
-      - id: current-similarity-cache
-        name: Find the current similarity manifest
-        if: needs.changes.outputs.code == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          lookup-only: true
-          path: ${{ runner.temp }}/amiss-similarity/manifest
-          key: similarity-v1-${{ steps.similarity.outputs.policy }}-${{ steps.similarity.outputs.current_tree }}
-      - name: Stage the current similarity manifest
-        if: needs.changes.outputs.code == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.current-similarity-cache.outputs.cache-hit != 'true'
-        shell: bash
-        run: install -D -m 0644 "${{ runner.temp }}/amiss-similarity/current.manifest" "${{ runner.temp }}/amiss-similarity/manifest"
-      - name: Save the current similarity manifest
-        if: needs.changes.outputs.code == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.current-similarity-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/amiss-similarity/manifest
-          key: similarity-v1-${{ steps.similarity.outputs.policy }}-${{ steps.similarity.outputs.current_tree }}
 
   # The scanner reads its own repository under enforce, through the very
   # action a consumer pins: the engine is built from this pull request, the
