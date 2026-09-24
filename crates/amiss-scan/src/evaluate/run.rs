@@ -194,10 +194,6 @@ fn exception_targets(findings: &[Finding]) -> BTreeMap<Digest, usize> {
     targets
 }
 
-pub(super) fn candidate_digest_of(finding: &Finding) -> Option<Digest> {
-    finding.candidate_fact.as_ref().map(|fact| fact.digest)
-}
-
 /// Steps four and five with their defect findings: exact active debt, one
 /// exact selected waiver, the closed defect rows in construction order, and
 /// the overlap law that applies neither when both are valid.

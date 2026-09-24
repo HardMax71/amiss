@@ -6,8 +6,8 @@ use amiss_wire::model::UtcInstant;
 use amiss_wire::report::FindingKind;
 use amiss_wire::report::model::ExceptionDiagnostic;
 
+use super::Finding;
 use super::control::control_row;
-use super::{Finding, candidate_digest_of};
 
 fn debt_diagnostic(
     item: &amiss_wire::controls::DebtItem,
@@ -46,7 +46,10 @@ pub(super) fn debt_pass(
         let Some(target) = targets.get(&item.finding_key).copied() else {
             continue;
         };
-        let Some(current) = findings.get(target).and_then(candidate_digest_of) else {
+        let Some(current) = findings
+            .get(target)
+            .and_then(|finding| finding.candidate_fact.as_ref().map(|fact| fact.digest))
+        else {
             continue;
         };
         let expired = *instant >= item.expires_at;
