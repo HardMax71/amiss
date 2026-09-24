@@ -11,8 +11,8 @@ use amiss_scan::policy::{
 };
 use amiss_scan::{Includes, PolicySide};
 use amiss_wire::controls::{
-    BlobLineSelection, Disposition, DocumentInclude, FACT_DOMAIN, FINDING_KEY_DOMAIN,
-    FindingDisposition, IncludeKind, ProjectionAssertion, ProjectionKind, ProjectionSink,
+    BlobLineSelection, DocumentInclude, FACT_DOMAIN, FINDING_KEY_DOMAIN, FindingDisposition,
+    IncludeKind, PolicyDisposition, ProjectionAssertion, ProjectionKind, ProjectionSink,
     ProjectionSource, PromotableFindingKind, ResourceName, ScannerPolicy, ScannerPolicySchema,
 };
 
@@ -236,7 +236,7 @@ fn the_union_carries_both_suffixes_but_the_candidate_binding() {
     );
 }
 
-fn disposition_side(rows: &[(PromotableFindingKind, Disposition)]) -> PolicySide {
+fn disposition_side(rows: &[(PromotableFindingKind, PolicyDisposition)]) -> PolicySide {
     let mut finding_dispositions = rows
         .iter()
         .map(|(finding_kind, disposition)| FindingDisposition {
@@ -258,7 +258,7 @@ fn disposition_side(rows: &[(PromotableFindingKind, Disposition)]) -> PolicySide
 fn a_disposition_weakens_only_by_dropping_below_the_base() {
     let raised = &[(
         PromotableFindingKind::ExplicitTargetMissing,
-        Disposition::Fail,
+        PolicyDisposition::Fail,
     )];
     let weakened_rule = "policy/disposition/explicit-target-missing";
     let holds = effects(
@@ -278,7 +278,7 @@ fn a_disposition_weakens_only_by_dropping_below_the_base() {
         &disposition_side(raised),
         &disposition_side(&[(
             PromotableFindingKind::ExplicitTargetMissing,
-            Disposition::Warn,
+            PolicyDisposition::Warn,
         )]),
         &|_path| InventoryState::Scanned,
     );

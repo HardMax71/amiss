@@ -40,7 +40,7 @@ pub enum IncludeKind {
     DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
-pub enum Disposition {
+pub enum PolicyDisposition {
     Warn,
     Fail,
 }
