@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use amiss_scan::claim::{ClaimCarrier, ClaimMissingReason, ClaimOutcome, ClaimVerdict};
 use amiss_scan::evaluate::claim_groups;
 use amiss_scan::policy::{InventoryState, effects};
-use amiss_scan::scan::SpanDisplay;
+use amiss_scan::scanned::SpanDisplay;
 use amiss_scan::{Includes, PolicySide};
 use amiss_wire::controls::{DocumentInclude, IncludeKind, ScannerPolicy, ScannerPolicySchema};
 use amiss_wire::model::{RepoPath, RepoPathText};

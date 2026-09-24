@@ -154,7 +154,7 @@ fn resolved_observation(
     adapter: Adapter,
     adapter_contract_digest: amiss_wire::model::Digest,
     path: &RepoPath,
-    occurrence: &crate::scan::ScannedOccurrence,
+    occurrence: &crate::scanned::ScannedOccurrence,
 ) -> Result<Observation, Error> {
     let (intent, resolution, external_destination) =
         resolver.resolve_scanned(context.forge, context.semantic, adapter, path, occurrence)?;
@@ -265,12 +265,12 @@ fn effective_limits(
 /// forms stay for the governed boundary.
 fn document_claims(
     resolver: &mut Resolver<'_>,
-    document: (&RepoPath, &crate::scan::Scanned),
+    document: (&RepoPath, &crate::scanned::Scanned),
     outcomes: &mut Vec<crate::claim::ClaimOutcome>,
 ) -> Result<(), ErrorDetail> {
     let (path, scanned) = document;
     for governed in &scanned.governed {
-        let crate::claim::GovernedForm::Value(claim) = &governed.form else {
+        let crate::scanned::GovernedForm::Value(claim) = &governed.form else {
             continue;
         };
         let verdict = resolver

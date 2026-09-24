@@ -153,7 +153,7 @@ fn claim_under(adapter: Adapter, bytes: &[u8]) {
             start <= end && end <= bytes.len(),
             "governed spans stay inside the source"
         );
-        let amiss_scan::claim::GovernedForm::Value(claim) = &source.form else {
+        let amiss_scan::scanned::GovernedForm::Value(claim) = &source.form else {
             continue;
         };
         assert!(

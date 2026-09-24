@@ -9,7 +9,7 @@ use amiss_scan::evaluate::{
 use amiss_scan::observe::{ObservationIdentity, observation_input};
 use amiss_scan::policy::{Effects, TimeContext, WaiverContext};
 use amiss_scan::resolve::{Intent, Resolution};
-use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
+use amiss_scan::scanned::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{Profile, TargetKind};
 use amiss_wire::envelope::document_digest;
 use amiss_wire::extraction::SourceConstruct;

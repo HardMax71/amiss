@@ -9,7 +9,9 @@ use crate::resolve::{LineRange, named_region_bytes, selected_line_bytes};
 use crate::resources::crossing;
 use crate::{Error, lfs};
 
-use super::{inventory, normalized_line_endings};
+use super::inventory;
+
+use crate::scan::normalized_line_endings;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RepositoryProjectionLimits {

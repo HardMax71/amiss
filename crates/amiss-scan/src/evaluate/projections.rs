@@ -3,7 +3,9 @@ use amiss_wire::model::RepoPath;
 use amiss_wire::report::FindingKind;
 use amiss_wire::report::model::FindingFactEvidence;
 
-use crate::projection::{Outcome, Verdict};
+use crate::projection::Outcome;
+
+use crate::scanned::Verdict;
 
 use super::Finding;
 use super::claims::source_multiplicities;

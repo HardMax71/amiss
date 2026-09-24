@@ -1,19 +1,18 @@
 use sha2::Digest as _;
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use amiss_wire::controls::{ProjectionAssertion, ProjectionKind, ProjectionSource};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPath};
-use amiss_wire::report::model::{
-    ProjectionDifference, ProjectionObserved, RowsProjectionDifference,
-};
+use amiss_wire::report::model::ProjectionObserved;
 
 use crate::Error;
 use crate::discovery::{DocumentStatus, SnapshotDiscovery};
 use crate::resolve::Resolver;
 use crate::resources::Aggregate;
-use crate::scan::{SemanticCodeSink, SpanDisplay};
+use crate::scanned::{
+    CODE_TEXT_SOURCE_DOMAIN, SemanticCodeSink, SpanDisplay, Verdict, unavailable,
+};
 use crate::semantic::RecordSet;
 
 mod inventory;
@@ -23,51 +22,6 @@ pub use repository::{
     RepositoryProjectionLimits, RepositoryProjectionOutcome, RepositoryProjectionRequest,
     project_repository,
 };
-
-pub(crate) const CODE_TEXT_SOURCE_DOMAIN: &str = "amiss/scanner-code-text-source";
-
-pub(crate) fn normalized_line_endings(selected: &[u8]) -> Cow<'_, [u8]> {
-    if !selected.contains(&b'\r') {
-        return Cow::Borrowed(selected);
-    }
-    let mut normalized = Vec::with_capacity(selected.len());
-    let mut bytes = selected.iter().copied().peekable();
-    while let Some(byte) = bytes.next() {
-        if byte == b'\r' {
-            if bytes.peek() == Some(&b'\n') {
-                let _line_feed = bytes.next();
-            }
-            normalized.push(b'\n');
-        } else {
-            normalized.push(byte);
-        }
-    }
-    Cow::Owned(normalized)
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Verdict {
-    Attested,
-    Drift {
-        reason: ProjectionObserved,
-        expected_digest: Option<Digest>,
-        observed_digest: Option<Digest>,
-        expected_bytes: Option<u64>,
-        observed_bytes: Option<u64>,
-        difference: Option<ProjectionDifference<Box<RowsProjectionDifference>>>,
-    },
-}
-
-pub(crate) fn unavailable(reason: ProjectionObserved, sink: &SemanticCodeSink) -> Verdict {
-    Verdict::Drift {
-        reason,
-        expected_digest: None,
-        observed_digest: Some(sink.digest),
-        expected_bytes: None,
-        observed_bytes: Some(u64::try_from(sink.value.len()).unwrap_or(u64::MAX)),
-        difference: None,
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Outcome {
@@ -138,7 +92,7 @@ pub(crate) fn evaluate(
         .filter(|governed| {
             matches!(
                 &governed.form,
-                crate::claim::GovernedForm::Projection { name } if name == &assertion.name
+                crate::scanned::GovernedForm::Projection { name } if name == &assertion.name
             )
         })
         .collect();

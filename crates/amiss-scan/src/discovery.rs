@@ -12,7 +12,9 @@ use crate::document::{Classification, classify, excluded_by_built_in, native_ada
 use crate::policy::Includes;
 use crate::resources::{ScanIdentity, ScanMemo, ScanResources, crossing};
 use crate::route::DOCUSAURUS;
-use crate::scan::{Scanned, ScannedOccurrence, replay_scan_charges, scan_bytes};
+use crate::scan::{replay_scan_charges, scan_bytes};
+use crate::scanned::Scanned;
+use crate::scanned::ScannedOccurrence;
 use crate::{Error, GitDefect, lfs};
 
 /// The deliberate object and format boundaries a discovered document side can

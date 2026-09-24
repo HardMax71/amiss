@@ -4,7 +4,7 @@ use amiss_scan::correlate::{
 };
 use amiss_scan::observe::{ObservationIdentity, observation_input};
 use amiss_scan::resolve::{Intent, Resolution};
-use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
+use amiss_scan::scanned::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{GitMode, TargetKind};
 use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};

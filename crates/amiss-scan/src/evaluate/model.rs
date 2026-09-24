@@ -13,7 +13,7 @@ pub use amiss_wire::report::model::{Attribution, LocationSide, PolicyStep};
 use amiss_wire::report::{Disposition, FixKind};
 use amiss_wire::resolution::Resolution;
 
-use crate::scan::SpanDisplay;
+use crate::scanned::SpanDisplay;
 
 /// One document path's paired sides, reduced to what finding construction
 /// reads. A failed side never reaches this projection: analysis errors are

@@ -1,5 +1,7 @@
 use amiss_scan::claim;
-use amiss_scan::claim::{GovernedForm, ValueClaim, classify};
+use amiss_scan::scanned::GovernedForm;
+use amiss_scan::scanned::ValueClaim;
+use amiss_scan::scanned::classify;
 use amiss_wire::extraction::GovernedDefinition;
 use amiss_wire::model::RepoPath;
 
