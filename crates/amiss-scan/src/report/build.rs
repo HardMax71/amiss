@@ -1,5 +1,4 @@
 use amiss_wire::controls::ResourceName;
-use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::envelope::{Payload as _, sealed_digest};
 use amiss_wire::model::{Digest, RepoPath};
 use amiss_wire::report::model;
@@ -130,7 +129,7 @@ pub(crate) fn construct_with_site(
         findings: finding_rows,
         errors,
     };
-    if let Some(crossing) = output_crossing(&payload)? {
+    if let Some(crossing) = output_crossing(&payload, setup.policy.machine_json_bytes)? {
         let mut details = error_details;
         details.push(crossing);
         return construct_incomplete(setup, &details);
@@ -162,13 +161,16 @@ fn logical_error_set(
     details
 }
 
-/// A non-error envelope whose wire would exceed the reservation becomes the
+/// A non-error envelope whose wire would exceed the ceiling becomes the
 /// output-limit fatal projection carrying the exact counted length. The
 /// payload is counted into a sink before it is spelled, so a report too large
 /// to hold is still one the ceiling can name. Key order is all that separates
 /// this spelling from the canonical one, and order costs no bytes; the seal
 /// around the payload is the same width under any digest.
-fn output_crossing<P: serde::Serialize>(payload: &P) -> Result<Option<ErrorDetail>, crate::Error> {
+fn output_crossing<P: serde::Serialize>(
+    payload: &P,
+    ceiling: u64,
+) -> Result<Option<ErrorDetail>, crate::Error> {
     let mut payload_counter = countio::Counter::new(std::io::sink());
     serde_json::to_writer(&mut payload_counter, payload)
         .map_err(|_defect| crate::Error::Internal)?;
@@ -187,15 +189,11 @@ fn output_crossing<P: serde::Serialize>(payload: &P) -> Result<Option<ErrorDetai
         .saturating_sub(4)
         .saturating_add(u64::try_from(payload_counter.writer_bytes()).unwrap_or(u64::MAX))
         .saturating_add(1);
-    Ok((wire_length > MACHINE_JSON_BYTES).then_some(ErrorDetail {
+    Ok((wire_length > ceiling).then_some(ErrorDetail {
         code: AnalysisErrorCode::OutputLimitExceeded,
         path: None,
         path_bytes: None,
-        resource: Some((
-            ResourceName::MachineJsonBytes,
-            MACHINE_JSON_BYTES,
-            wire_length,
-        )),
+        resource: Some((ResourceName::MachineJsonBytes, ceiling, wire_length)),
     }))
 }
 
