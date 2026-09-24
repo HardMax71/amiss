@@ -41,6 +41,13 @@ top is the work that does not belong on a developer's machine: the fuzz packages
 whose release builds cost minutes, and mutation, which costs ten of them for a code change. A
 push should not buy what a pull request already measures.
 
+CI also runs the [module-cycles](https://github.com/HardMax71/module-cycles) lint through
+[Dylint](https://github.com/trailofbits/dylint), pinned by commit under `workspace.metadata.dylint`.
+It reports sibling modules that depend on each other in a cycle, where a module counts together
+with everything nested in it and a parent and its own child are never compared. It warns while the
+cycles listed in [#1133](https://github.com/HardMax71/amiss/issues/1133) remain, and denies once
+they are gone.
+
 The shared [change detector](https://github.com/HardMax71/amiss/blob/main/.github/workflows/changes.yml)
 compares Git revisions, including renames and deletions. Documentation-only changes retain the
 cheap hooks, documentation contracts, book build, and self-scan, but skip unrelated platform,

@@ -187,3 +187,9 @@ zizmor = "1.26.1"
 ast-grep = "0.45.3"
 cargo-fuzz = "0.13.2"
 similarity-rs = "0.5.0"
+cargo-dylint = "6.1.0"
+dylint-link = "6.1.0"
+
+# The module-cycles lint, run by cargo dylint in CI.
+[workspace.metadata.dylint]
+libraries = [{ git = "https://github.com/HardMax71/module-cycles", rev = "a320625310c984cf42d0bb7cea3e8bac296d444c" }]
