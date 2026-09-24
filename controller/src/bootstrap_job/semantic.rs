@@ -13,7 +13,7 @@ use amiss_wire::requests::SuppliedSemanticEvidence;
 use amiss_wire::semantic::SemanticEvidence;
 use base64::Engine as _;
 
-use super::plan::normalized_expectations;
+use super::normalized_expectations;
 use super::{
     AcquiredSemanticTemplate, BootstrapJobError, BoundSemanticEvidence,
     SEMANTIC_INPUT_ARTIFACT_BYTES, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
