@@ -22,14 +22,14 @@ Hooks run through [prek](https://github.com/j178/prek): formatting and the cheap
 on commit, then [Clippy](https://github.com/rust-lang/rust-clippy) with
 warnings denied, the full test suite, `cargo deny`, `cargo shear`, and a
 [similarity-rs](https://github.com/mizchi/similarity) twin-function gate on push. The tool
-compares functions within one file, so the gate also concatenates the deliberately parallel
-provider transports, lane-test harnesses, service runtimes, and verification files. It maps
-those generated lines back to their source paths and compares stable pair identities with the
-base Git tree. Every candidate edge must already exist in that base set, so removals pass while
-new relationships, including an equal-count remove-and-replace, fail.
-Main and merge-queue CI cache the derived base manifest by tree and policy identity. Pull requests
-rescan so their private cache scope cannot shadow the default branch; any missing or invalid cache
-is likewise regenerated from Git, so no mutable baseline or allowlist lives in the tree.
+compares functions within one file, so a file that did not change keeps its edges, and the gate
+scans only the Rust files that differ from the base commit, in both trees. It also concatenates
+the deliberately parallel provider transports, lane-test harnesses, service runtimes, and
+verification files, and compares those when one of them changed, mapping the generated lines
+back to their source paths. Pair identities are stable and follow renames. Every candidate edge
+must already exist in the base set, so removals pass while new relationships, including an
+equal-count remove-and-replace, fail. Nothing is cached, and no baseline or allowlist lives in
+the tree.
 A last push-stage hook
 runs [cargo-sweep](https://github.com/holmgr/cargo-sweep) over `target/`, dropping artifacts and
 incremental sessions older than two days; cargo never collects superseded builds, and this
