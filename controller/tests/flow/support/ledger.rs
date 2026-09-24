@@ -179,7 +179,7 @@ impl DeliveryLedger for ScriptedLedger {
 }
 
 pub(crate) fn lease() -> DeliveryLease {
-    lease_with(super::fixtures::binding())
+    lease_with(super::binding())
 }
 
 fn lease_with(check: CheckBinding) -> DeliveryLease {
