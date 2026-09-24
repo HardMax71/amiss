@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.0](https://github.com/HardMax71/amiss/compare/v0.34.0...v0.35.0) - 2026-09-24
+
+### Changes
+
+- name the report's key input ReportFindingKeyInput and drop its MissingResolution alias
+- name the report's observation occurrence ObservedOccurrence
+- name the reader's resolution ReportResolution and drop its aliases
+- make the model RepoPath the report's one path type
+- drop the aliases that only rename a workspace type
+- give each re-exported wire type its one home name
+- move amiss-scan's scan output model into a leaf module
+- break the module cycle at the top of amiss-wire
+- break the two module cycles in test code
+- break the module cycle inside the wire semantic module
+- break the module cycle inside the wire report
+- break the module cycle at the top of amiss-git
+- refuse varints and lengths that overflow 64 bits instead of wrapping them
+- name the controls' key intent RepositoryTargetIntent and drop the report alias
+- name the controls' reference scope ReferenceScope
+- name the policy's disposition PolicyDisposition
+- split route.rs so routing no longer loops through discovery
+- break the module cycle inside resolve
+- break the module cycle inside evaluate
+- break the module cycle between pipeline, report and adoption
+
 ## [0.34.0](https://github.com/HardMax71/amiss/compare/v0.33.0...v0.34.0) - 2026-09-23
 
 ### Changes
