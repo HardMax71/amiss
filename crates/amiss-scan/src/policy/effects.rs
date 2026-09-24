@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_wire::controls::{
-    Disposition as PolicyDisposition, DocumentInclude, FindingDisposition, IncludeKind,
-    ProjectionAssertion, SCANNER_POLICY_PATH, ScannerPolicy,
+    DocumentInclude, FindingDisposition, IncludeKind, PolicyDisposition, ProjectionAssertion,
+    SCANNER_POLICY_PATH, ScannerPolicy,
 };
 use amiss_wire::model::Digest;
 use amiss_wire::model::{RepoPath, RepoPathText};

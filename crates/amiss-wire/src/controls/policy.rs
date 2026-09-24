@@ -7,7 +7,7 @@ use crate::extraction::governed_name_valid;
 
 use crate::model::{Adapter, ArtifactId, RepoPathText};
 
-use super::{Disposition, IncludeKind, PromotableFindingKind, sorted_set};
+use super::{IncludeKind, PolicyDisposition, PromotableFindingKind, sorted_set};
 
 /// Maximum UTF-8 byte length of one exact document suffix selector.
 pub const DOCUMENT_SUFFIX_BYTES: usize = 64;
@@ -72,7 +72,7 @@ pub struct DocumentInclude {
 #[serde(deny_unknown_fields)]
 pub struct FindingDisposition {
     pub finding_kind: PromotableFindingKind,
-    pub disposition: Disposition,
+    pub disposition: PolicyDisposition,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

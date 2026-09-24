@@ -41,7 +41,7 @@ pub use policy::{
 };
 pub use resources::{AnalysisPhase, ResourceName, ResourceNameIter};
 pub use taxonomy::{
-    ContentAvailability, Disposition, EligibleFindingKind, EntryKind, GitMode, IncludeKind,
+    ContentAvailability, EligibleFindingKind, EntryKind, GitMode, IncludeKind, PolicyDisposition,
     Profile, PromotableFindingKind, TargetKind,
 };
 pub use trusted_time::{
