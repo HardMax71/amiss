@@ -49,6 +49,7 @@ fn places_read_in_location_order_and_settle_ties_on_the_finding_key() {
     use amiss_wire::model::RepoPathText;
     use amiss_wire::report::Disposition;
     use amiss_wire::report::model::{Attribution, RepoPath, ReportEnvelope, SourceSpan};
+    use amiss_wire::resolution::ResolutionTag;
 
     let report: ReportEnvelope = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
     let mut payload = report.payload;
@@ -84,7 +85,7 @@ fn places_read_in_location_order_and_settle_ties_on_the_finding_key() {
     let read: Vec<(String, u64, u64, String)> = super::places(
         &payload,
         |path: Option<&RepoPath>| path.map_or_else(|| "-".to_owned(), super::wire_path),
-        &|resolution| crate::render::wire_resolution(resolution, super::wire_path),
+        &|_resolution| (ResolutionTag::Missing, None),
     )
     .iter()
     .map(|place| {
