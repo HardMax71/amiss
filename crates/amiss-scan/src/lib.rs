@@ -18,6 +18,7 @@ pub mod resolve;
 pub mod resources;
 pub mod route;
 pub mod scan;
+pub mod scanned;
 pub mod semantic;
 
 use amiss_md::Fault;
@@ -44,7 +45,8 @@ pub use projection::{
 pub use report::{Built, Setup, SnapshotIdentity, construct, construct_incomplete};
 pub use resolve::{ForgeContext, Intent, Resolution, Resolver, TargetCache};
 pub use resources::{ScanLimits, ScanResources};
-pub use scan::{Scanned, ScannedOccurrence, SpanDisplay, scan_bytes, scan_document};
+pub use scan::{scan_bytes, scan_document};
+pub use scanned::{Scanned, ScannedOccurrence, SpanDisplay};
 
 pub const SOURCE_PROJECTION_DOMAIN: &str = "amiss/scanner-source-projection";
 pub const RAW_DESTINATION_DOMAIN: &str = "amiss/scanner-raw-destination";

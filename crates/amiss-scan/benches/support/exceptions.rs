@@ -10,7 +10,7 @@ use amiss_scan::correlate::{
 use amiss_scan::evaluate::evaluate;
 use amiss_scan::policy::{DebtContext, Effects, TimeContext};
 use amiss_scan::resolve::Intent;
-use amiss_scan::scan::SpanDisplay;
+use amiss_scan::scanned::SpanDisplay;
 use amiss_wire::controls::{
     DebtItem, EligibleFindingKind, Fact, FactEvidence, FactEvidenceKind, FactSchema,
     FindingKeyInput, FindingKeyInputSchema, FindingOccurrence, FindingScope, MissingResolution,

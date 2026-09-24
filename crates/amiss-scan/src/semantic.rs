@@ -11,6 +11,7 @@ mod site;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPath};
 pub use amiss_wire::report::model::SemanticEvidenceProvenance as Provenance;
@@ -134,7 +135,7 @@ pub(crate) fn bind(input: &Input, candidate: Digest) -> Result<Context, ErrorDet
         Input::Template(template) => {
             parsed = amiss_wire::semantic::bind_template(template, candidate)
                 .and_then(|envelope| parse([Ok(envelope)]))
-                .map_err(|error| crate::request::configuration_detail(&error))?;
+                .map_err(|error| configuration_detail(&error))?;
             &parsed
         }
     };
@@ -157,4 +158,39 @@ pub(crate) fn bind(input: &Input, candidate: Digest) -> Result<Context, ErrorDet
         site: inputs.site.clone(),
         provenance: inputs.provenance.clone(),
     })
+}
+
+/// Maps one strict external-input defect into the scanner's public analysis taxonomy.
+#[must_use]
+pub fn configuration_detail(error: &Error) -> ErrorDetail {
+    let analysis = match &error.kind {
+        ErrorKind::Json(message)
+            if message.starts_with("invalid utf-8") || message.starts_with("incomplete utf-8") =>
+        {
+            AnalysisErrorCode::InvalidUtf8
+        }
+        ErrorKind::Json(message) if message.starts_with("duplicate JSON key") => {
+            AnalysisErrorCode::DuplicateJsonKey
+        }
+        ErrorKind::Json(_) => AnalysisErrorCode::InvalidJson,
+        ErrorKind::UnknownField => AnalysisErrorCode::UnknownField,
+        ErrorKind::DigestMismatch => AnalysisErrorCode::DigestMismatch,
+        ErrorKind::UnsortedSet | ErrorKind::DuplicateMember => AnalysisErrorCode::NoncanonicalArray,
+        ErrorKind::MissingField
+        | ErrorKind::WrongType
+        | ErrorKind::InvalidValue
+        | ErrorKind::LimitExceeded
+        | ErrorKind::Inconsistent
+        | ErrorKind::Noncanonical => AnalysisErrorCode::ConfigurationInvalid,
+    };
+    code(analysis)
+}
+
+pub(crate) const fn code(code: AnalysisErrorCode) -> ErrorDetail {
+    ErrorDetail {
+        code,
+        path: None,
+        path_bytes: None,
+        resource: None,
+    }
 }

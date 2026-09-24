@@ -1,7 +1,7 @@
 use amiss_md::extract::BlockKind;
 use amiss_scan::correlate::{Observation, Side};
 use amiss_scan::resolve::{Intent, Resolution};
-use amiss_scan::scan::SpanDisplay;
+use amiss_scan::scanned::SpanDisplay;
 use amiss_wire::controls::{SourceConstruct, TargetKind};
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::IntentKind;

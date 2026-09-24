@@ -9,7 +9,7 @@ use amiss_wire::report::model::{
 use amiss_wire::report::{FindingKind, FixKind};
 
 use crate::claim::{ClaimMissingReason, ClaimVerdict};
-use crate::scan::SpanDisplay;
+use crate::scanned::SpanDisplay;
 
 use super::control::control_fact_finding;
 use super::{Finding, FindingFix};

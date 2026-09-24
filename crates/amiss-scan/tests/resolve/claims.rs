@@ -1,6 +1,8 @@
 #![expect(clippy::expect_used, reason = "fixed claim fixtures must fail loudly")]
 
-use amiss_scan::claim::{ClaimMissingReason, ClaimVerdict, ValueClaim};
+use amiss_scan::claim::{ClaimMissingReason, ClaimVerdict};
+
+use amiss_scan::scanned::ValueClaim;
 use amiss_scan::{Error, ScanLimits};
 use amiss_wire::model::RepoPath;
 

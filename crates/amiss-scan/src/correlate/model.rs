@@ -17,7 +17,7 @@ pub struct Observation {
     pub adapter_contract_digest: Digest,
     pub document: RepoPath,
     pub span: (usize, usize),
-    pub display: crate::scan::SpanDisplay,
+    pub display: crate::scanned::SpanDisplay,
     pub block_kind: amiss_md::extract::BlockKind,
     pub node_path: Vec<usize>,
     pub adapter: Adapter,

@@ -31,7 +31,7 @@ mod site;
 pub(crate) mod syntax;
 mod transclusion;
 
-pub(crate) use line::{LineRange, named_region_bytes, safe_line_number, selected_line_bytes};
+pub(crate) use line::{LineRange, named_region_bytes, selected_line_bytes};
 pub(crate) use transclusion::included_documents;
 
 use anchor::{fragment_resolution, linked_label};
@@ -161,7 +161,7 @@ impl<'a> Resolver<'a> {
         semantic: crate::semantic::View<'_>,
         adapter: Adapter,
         document_path: &RepoPath,
-        occurrence: &crate::scan::ScannedOccurrence,
+        occurrence: &crate::scanned::ScannedOccurrence,
     ) -> Result<(Intent, Resolution, Option<String>), Error> {
         if occurrence.occurrence.construct == SourceConstruct::RstRefRole {
             return self.resolve_label(&occurrence.occurrence.semantic_destination, semantic);

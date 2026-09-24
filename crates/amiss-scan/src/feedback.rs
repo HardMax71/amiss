@@ -7,7 +7,7 @@ use amiss_wire::resolution::Resolution;
 
 use crate::correlate::{Comparison, Observation};
 use crate::evaluate::{Attribution, Finding, LocationSide};
-use crate::scan::SpanDisplay;
+use crate::scanned::SpanDisplay;
 
 use amiss_wire::report::model::FeedbackAction;
 
