@@ -10,9 +10,9 @@ use amiss_wire::resolution::BlobContent;
 use crate::resources::Aggregate;
 use crate::{Error, lfs};
 
-use super::anchor::Anchors;
-use super::line::LineRange;
-use super::{RAW_EVIDENCE_DOMAIN, Resolver, TARGET_PROJECTION_DOMAIN, TargetCache};
+use super::{
+    Anchors, LineRange, RAW_EVIDENCE_DOMAIN, Resolver, TARGET_PROJECTION_DOMAIN, TargetCache,
+};
 
 #[derive(serde::Serialize)]
 struct TargetProjection {
