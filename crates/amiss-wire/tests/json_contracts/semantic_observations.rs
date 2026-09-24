@@ -4,8 +4,8 @@ use amiss_wire::{artifact_id, repo_path_text};
 use amiss_wire::{
     assessment::Nullable,
     semantic::{
-        self, SemanticEvidence, SemanticEvidenceTemplate, TemplateSchema,
-        observation::{Observation, SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation},
+        self, Observation, SemanticEvidence, SemanticEvidenceTemplate, TemplateSchema,
+        observation::{SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation},
         record,
     },
 };
@@ -54,7 +54,7 @@ fn observations() -> Vec<(Observation, Vec<u8>)> {
     };
     let expected = serde_json_canonicalizer::to_vec(&label).unwrap();
     cases.push((Observation::Sphinx(label), expected));
-    let records = record::Observation {
+    let records = record::RecordSetObservation {
         kind: record::ObservationKind::Current,
         name: artifact_id!("rust/api"),
         records: vec![record::Record {

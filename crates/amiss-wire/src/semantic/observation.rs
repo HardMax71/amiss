@@ -9,14 +9,6 @@ pub const SPHINX_INVENTORY_VERSION: &str = "1";
 pub const SITE_BUILD_VERSION: &str = "0.5.1";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Observation {
-    Site(SiteBuildObservation),
-    Sphinx(SphinxLabelObservation),
-    Record(super::record::Observation),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum SiteBuildObservation {
     #[serde(rename = "site-route")]

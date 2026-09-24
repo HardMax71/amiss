@@ -9,7 +9,7 @@ use amiss_wire::de::{Error, ErrorKind, fail};
 use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{BrokenRedirectReason, FindingFactEvidence};
-use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
+use amiss_wire::semantic::{Observation, observation::SiteBuildObservation};
 
 use super::{
     SiteClaim, SiteDefect, SiteEvaluation, SiteNavigation, SitePageBacking, SiteRoute, SiteTarget,

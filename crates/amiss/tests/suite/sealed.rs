@@ -30,8 +30,9 @@ use amiss_wire::requests::{
     SnapshotRequest, SuppliedControl, SuppliedSemanticEvidence, commit_candidate_identity_digest,
 };
 use amiss_wire::resolution::{BlobTarget, Target};
-use amiss_wire::semantic::observation::{
-    Observation, SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation,
+use amiss_wire::semantic::{
+    Observation,
+    observation::{SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation},
 };
 use amiss_wire::semantic::{PayloadSchema, SemanticEvidence, SemanticProducer, SemanticSubject};
 

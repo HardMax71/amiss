@@ -20,8 +20,8 @@ use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::requests::{ControlsRequest, SuppliedSemanticEvidence};
+use amiss_wire::semantic::{Observation, record};
 use amiss_wire::semantic::{PayloadSchema, SemanticEvidence, SemanticProducer, SemanticSubject};
-use amiss_wire::semantic::{observation::Observation, record};
 
 fn engine() -> EngineProvenance {
     EngineProvenance {
@@ -95,17 +95,19 @@ fn semantic_inputs(
             ),
         },
         complete,
-        observations: vec![Cow::Owned(Observation::Record(record::Observation {
-            kind: record::ObservationKind::Current,
-            name: ArtifactId::try_from(set.to_owned()).unwrap(),
-            records: records
-                .iter()
-                .map(|(key, value)| record::Record {
-                    key: (*key).to_owned(),
-                    value: (*value).to_owned(),
-                })
-                .collect(),
-        }))],
+        observations: vec![Cow::Owned(Observation::Record(
+            record::RecordSetObservation {
+                kind: record::ObservationKind::Current,
+                name: ArtifactId::try_from(set.to_owned()).unwrap(),
+                records: records
+                    .iter()
+                    .map(|(key, value)| record::Record {
+                        key: (*key).to_owned(),
+                        value: (*value).to_owned(),
+                    })
+                    .collect(),
+            },
+        ))],
     };
     let request = ControlsRequest {
         semantic_evidence: vec![SuppliedSemanticEvidence {

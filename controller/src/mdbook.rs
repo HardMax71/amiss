@@ -5,7 +5,7 @@ use amiss_controller_files::read_bounded_at;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPathText;
-use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
+use amiss_wire::semantic::{Observation, observation::SiteBuildObservation};
 use amiss_wire::semantic::{PayloadSchema, SemanticProducer, SemanticSubject};
 use cap_std::fs::Dir;
 

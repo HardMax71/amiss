@@ -18,9 +18,9 @@ use amiss_wire::{
         commit_candidate_identity_digest,
     },
     semantic::{
-        self, SemanticEvidence, SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind,
-        TemplateSchema, bind_template,
-        observation::{Observation, SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation},
+        self, Observation, SemanticEvidence, SemanticEvidenceTemplate, SemanticProducer,
+        SemanticProducerKind, TemplateSchema, bind_template,
+        observation::{SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation},
         record,
     },
 };
@@ -157,7 +157,7 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
         (
             SemanticProducerKind::RecordSet,
             record::PRODUCER_VERSION,
-            Observation::Record(record::Observation {
+            Observation::Record(record::RecordSetObservation {
                 kind: record::ObservationKind::Current,
                 name: artifact_id!("rust/api"),
                 records: Vec::new(),

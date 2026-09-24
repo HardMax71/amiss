@@ -5,8 +5,9 @@ use std::sync::Arc;
 use amiss_wire::artifact_id;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
-use amiss_wire::semantic::observation::{
-    Observation, SPHINX_INVENTORY_VERSION, SphinxLabelKind, SphinxLabelObservation,
+use amiss_wire::semantic::{
+    Observation,
+    observation::{SPHINX_INVENTORY_VERSION, SphinxLabelKind, SphinxLabelObservation},
 };
 use amiss_wire::semantic::{SemanticProducer, SemanticProducerKind, TemplateSchema};
 use flate2::{Decompress, FlushDecompress, Status};

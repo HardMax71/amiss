@@ -3,8 +3,8 @@ use amiss_wire::semantic::record::Input;
 use std::borrow::Cow;
 
 use amiss_wire::de::ErrorKind;
+use amiss_wire::semantic::Observation;
 use amiss_wire::semantic::SemanticEvidenceTemplate;
-use amiss_wire::semantic::observation::Observation;
 use amiss_wire::semantic::record::{template, validate_records};
 use serde_json::Value;
 
