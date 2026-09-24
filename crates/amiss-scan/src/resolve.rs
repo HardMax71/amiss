@@ -31,7 +31,7 @@ mod site;
 pub(crate) mod syntax;
 mod transclusion;
 
-pub(crate) use line::{LineRange, named_region_bytes, safe_line_number, selected_line_bytes};
+pub(crate) use line::{named_region_bytes, safe_line_number, selected_line_bytes};
 pub(crate) use transclusion::included_documents;
 
 use anchor::{fragment_resolution, linked_label};
@@ -43,6 +43,24 @@ use syntax::{
 pub use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 pub const TARGET_PROJECTION_DOMAIN: &str = "amiss/scanner-target-projection";
 pub const TARGET_LINE_PROJECTION_DOMAIN: &str = "amiss/scanner-target-line-projection";
+
+/// A target's heading identities, built once and then answered from memory.
+/// `Unevaluable` records that the parse was refused or unaffordable, which is
+/// not the same as a document that publishes nothing.
+#[derive(Debug)]
+enum Anchors {
+    Unread,
+    Unevaluable,
+    Published(anchor::AnchorIndex),
+    Partial(anchor::AnchorIndex),
+}
+
+/// An inclusive, one-indexed selection of raw source lines.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct LineRange {
+    pub(crate) first: u64,
+    pub(crate) last: u64,
+}
 
 /// The occurrence's target intent, fixed after component splitting and before
 /// any repository lookup. This, not the eventual resolution, fixes identity

@@ -15,18 +15,7 @@ use crate::route::unrouted;
 use super::content::{Content, content_cache};
 use super::line::{line_fragment, line_resolution};
 use super::transclusion::{Source, expand, templated};
-use super::{Intent, Resolution, Resolver, lookup};
-
-/// A target's heading identities, built once and then answered from memory.
-/// `Unevaluable` records that the parse was refused or unaffordable, which is
-/// not the same as a document that publishes nothing.
-#[derive(Debug)]
-pub(super) enum Anchors {
-    Unread,
-    Unevaluable,
-    Published(AnchorIndex),
-    Partial(AnchorIndex),
-}
+use super::{Anchors, Intent, Resolution, Resolver, lookup};
 
 #[derive(Debug)]
 pub(super) struct AnchorIndex {
