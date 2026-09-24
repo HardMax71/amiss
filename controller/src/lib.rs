@@ -55,23 +55,22 @@ pub use bootstrap_result::{BootstrapTermination, classify_bootstrap_result};
 pub use bootstrap_runner::{BootstrapRun, run_bootstrap};
 pub use clock::{ControllerClock, SystemClock};
 pub use external::{
-    ForgeEvidence, ForgePresence, ForgeProducer, ForgeRefFamily, ForgeTail, ForgeVisibility,
+    ForgeEvidence, ForgePresence, ForgeProducer, ForgeRefFamily, ForgeRepository, ForgeTail,
     forge_evidence, forge_repository_evidence,
 };
 pub use file_ledger::{
     FileLedger, FileLedgerCleanup, FileLedgerConfig, FileLedgerError, FileLedgerRoot,
 };
 pub use identity::{
-    AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, ChangeState,
-    ControllerEvaluationId, Delivery, DeliveryIdentity, IntegrationId, MergeRequestChange, OidPair,
-    OidcToken, OpaqueId, PipelineJob, ProviderFacts, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity, PullRequestChange,
-    RunIdentity, RunRefs,
+    AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, ChangeState, Delivery,
+    DeliveryIdentity, MergeRequestChange, OidPair, OidcToken, OpaqueId, PipelineJob, ProviderFacts,
+    ProviderIdentity, ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
+    PullRequestChange, RunIdentity, RunRefs,
 };
 pub use ingress::{
     AcceptedDelivery, DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits,
-    IngressPolicy, ReplayIdentity, ReplayWindow, SignedTimePolicy, TrustAnchorId, TrustSetId,
-    UntrustedDelivery, VerifiedDelivery,
+    IngressPolicy, ReplayIdentity, ReplayWindow, SignedTimePolicy, UntrustedDelivery,
+    VerifiedDelivery,
 };
 pub use intersphinx::{
     INTERSPHINX_INVENTORY_BYTES, IntersphinxError, IntersphinxInventory, intersphinx_evidence,
@@ -118,5 +117,5 @@ pub use response_body::read_response_body;
 pub use spelling::{ref_span, spelled_segments};
 pub use webhook::{
     GitHubWebhook, GitLabWebhook, GiteaWebhook, SignedRequestProof, WebhookError, WebhookKey,
-    WebhookKeyring, WebhookKeyringError, WebhookProof,
+    WebhookKeyring, WebhookKeyringError,
 };

@@ -1,4 +1,4 @@
-use amiss_controller::{IntegrationId, ProviderIdentity, TrustAnchorId};
+use amiss_controller::{OpaqueId, ProviderIdentity};
 use amiss_wire::model::Oid;
 use jsonwebtoken::jwk::JwkSet;
 use jsonwebtoken::{AlgorithmFamily, DecodingKey};
@@ -17,7 +17,7 @@ pub struct RunnerTrust {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PolicyBinding {
-    pub integration: IntegrationId,
+    pub integration: OpaqueId,
     pub project_id: u64,
     pub project_path: String,
     pub target_branch: String,
@@ -30,7 +30,7 @@ pub struct PolicyBinding {
 #[derive(Clone, Debug)]
 pub struct OidcPublicKey {
     pub kid: String,
-    pub anchor: TrustAnchorId,
+    pub anchor: OpaqueId,
     pub(crate) key: DecodingKey,
 }
 
@@ -42,7 +42,7 @@ impl OidcPublicKey {
     /// The key identifier or PEM public key is invalid.
     pub fn from_rsa_pem(
         kid: String,
-        anchor: TrustAnchorId,
+        anchor: OpaqueId,
         pem: &[u8],
     ) -> Result<Self, GitLabConfigError> {
         valid_kid(&kid)?;
@@ -58,7 +58,7 @@ impl OidcPublicKey {
 /// The set is empty, oversized, duplicated, non-RSA, or not exactly anchored.
 pub fn public_keys_from_jwks(
     jwks: &JwkSet,
-    anchors: &BTreeMap<String, TrustAnchorId>,
+    anchors: &BTreeMap<String, OpaqueId>,
 ) -> Result<Vec<OidcPublicKey>, GitLabConfigError> {
     if jwks.keys.is_empty() || jwks.keys.len() > MAX_KEYS || jwks.keys.len() != anchors.len() {
         return Err(GitLabConfigError::invalid());

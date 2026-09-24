@@ -4,9 +4,9 @@ use sha2::Digest as _;
 use std::sync::Arc;
 
 use amiss_controller::{
-    IntegrationId, OidPair, OpaqueId, PlanScope, ProviderIdentity, RelationAcquiredRoot,
-    RelationLimits, RelationPlan, RelationStatusDestination, RelationSubject,
-    RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_transition,
+    OidPair, OpaqueId, PlanScope, ProviderIdentity, RelationAcquiredRoot, RelationLimits,
+    RelationPlan, RelationStatusDestination, RelationSubject, RelationSubjectTransition,
+    RelationTransition, TriggeredRelation, relation_transition,
 };
 use amiss_controller::{opaque_id, provider_namespace};
 use amiss_wire::artifact_id;
@@ -42,7 +42,7 @@ fn subject(role: &str, repository_name: &str, source_path: &str) -> RelationSubj
                 namespace: provider_namespace!("github"),
                 instance: opaque_id!("github.com"),
             },
-            integration: IntegrationId::try_from(format!("installation/{repository_name}"))
+            integration: OpaqueId::try_from(format!("installation/{repository_name}"))
                 .expect("integration"),
             repository: RepositoryIdentity::github("acme".to_owned(), repository_name.to_owned())
                 .expect("fixed repository"),

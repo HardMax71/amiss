@@ -12,4 +12,4 @@ pub use gitea::GiteaWebhook;
 pub use github::GitHubWebhook;
 pub use gitlab::GitLabWebhook;
 pub use keyring::{WebhookKey, WebhookKeyring};
-pub use proof::{SignedRequestProof, WebhookProof};
+pub use proof::SignedRequestProof;

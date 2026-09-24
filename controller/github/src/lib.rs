@@ -11,10 +11,10 @@ use std::sync::Arc;
 
 use amiss_controller::{
     AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, ChangeState, CheckConclusion,
-    GitHubWebhook, IngressCheck, IntegrationId, OpaqueId, ProviderAdapter, ProviderError,
-    ProviderFacts, ProviderIdentity, ProviderNamespace, ProviderRun, ProviderRunAttempt,
-    ProviderRunIdentity, Publication, PullRequestChange, SignedTimePolicy, VerifiedDelivery,
-    WebhookProof, WorkflowArtifactExpectation,
+    GitHubWebhook, IngressCheck, OpaqueId, ProviderAdapter, ProviderError, ProviderFacts,
+    ProviderIdentity, ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
+    Publication, PullRequestChange, SignedRequestProof, SignedTimePolicy, VerifiedDelivery,
+    WorkflowArtifactExpectation,
 };
 use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
@@ -150,7 +150,7 @@ impl GitHubPullRequestSource {
     fn authenticate_facts(
         &self,
         check: IngressCheck<'_>,
-    ) -> Result<Option<(WebhookProof, PullRequestFacts)>, ProviderError> {
+    ) -> Result<Option<(SignedRequestProof, PullRequestFacts)>, ProviderError> {
         let proof = self
             .webhook
             .verify(check)
@@ -369,7 +369,7 @@ fn bind_pull_request(
         ),
     };
     let integration =
-        IntegrationId::try_from(installation_id.to_string()).map_err(|_defect| Authentication)?;
+        OpaqueId::try_from(installation_id.to_string()).map_err(|_defect| Authentication)?;
     let candidate =
         Oid::new(ObjectFormat::Sha1, binding.candidate.to_owned()).ok_or(Authentication)?;
     let candidate_ref = github_ref(binding.candidate_branch).ok_or(Authentication)?;
@@ -553,7 +553,7 @@ fn event_bound_run(
 }
 
 fn provider_run(
-    installation: &IntegrationId,
+    installation: &OpaqueId,
     change: &ChangeLocator,
     candidate: &Oid,
     candidate_ref: &BranchRef,

@@ -4,7 +4,7 @@ use amiss_wire::report::model::ControlsUnavailableReason;
 use amiss_wire::report::{EngineProvenance, ErrorDetail};
 
 use crate::Error;
-use crate::report::{Built, CandidateBlock, Setup, SnapshotIdentity, construct_incomplete};
+use crate::report::{Built, CandidateBlock, GitSnapshotIdentity, Setup, construct_incomplete};
 use crate::resolve::ForgeContext;
 use crate::resources::{ScanLimits, ScanResources};
 
@@ -24,7 +24,7 @@ fn oid_fallback(
     base_oid: &Oid,
     candidate_oid: &Oid,
 ) -> Setup {
-    let placeholder = |oid: &Oid| SnapshotIdentity {
+    let placeholder = |oid: &Oid| GitSnapshotIdentity {
         commit_oid: oid.clone(),
         kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
         object_format: repo.object_format(),

@@ -17,16 +17,19 @@ use amiss_wire::external::{ExternalReason, ExternalVerdict, assess};
 use serde_json::Value;
 
 use super::super::transport::Budget;
-use super::{GitLabVerification, PRODUCER_NAME, Presence, RefFamily, Visibility, verify_external};
+use super::{
+    ForgePresence, ForgeRefFamily, ForgeRepository, GitLabVerification, PRODUCER_NAME,
+    verify_external,
+};
 
 #[derive(Default)]
 struct ScriptedRest {
-    visibility: BTreeMap<&'static str, Visibility>,
+    visibility: BTreeMap<&'static str, ForgeRepository>,
     heads: BTreeMap<&'static str, Vec<&'static str>>,
     tags: BTreeMap<&'static str, Vec<&'static str>>,
-    files: BTreeMap<(&'static str, &'static str, &'static str), Presence>,
-    trees: BTreeMap<(&'static str, &'static str, &'static str), Presence>,
-    commits: BTreeMap<(&'static str, &'static str), Presence>,
+    files: BTreeMap<(&'static str, &'static str, &'static str), ForgePresence>,
+    trees: BTreeMap<(&'static str, &'static str, &'static str), ForgePresence>,
+    commits: BTreeMap<(&'static str, &'static str), ForgePresence>,
     refs_denied: BTreeSet<&'static str>,
     calls: AtomicUsize,
     unavailable_from: Option<usize>,
@@ -42,8 +45,8 @@ impl ScriptedRest {
     }
 }
 
-fn scripted<K: Ord + Copy>(table: &BTreeMap<K, Presence>, key: K) -> Presence {
-    *table.get(&key).unwrap_or(&Presence::Absent)
+fn scripted<K: Ord + Copy>(table: &BTreeMap<K, ForgePresence>, key: K) -> ForgePresence {
+    *table.get(&key).unwrap_or(&ForgePresence::Absent)
 }
 
 impl GitLabVerification for ScriptedRest {
@@ -55,10 +58,13 @@ impl GitLabVerification for ScriptedRest {
         &self,
         project: &str,
         budget: Budget,
-    ) -> Result<(Visibility, Budget), ProviderError> {
+    ) -> Result<(ForgeRepository, Budget), ProviderError> {
         self.spend()?;
         Ok((
-            *self.visibility.get(project).unwrap_or(&Visibility::Missing),
+            *self
+                .visibility
+                .get(project)
+                .unwrap_or(&ForgeRepository::Missing),
             budget,
         ))
     }
@@ -66,7 +72,7 @@ impl GitLabVerification for ScriptedRest {
     fn matching_refs(
         &self,
         project: &str,
-        family: RefFamily,
+        family: ForgeRefFamily,
         prefix: &str,
         budget: Budget,
     ) -> Result<(Option<Vec<String>>, Budget), ProviderError> {
@@ -75,8 +81,8 @@ impl GitLabVerification for ScriptedRest {
             return Ok((None, budget));
         }
         let table = match family {
-            RefFamily::Heads => &self.heads,
-            RefFamily::Tags => &self.tags,
+            ForgeRefFamily::Heads => &self.heads,
+            ForgeRefFamily::Tags => &self.tags,
         };
         Ok((
             Some(
@@ -98,7 +104,7 @@ impl GitLabVerification for ScriptedRest {
         reference: &str,
         path: &str,
         budget: Budget,
-    ) -> Result<(Presence, Budget), ProviderError> {
+    ) -> Result<(ForgePresence, Budget), ProviderError> {
         self.spend()?;
         Ok((scripted(&self.files, (project, reference, path)), budget))
     }
@@ -109,7 +115,7 @@ impl GitLabVerification for ScriptedRest {
         reference: &str,
         path: &str,
         budget: Budget,
-    ) -> Result<(Presence, Budget), ProviderError> {
+    ) -> Result<(ForgePresence, Budget), ProviderError> {
         self.spend()?;
         Ok((scripted(&self.trees, (project, reference, path)), budget))
     }
@@ -119,7 +125,7 @@ impl GitLabVerification for ScriptedRest {
         project: &str,
         revision: &str,
         budget: Budget,
-    ) -> Result<(Presence, Budget), ProviderError> {
+    ) -> Result<(ForgePresence, Budget), ProviderError> {
         self.spend()?;
         Ok((scripted(&self.commits, (project, revision)), budget))
     }
@@ -130,21 +136,21 @@ const OID: &str = "0123456789abcdef0123456789abcdef01234567";
 fn matrix_rest() -> ScriptedRest {
     ScriptedRest {
         visibility: BTreeMap::from([
-            ("acme/agreed", Visibility::Readable),
-            ("acme/bare", Visibility::Readable),
-            ("acme/deleted", Visibility::Readable),
-            ("acme/denied", Visibility::Denied),
-            ("acme/gone", Visibility::Readable),
-            ("acme/group/widgets", Visibility::Readable),
-            ("acme/head", Visibility::Readable),
-            ("acme/hollow", Visibility::Readable),
-            ("acme/large", Visibility::Readable),
-            ("acme/pinned", Visibility::Readable),
-            ("acme/refless", Visibility::Readable),
-            ("acme/shadow", Visibility::Readable),
-            ("acme/tagged", Visibility::Readable),
-            ("acme/tickets", Visibility::Readable),
-            ("acme/trees", Visibility::Readable),
+            ("acme/agreed", ForgeRepository::Readable),
+            ("acme/bare", ForgeRepository::Readable),
+            ("acme/deleted", ForgeRepository::Readable),
+            ("acme/denied", ForgeRepository::Denied),
+            ("acme/gone", ForgeRepository::Readable),
+            ("acme/group/widgets", ForgeRepository::Readable),
+            ("acme/head", ForgeRepository::Readable),
+            ("acme/hollow", ForgeRepository::Readable),
+            ("acme/large", ForgeRepository::Readable),
+            ("acme/pinned", ForgeRepository::Readable),
+            ("acme/refless", ForgeRepository::Readable),
+            ("acme/shadow", ForgeRepository::Readable),
+            ("acme/tagged", ForgeRepository::Readable),
+            ("acme/tickets", ForgeRepository::Readable),
+            ("acme/trees", ForgeRepository::Readable),
         ]),
         refs_denied: BTreeSet::from(["acme/refless"]),
         heads: BTreeMap::from([
@@ -162,23 +168,23 @@ fn matrix_rest() -> ScriptedRest {
             ("acme/tagged", vec!["v1.0"]),
         ]),
         files: BTreeMap::from([
-            (("acme/agreed", "v1.0", "a.md"), Presence::Present),
+            (("acme/agreed", "v1.0", "a.md"), ForgePresence::Present),
             (
                 ("acme/group/widgets", "feature/x", "docs/a.md"),
-                Presence::Present,
+                ForgePresence::Present,
             ),
-            (("acme/head", "HEAD", "README.md"), Presence::Present),
-            (("acme/large", "main", "big.bin"), Presence::Unknown),
-            (("acme/pinned", OID, "a.md"), Presence::Present),
-            (("acme/tagged", "v1.0", "a.md"), Presence::Present),
+            (("acme/head", "HEAD", "README.md"), ForgePresence::Present),
+            (("acme/large", "main", "big.bin"), ForgePresence::Unknown),
+            (("acme/pinned", OID, "a.md"), ForgePresence::Present),
+            (("acme/tagged", "v1.0", "a.md"), ForgePresence::Present),
         ]),
         trees: BTreeMap::from([
-            (("acme/hollow", "main", "void"), Presence::Unknown),
-            (("acme/trees", "main", "docs"), Presence::Present),
+            (("acme/hollow", "main", "void"), ForgePresence::Unknown),
+            (("acme/trees", "main", "docs"), ForgePresence::Present),
         ]),
         commits: BTreeMap::from([
-            (("acme/head", "HEAD"), Presence::Present),
-            (("acme/pinned", OID), Presence::Present),
+            (("acme/head", "HEAD"), ForgePresence::Present),
+            (("acme/pinned", OID), ForgePresence::Present),
         ]),
         ..ScriptedRest::default()
     }
@@ -265,11 +271,11 @@ fn escaped_spellings_resolve_and_never_refute() {
     .expect("the report fixture yields a plan");
     let rest = ScriptedRest {
         visibility: BTreeMap::from([
-            ("acme/coupled", Visibility::Readable),
-            ("acme/doubled", Visibility::Readable),
-            ("acme/slashed", Visibility::Readable),
-            ("acme/spaced", Visibility::Readable),
-            ("acme/veiled", Visibility::Readable),
+            ("acme/coupled", ForgeRepository::Readable),
+            ("acme/doubled", ForgeRepository::Readable),
+            ("acme/slashed", ForgeRepository::Readable),
+            ("acme/spaced", ForgeRepository::Readable),
+            ("acme/veiled", ForgeRepository::Readable),
         ]),
         heads: BTreeMap::from([
             ("acme/coupled", vec!["main"]),
@@ -278,9 +284,18 @@ fn escaped_spellings_resolve_and_never_refute() {
             ("acme/spaced", vec!["main"]),
         ]),
         files: BTreeMap::from([
-            (("acme/doubled", "main", "My%20File.md"), Presence::Present),
-            (("acme/slashed", "release/x", "a.md"), Presence::Present),
-            (("acme/spaced", "main", "My File.md"), Presence::Present),
+            (
+                ("acme/doubled", "main", "My%20File.md"),
+                ForgePresence::Present,
+            ),
+            (
+                ("acme/slashed", "release/x", "a.md"),
+                ForgePresence::Present,
+            ),
+            (
+                ("acme/spaced", "main", "My File.md"),
+                ForgePresence::Present,
+            ),
         ]),
         ..ScriptedRest::default()
     };
@@ -310,8 +325,8 @@ fn a_rate_limit_keeps_the_partial_evidence() {
     .expect("the report fixture yields a plan");
     let rest = ScriptedRest {
         visibility: BTreeMap::from([
-            ("acme/first", Visibility::Readable),
-            ("acme/second", Visibility::Readable),
+            ("acme/first", ForgeRepository::Readable),
+            ("acme/second", ForgeRepository::Readable),
         ]),
         unavailable_from: Some(1),
         ..ScriptedRest::default()
@@ -334,8 +349,8 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
     .expect("the report fixture yields a plan");
     let rest = ScriptedRest {
         visibility: BTreeMap::from([
-            ("acme/gone", Visibility::Readable),
-            ("acme/private", Visibility::Missing),
+            ("acme/gone", ForgeRepository::Readable),
+            ("acme/private", ForgeRepository::Missing),
         ]),
         heads: BTreeMap::from([("acme/gone", vec!["main"])]),
         ..ScriptedRest::default()

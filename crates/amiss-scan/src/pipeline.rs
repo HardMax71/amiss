@@ -13,7 +13,9 @@ use crate::Error;
 use crate::correlate::{Observation, Side, correlate, unique_path_pairs};
 use crate::discovery::{DocumentStatus, SnapshotDiscovery, discover};
 use crate::observe::{OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_input};
-use crate::report::{Built, CandidateBlock, Setup, SnapshotIdentity, construct_incomplete, detail};
+use crate::report::{
+    Built, CandidateBlock, GitSnapshotIdentity, Setup, construct_incomplete, detail,
+};
 use crate::resolve::{ForgeContext, Resolver, TargetCache};
 use crate::resources::{ScanLimits, ScanResources};
 use crate::semantic::RecordSet;
@@ -36,7 +38,7 @@ use external::ExternalVerified;
 /// side's own tree holds, which the comparison reports on where the snapshot
 /// was read under another side's.
 struct Evaluated {
-    identity: SnapshotIdentity,
+    identity: GitSnapshotIdentity,
     discovery: SnapshotDiscovery,
     side: Side,
     declared: BTreeMap<RepoPath, (String, Option<String>)>,
@@ -55,7 +57,7 @@ pub(crate) struct CandidateEvaluation<'a> {
 }
 
 /// One resolved snapshot root: its tree OID plus the full identity block.
-type ResolvedTree = (Oid, SnapshotIdentity);
+type ResolvedTree = (Oid, GitSnapshotIdentity);
 
 #[derive(Clone, Copy)]
 pub(crate) struct ObservationContext<'a> {
@@ -343,7 +345,7 @@ type PipelineResult<T> = Result<T, PipelineFailure>;
 
 fn controls_failure(
     setup_shell: &SetupShell,
-    base: SnapshotIdentity,
+    base: GitSnapshotIdentity,
     candidate: CandidateBlock,
     reason: ControlsUnavailableReason,
     row: ErrorDetail,
@@ -355,7 +357,7 @@ fn controls_failure(
 
 fn binding_mismatch(
     setup_shell: &SetupShell,
-    base: SnapshotIdentity,
+    base: GitSnapshotIdentity,
     candidate: CandidateBlock,
     row: ErrorDetail,
 ) -> PipelineFailure {
@@ -582,7 +584,7 @@ fn resolve_tree(
     repo: &Repository,
     git_resources: &mut GitResources,
     commit_oid: &Oid,
-) -> Result<(Oid, SnapshotIdentity), ErrorDetail> {
+) -> Result<(Oid, GitSnapshotIdentity), ErrorDetail> {
     let commit_object = repo
         .read_expected(git_resources, commit_oid, ObjectKind::Commit)
         .map_err(|defect| detail(&Error::from(defect), None))?;
@@ -590,7 +592,7 @@ fn resolve_tree(
         .map_err(|defect| detail(&Error::from(defect), None))?;
     Ok((
         commit.tree.clone(),
-        SnapshotIdentity {
+        GitSnapshotIdentity {
             commit_oid: commit_oid.clone(),
             kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
             object_format: repo.object_format(),
@@ -612,7 +614,7 @@ fn evaluate_tree(
     semantic: crate::semantic::View<'_>,
     includes: &crate::policy::Includes,
     declared: Option<&SnapshotDiscovery>,
-    tree: (Oid, SnapshotIdentity),
+    tree: (Oid, GitSnapshotIdentity),
     candidate: Option<CandidateEvaluation<'_>>,
 ) -> Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail> {
     let (tree_oid, identity) = tree;
@@ -676,7 +678,7 @@ pub struct SetupShell {
 }
 
 impl SetupShell {
-    fn with(&self, base: SnapshotIdentity, candidate: CandidateBlock) -> Setup {
+    fn with(&self, base: GitSnapshotIdentity, candidate: CandidateBlock) -> Setup {
         Setup {
             engine: self.engine.clone(),
             profile: self.profile,

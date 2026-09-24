@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use amiss_controller::{
     DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits, IngressPolicy,
-    ProviderIdentity, ReplayWindow, SignedTimePolicy, TrustAnchorId, TrustSetId, UntrustedDelivery,
-    WebhookKey, WebhookKeyring,
+    OpaqueId, ProviderIdentity, ReplayWindow, SignedTimePolicy, UntrustedDelivery, WebhookKey,
+    WebhookKeyring,
 };
 use amiss_controller::{opaque_id, provider_namespace};
 
@@ -16,11 +16,11 @@ static REPLAY_ROUTE: LazyLock<DeliveryRoute> =
 static SIGNED_ROUTE: LazyLock<DeliveryRoute> =
     LazyLock::new(|| route(SignedTimePolicy::Required(Duration::from_mins(5))));
 
-pub(crate) fn anchor(value: &str) -> TrustAnchorId {
-    TrustAnchorId::try_from(value.to_owned()).unwrap()
+pub(crate) fn anchor(value: &str) -> OpaqueId {
+    OpaqueId::try_from(value.to_owned()).unwrap()
 }
 
-pub(crate) fn trust_set() -> TrustSetId {
+pub(crate) fn trust_set() -> OpaqueId {
     opaque_id!("primary-webhooks")
 }
 

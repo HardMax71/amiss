@@ -3,7 +3,7 @@ use sha2::Digest as _;
 mod tests;
 
 use amiss_controller::{
-    IntegrationId, PlanScope, ProviderError, RelationStatusRecord, RelationStatusTarget,
+    OpaqueId, PlanScope, ProviderError, RelationStatusRecord, RelationStatusTarget,
     RelationSubject, RelationSubjectHead, relation_status_publication,
 };
 use amiss_wire::model::{ObjectFormat, Oid};
@@ -106,7 +106,7 @@ fn validate_relation_scope(
     scope: &PlanScope,
     object_format: ObjectFormat,
 ) -> Result<(), ProviderError> {
-    let integration = IntegrationId::try_from(config.installation_id.to_string())
+    let integration = OpaqueId::try_from(config.installation_id.to_string())
         .map_err(|_defect| ProviderError::InvalidResponse)?;
     (scope.provider == config.provider
         && scope.integration == integration

@@ -7,7 +7,7 @@ pub(super) enum RecordSchema {
 use amiss_wire::model::Digest;
 use serde::{Deserialize, Serialize};
 
-use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId};
+use crate::{AcceptedDelivery, CheckBinding, OpaqueId};
 
 use super::model::{StoredDelivery, StoredReplayKeep};
 use super::publication::StoredPublication;
@@ -24,7 +24,7 @@ pub(in crate::file_ledger) struct Record {
     binding: StoredDelivery,
     pub(in crate::file_ledger) replay_keep: StoredReplayKeep,
     check: CheckBinding,
-    evaluation_id: ControllerEvaluationId,
+    evaluation_id: OpaqueId,
     pub(in crate::file_ledger) state: State,
 }
 
@@ -32,7 +32,7 @@ impl Record {
     pub(in crate::file_ledger) fn running(
         delivery: &AcceptedDelivery,
         check: &CheckBinding,
-        evaluation_id: &ControllerEvaluationId,
+        evaluation_id: &OpaqueId,
         owner: [u8; 16],
         now: i64,
         expires_at_unix_millis: i64,
@@ -67,7 +67,7 @@ impl Record {
         Ok(super::delivery_key(&self.binding.identity)? == key)
     }
 
-    pub(in crate::file_ledger) fn evaluation_id(&self) -> ControllerEvaluationId {
+    pub(in crate::file_ledger) fn evaluation_id(&self) -> OpaqueId {
         self.evaluation_id.clone()
     }
 

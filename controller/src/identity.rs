@@ -100,10 +100,6 @@ macro_rules! provider_namespace {
 #[serde(try_from = "String")]
 pub struct OpaqueId(Cow<'static, str>);
 
-pub type ProviderInstance = OpaqueId;
-pub type IntegrationId = OpaqueId;
-pub type ControllerEvaluationId = OpaqueId;
-
 impl OpaqueId {
     const INVALID: &'static str = "invalid opaque identifier";
 
@@ -221,14 +217,14 @@ impl ProviderRunIdentity {
 #[serde(deny_unknown_fields)]
 pub struct ProviderIdentity {
     pub namespace: ProviderNamespace,
-    pub instance: ProviderInstance,
+    pub instance: OpaqueId,
 }
 
 impl ProviderIdentity {
     pub fn new(namespace: String, instance: String) -> Option<Self> {
         Some(Self {
             namespace: ProviderNamespace::try_from(namespace).ok()?,
-            instance: ProviderInstance::try_from(instance).ok()?,
+            instance: OpaqueId::try_from(instance).ok()?,
         })
     }
 }
@@ -237,7 +233,7 @@ impl ProviderIdentity {
 #[serde(deny_unknown_fields)]
 pub struct DeliveryIdentity {
     pub provider: ProviderIdentity,
-    pub integration: IntegrationId,
+    pub integration: OpaqueId,
     pub delivery: Delivery,
 }
 
@@ -408,7 +404,7 @@ pub struct ChangeSnapshot {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProviderFacts {
     pub provider: ProviderIdentity,
-    pub integration: IntegrationId,
+    pub integration: OpaqueId,
     pub change: ChangeLocator,
     pub provider_run: ProviderRunIdentity,
 }

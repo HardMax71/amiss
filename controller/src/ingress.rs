@@ -10,14 +10,11 @@ pub(crate) use binding::RequestBinding;
 
 pub use policy::{IngressCheck, IngressError, IngressLimits, IngressPolicy};
 
-pub type TrustSetId = OpaqueId;
-pub type TrustAnchorId = OpaqueId;
-
 /// Controller-owned routing data selected before request bytes are trusted.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeliveryRoute {
     pub provider: ProviderIdentity,
-    pub trust_set: TrustSetId,
+    pub trust_set: OpaqueId,
     pub signed_time: SignedTimePolicy,
 }
 
@@ -151,8 +148,8 @@ impl AcceptedDelivery {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifiedDelivery {
     facts: ProviderFacts,
-    trust_set: TrustSetId,
-    anchor: TrustAnchorId,
+    trust_set: OpaqueId,
+    anchor: OpaqueId,
     issued_at_unix_millis: Option<i64>,
     replay: ReplayIdentity,
     request: RequestBinding,
@@ -161,8 +158,8 @@ pub struct VerifiedDelivery {
 impl VerifiedDelivery {
     pub(crate) fn from_webhook(
         facts: ProviderFacts,
-        trust_set: TrustSetId,
-        anchor: TrustAnchorId,
+        trust_set: OpaqueId,
+        anchor: OpaqueId,
         issued_at_unix_millis: Option<i64>,
         replay: ReplayIdentity,
         request: RequestBinding,
@@ -181,11 +178,11 @@ impl VerifiedDelivery {
         &self.facts
     }
 
-    pub fn trust_set(&self) -> &TrustSetId {
+    pub fn trust_set(&self) -> &OpaqueId {
         &self.trust_set
     }
 
-    pub fn anchor(&self) -> &TrustAnchorId {
+    pub fn anchor(&self) -> &OpaqueId {
         &self.anchor
     }
 

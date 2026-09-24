@@ -10,7 +10,7 @@ use std::borrow::Cow;
 
 use amiss_git::Repository;
 use amiss_scan::pipeline::{SetupShell, commit_pair};
-use amiss_scan::report::{CandidateBlock, RequestDigests, Setup, SnapshotIdentity};
+use amiss_scan::report::{CandidateBlock, GitSnapshotIdentity, RequestDigests, Setup};
 use amiss_scan::request::controls;
 use amiss_scan::{Effects, semantic};
 use amiss_wire::artifact_id;
@@ -53,8 +53,8 @@ fn policy(projection: &str, source: &serde_json::Value) -> String {
     .unwrap()
 }
 
-fn snapshot(commit: &str, tree: &str) -> SnapshotIdentity {
-    SnapshotIdentity {
+fn snapshot(commit: &str, tree: &str) -> GitSnapshotIdentity {
+    GitSnapshotIdentity {
         commit_oid: Oid::new(ObjectFormat::Sha1, commit.to_owned()).unwrap(),
         kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
         object_format: ObjectFormat::Sha1,

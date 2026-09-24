@@ -13,9 +13,9 @@ use std::time::Duration;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
     AcquiredSemanticTemplate, Acquisition as _, AcquisitionTarget, Change, ChangeLocator, Delivery,
-    DeliveryIdentity, IntegrationId, MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
-    MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair, PolicyControls, ProviderError, ProviderIdentity,
-    ProviderRun, ProviderRunAttempt, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
+    DeliveryIdentity, MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES,
+    OidPair, OpaqueId, PolicyControls, ProviderError, ProviderIdentity, ProviderRun,
+    ProviderRunAttempt, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
     SemanticEvidenceExpectation, WorkflowArtifactExpectation, check_binding, check_plan,
 };
 use amiss_controller::{opaque_id, provider_namespace};
@@ -329,7 +329,7 @@ fn execution() -> ExecutionConstraintDescriptor {
 }
 
 fn provider_run(
-    installation: &IntegrationId,
+    installation: &OpaqueId,
     change: &ChangeLocator,
     candidate: &Oid,
     candidate_ref: &BranchRef,

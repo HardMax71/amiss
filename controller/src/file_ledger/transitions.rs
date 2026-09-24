@@ -1,7 +1,7 @@
 use crate::{
-    AcceptedDelivery, AuthenticatedDelivery, CheckBinding, ControllerEvaluationId, DeliveryClaim,
-    DeliveryLease, DeliveryLedger, LeaseCompletion, LeaseFence, LeaseRenewal, Publication,
-    StageOutcome, StagedPublication,
+    AcceptedDelivery, AuthenticatedDelivery, CheckBinding, DeliveryClaim, DeliveryLease,
+    DeliveryLedger, LeaseCompletion, LeaseFence, LeaseRenewal, OpaqueId, Publication, StageOutcome,
+    StagedPublication,
 };
 
 use super::format::{self, State, StoredPublication};
@@ -195,7 +195,7 @@ fn restage(
     row: &Row,
     lease: &DeliveryLease,
     publication: &Publication,
-    evaluation_id: ControllerEvaluationId,
+    evaluation_id: OpaqueId,
     fence: u64,
     stored: StoredPublication,
 ) -> Result<StageOutcome, FileLedgerError> {
@@ -211,7 +211,7 @@ fn restage(
 }
 
 fn make_lease(
-    evaluation_id: ControllerEvaluationId,
+    evaluation_id: OpaqueId,
     check: CheckBinding,
     fence: u64,
     expires_at_unix_millis: i64,
@@ -226,7 +226,7 @@ fn make_lease(
 
 fn staged(
     row: &Row,
-    evaluation_id: ControllerEvaluationId,
+    evaluation_id: OpaqueId,
     fence: u64,
     stored: StoredPublication,
 ) -> Result<StagedPublication, FileLedgerError> {
@@ -240,7 +240,7 @@ fn staged(
 
 fn publication_matches(
     delivery: &AuthenticatedDelivery,
-    evaluation_id: &ControllerEvaluationId,
+    evaluation_id: &OpaqueId,
     publication: &Publication,
 ) -> bool {
     publication.evaluation_id == *evaluation_id

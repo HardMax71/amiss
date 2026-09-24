@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use amiss_controller::{TrustAnchorId, TrustSetId, WebhookKey, WebhookKeyring};
+use amiss_controller::{OpaqueId, WebhookKey, WebhookKeyring};
 use serde::Deserialize;
 
 use super::{ConfigError, read_regular};
@@ -22,13 +22,13 @@ pub struct WebhookKeyFile {
 ///
 /// A key identity, secret file, activation window, or keyring is invalid.
 pub fn load_webhook_keyring(
-    trust_set: TrustSetId,
+    trust_set: OpaqueId,
     raw: Vec<WebhookKeyFile>,
 ) -> Result<WebhookKeyring, ConfigError> {
     let keys = raw
         .into_iter()
         .map(|key| {
-            let anchor = TrustAnchorId::try_from(key.id)
+            let anchor = OpaqueId::try_from(key.id)
                 .map_err(|_defect| ConfigError::invalid("webhook key identity is invalid"))?;
             let secret = read_regular(&key.secret_file, WEBHOOK_SECRET_BYTES)?;
             WebhookKey::new(

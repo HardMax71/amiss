@@ -1,28 +1,28 @@
 use amiss_scan::document::native_adapter;
-use amiss_scan::{Classification, classify, excluded_by_built_in};
+use amiss_scan::{DocumentClassification, classify, excluded_by_built_in};
 use amiss_wire::model::Adapter;
 
 #[test]
 fn suffixes_are_exact_and_lowercase() {
     assert_eq!(
         classify(b"docs/guide.md"),
-        Some(Classification::StructuredMarkdown)
+        Some(DocumentClassification::StructuredMarkdown)
     );
     assert_eq!(
         classify(b"a/b.markdown"),
-        Some(Classification::StructuredMarkdown)
+        Some(DocumentClassification::StructuredMarkdown)
     );
     assert_eq!(
         classify(b"pages/home.mdx"),
-        Some(Classification::StructuredMdx)
+        Some(DocumentClassification::StructuredMdx)
     );
     assert_eq!(
         classify(b"CLAUDE.md"),
-        Some(Classification::StructuredMarkdown)
+        Some(DocumentClassification::StructuredMarkdown)
     );
     assert_eq!(
         classify(b"AGENTS.md"),
-        Some(Classification::StructuredMarkdown)
+        Some(DocumentClassification::StructuredMarkdown)
     );
     assert_eq!(classify(b"a.MD"), None);
     assert_eq!(classify(b"a.Markdown"), None);
@@ -43,12 +43,12 @@ fn extensionless_basenames_are_markdown() {
     ] {
         assert_eq!(
             classify(name.as_bytes()),
-            Some(Classification::ExtensionlessMarkdown),
+            Some(DocumentClassification::ExtensionlessMarkdown),
             "{name}"
         );
         assert_eq!(
             classify(format!("docs/{name}").as_bytes()),
-            Some(Classification::ExtensionlessMarkdown),
+            Some(DocumentClassification::ExtensionlessMarkdown),
             "nested {name}"
         );
     }
@@ -61,16 +61,16 @@ fn extensionless_basenames_are_markdown() {
 fn advisory_basenames_run_no_grammar() {
     assert_eq!(
         classify(b".cursorrules"),
-        Some(Classification::PlainAdvisory)
+        Some(DocumentClassification::PlainAdvisory)
     );
     assert_eq!(
         classify(b"docs/llms.txt"),
-        Some(Classification::PlainAdvisory)
+        Some(DocumentClassification::PlainAdvisory)
     );
     assert_eq!(classify(b"LLMS.txt"), None);
     assert_eq!(classify(b"a/b.cursorrules"), None);
     assert_eq!(
-        native_adapter(Classification::PlainAdvisory),
+        native_adapter(DocumentClassification::PlainAdvisory),
         Some(Adapter::PlainAdvisory)
     );
 }
@@ -78,27 +78,33 @@ fn advisory_basenames_run_no_grammar() {
 #[test]
 fn classifications_map_to_their_adapters() {
     assert_eq!(
-        native_adapter(Classification::StructuredMarkdown),
+        native_adapter(DocumentClassification::StructuredMarkdown),
         Some(Adapter::Markdown)
     );
     assert_eq!(
-        native_adapter(Classification::ExtensionlessMarkdown),
+        native_adapter(DocumentClassification::ExtensionlessMarkdown),
         Some(Adapter::Markdown)
     );
     assert_eq!(
-        native_adapter(Classification::StructuredMdx),
+        native_adapter(DocumentClassification::StructuredMdx),
         Some(Adapter::Mdx)
     );
     assert_eq!(
-        Classification::StructuredMarkdown.as_ref(),
+        DocumentClassification::StructuredMarkdown.as_ref(),
         "structured-markdown"
     );
-    assert_eq!(Classification::StructuredMdx.as_ref(), "structured-mdx");
     assert_eq!(
-        Classification::ExtensionlessMarkdown.as_ref(),
+        DocumentClassification::StructuredMdx.as_ref(),
+        "structured-mdx"
+    );
+    assert_eq!(
+        DocumentClassification::ExtensionlessMarkdown.as_ref(),
         "extensionless-markdown"
     );
-    assert_eq!(Classification::PlainAdvisory.as_ref(), "plain-advisory");
+    assert_eq!(
+        DocumentClassification::PlainAdvisory.as_ref(),
+        "plain-advisory"
+    );
 }
 
 #[test]
@@ -140,28 +146,28 @@ fn excluded_trees_are_directory_components() {
 fn the_markup_suffixes_reach_their_own_adapters() {
     assert_eq!(
         classify(b"docs/guide.rst"),
-        Some(Classification::StructuredRst),
+        Some(DocumentClassification::StructuredRst),
     );
     assert_eq!(
-        native_adapter(Classification::StructuredRst),
+        native_adapter(DocumentClassification::StructuredRst),
         Some(Adapter::Rst)
     );
     for path in [&b"docs/guide.adoc"[..], b"docs/guide.asciidoc"] {
         assert_eq!(
             classify(path),
-            Some(Classification::StructuredAsciiDoc),
+            Some(DocumentClassification::StructuredAsciiDoc),
             "{}",
             String::from_utf8_lossy(path),
         );
     }
     assert_eq!(
-        native_adapter(Classification::StructuredAsciiDoc),
+        native_adapter(DocumentClassification::StructuredAsciiDoc),
         Some(Adapter::AsciiDoc),
     );
     for path in [&b"docs/guide.txt"[..], b"docs/guide.rst.bak", b"docs/RST"] {
         assert_ne!(
             classify(path),
-            Some(Classification::UnparsedMarkup),
+            Some(DocumentClassification::UnparsedMarkup),
             "{}",
             String::from_utf8_lossy(path),
         );
@@ -173,12 +179,12 @@ fn a_notebook_or_org_file_is_a_document_that_is_never_read() {
     for path in [&b"docs/tour.ipynb"[..], b"notes/plan.org"] {
         assert_eq!(
             classify(path),
-            Some(Classification::UnparsedMarkup),
+            Some(DocumentClassification::UnparsedMarkup),
             "{}",
             String::from_utf8_lossy(path),
         );
     }
-    assert_eq!(native_adapter(Classification::UnparsedMarkup), None);
+    assert_eq!(native_adapter(DocumentClassification::UnparsedMarkup), None);
     for path in [
         &b"docs/tour.IPYNB"[..],
         b"docs/tour.ipynb.bak",
@@ -187,7 +193,7 @@ fn a_notebook_or_org_file_is_a_document_that_is_never_read() {
     ] {
         assert_ne!(
             classify(path),
-            Some(Classification::UnparsedMarkup),
+            Some(DocumentClassification::UnparsedMarkup),
             "{}",
             String::from_utf8_lossy(path),
         );

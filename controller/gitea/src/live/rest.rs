@@ -3,7 +3,7 @@ mod tests;
 pub(super) use amiss_controller::OperationDeadline;
 use amiss_controller::{ForgeFact, ForgeNegative, ProviderError};
 pub(super) use amiss_controller::{
-    ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeVisibility as Visibility,
+    ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeRepository as Visibility,
 };
 use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};

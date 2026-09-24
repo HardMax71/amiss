@@ -7,8 +7,8 @@ use amiss_controller::PullRequestChange;
 use amiss_controller::opaque_id;
 use amiss_controller::{
     AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, CheckBinding, CheckConclusion,
-    ControllerEvaluationId, Delivery, DeliveryIdentity, ProviderError, ProviderIdentity,
-    ProviderNamespace, Publication,
+    Delivery, DeliveryIdentity, OpaqueId, ProviderError, ProviderIdentity, ProviderNamespace,
+    Publication,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -309,7 +309,7 @@ impl Fixture {
         );
         Publication {
             provider_run: self.delivery.provider_run.clone(),
-            evaluation_id: ControllerEvaluationId::try_from(evaluation.to_owned()).unwrap(),
+            evaluation_id: OpaqueId::try_from(evaluation.to_owned()).unwrap(),
             check: CheckBinding {
                 plan_digest: digest,
                 required_status_name: required_status_name!("amiss"),

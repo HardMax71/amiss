@@ -2,7 +2,7 @@ pub use amiss_controller_fixtures::clock::TestClock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use amiss_controller::provider_namespace;
-use amiss_controller::{ProviderIdentity, ProviderInstance};
+use amiss_controller::{OpaqueId, ProviderIdentity};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 pub const HOST: &str = "gitlab.example";
@@ -18,7 +18,7 @@ pub fn now_seconds() -> u64 {
 pub fn provider() -> ProviderIdentity {
     ProviderIdentity {
         namespace: provider_namespace!("gitlab"),
-        instance: ProviderInstance::try_from(HOST.to_owned()).unwrap(),
+        instance: OpaqueId::try_from(HOST.to_owned()).unwrap(),
     }
 }
 

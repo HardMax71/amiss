@@ -3,7 +3,7 @@ use amiss_wire::envelope::MACHINE_JSON_BYTES;
 
 use crate::{Evaluation, RunRequest, RunnerOutcome};
 
-type Classification<T> = Result<T, RunnerOutcome>;
+type DocumentClassification<T> = Result<T, RunnerOutcome>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BootstrapTermination {
@@ -32,7 +32,7 @@ pub fn classify_bootstrap_result(
         .unwrap_or_else(std::convert::identity)
 }
 
-fn exit_code(termination: BootstrapTermination) -> Classification<i32> {
+fn exit_code(termination: BootstrapTermination) -> DocumentClassification<i32> {
     match termination {
         BootstrapTermination::Exited(exit_code) => Ok(exit_code),
         BootstrapTermination::TimedOut => Err(RunnerOutcome::TimedOut),
@@ -42,20 +42,20 @@ fn exit_code(termination: BootstrapTermination) -> Classification<i32> {
     }
 }
 
-fn result_record(result: Option<Vec<u8>>) -> Classification<BootstrapResult> {
+fn result_record(result: Option<Vec<u8>>) -> DocumentClassification<BootstrapResult> {
     bounded_nonempty(result, RESULT_BYTES, RunnerOutcome::TamperedRuntime)
         .and_then(|bytes| parse_result(&bytes).ok_or(RunnerOutcome::TamperedRuntime))
 }
 
 fn verify_exit_code(
     (exit_code, result): (i32, BootstrapResult),
-) -> Classification<BootstrapResult> {
+) -> DocumentClassification<BootstrapResult> {
     (exit_code == result_exit_code(result))
         .then_some(result)
         .ok_or(RunnerOutcome::TamperedRuntime)
 }
 
-fn classify_record(result: BootstrapResult) -> Classification<Evaluation> {
+fn classify_record(result: BootstrapResult) -> DocumentClassification<Evaluation> {
     match result {
         BootstrapResult::Pass => Ok(Evaluation::Pass),
         BootstrapResult::Block => Ok(Evaluation::Block),
@@ -72,7 +72,7 @@ fn complete(
     evaluation: Evaluation,
     report: Vec<u8>,
     semantic_artifact: Option<Vec<u8>>,
-) -> Classification<RunnerOutcome> {
+) -> DocumentClassification<RunnerOutcome> {
     bounded_nonempty(
         Some(report),
         MACHINE_JSON_BYTES,
@@ -90,7 +90,7 @@ fn bounded_nonempty(
     bytes: Option<Vec<u8>>,
     limit: u64,
     oversized: RunnerOutcome,
-) -> Classification<Vec<u8>> {
+) -> DocumentClassification<Vec<u8>> {
     let bytes = bytes
         .filter(|bytes| !bytes.is_empty())
         .ok_or(RunnerOutcome::MissingOutput)?;

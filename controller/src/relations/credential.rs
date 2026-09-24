@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{IntegrationId, OpaqueId, PlanScope, ProviderIdentity};
+use crate::{OpaqueId, PlanScope, ProviderIdentity};
 
 use super::RelationRegistry;
 
@@ -10,7 +10,7 @@ pub struct RelationCredentialRoute<A> {
 }
 
 pub struct RelationCredentialRouter<A> {
-    routes: BTreeMap<OpaqueId, (ProviderIdentity, IntegrationId, A)>,
+    routes: BTreeMap<OpaqueId, (ProviderIdentity, OpaqueId, A)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]

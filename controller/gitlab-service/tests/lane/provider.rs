@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
-use amiss_controller::{ProviderError, ProviderIdentity, ProviderInstance};
+use amiss_controller::{OpaqueId, ProviderError, ProviderIdentity};
 use amiss_controller::{opaque_id, provider_namespace};
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitlab::{
@@ -109,7 +109,7 @@ pub(super) fn policy() -> PolicyBinding {
 pub(super) fn provider() -> ProviderIdentity {
     ProviderIdentity {
         namespace: provider_namespace!("gitlab"),
-        instance: ProviderInstance::try_from(HOST.to_owned()).unwrap(),
+        instance: OpaqueId::try_from(HOST.to_owned()).unwrap(),
     }
 }
 

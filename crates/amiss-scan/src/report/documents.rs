@@ -5,7 +5,7 @@ use amiss_wire::report::model::{
 };
 
 use crate::discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind};
-use crate::document::Classification;
+use crate::document::DocumentClassification;
 
 /// A blob's raw digest exists exactly when the run held its bytes, which is
 /// what content availability states for a document no ceiling let it scan.
@@ -135,7 +135,7 @@ fn document_side(record: &DocumentRecord) -> DocumentSide<GitMode> {
 
 pub(super) struct PairedDocument<'a> {
     pub(super) path: RepoPath,
-    classification: Classification,
+    classification: DocumentClassification,
     pub(super) base: Option<&'a DocumentRecord>,
     pub(super) candidate: Option<&'a DocumentRecord>,
 }

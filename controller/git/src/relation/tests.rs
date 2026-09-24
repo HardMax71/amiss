@@ -5,9 +5,9 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use amiss_controller::{
-    IntegrationId, OidPair, OpaqueId, PlanScope, ProviderIdentity, RelationAcquisitionError,
-    RelationLimits, RelationPlan, RelationStatusDestination, RelationSubject,
-    RelationSubjectTransition, TriggeredRelation, relation_transition,
+    OidPair, OpaqueId, PlanScope, ProviderIdentity, RelationAcquisitionError, RelationLimits,
+    RelationPlan, RelationStatusDestination, RelationSubject, RelationSubjectTransition,
+    TriggeredRelation, relation_transition,
 };
 use amiss_controller::{opaque_id, provider_namespace};
 use amiss_wire::artifact_id;
@@ -35,7 +35,7 @@ fn subject(role: &str, repository: &str) -> RelationSubject {
                 namespace: provider_namespace!("github"),
                 instance: opaque_id!("github.com"),
             },
-            integration: IntegrationId::try_from(format!("installation/{repository}"))
+            integration: OpaqueId::try_from(format!("installation/{repository}"))
                 .expect("integration"),
             repository: RepositoryIdentity::github("acme".to_owned(), repository.to_owned())
                 .expect("repository"),

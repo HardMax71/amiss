@@ -174,7 +174,7 @@ pub struct Effects {
     pub waiver: Option<WaiverContext>,
     pub time: Option<TimeContext>,
     pub constraint: Option<ConstraintContext>,
-    pub semantic_evidence: Vec<crate::semantic::Provenance>,
+    pub semantic_evidence: Vec<crate::semantic::SemanticEvidenceProvenance>,
     /// The effective typed-analysis-errors-retained ceiling `E`:
     /// `min(64, verified floor limit)`, the built-in 64 without a floor.
     pub errors_retained: u64,

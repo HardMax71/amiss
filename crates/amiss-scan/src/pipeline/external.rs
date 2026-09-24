@@ -166,10 +166,12 @@ fn waiver_authority(
 /// binding mismatches and invalid controls name themselves, and any other
 /// defect leaves the stage merely not parsed.
 pub(super) fn external_reason(row: &ErrorDetail) -> ControlsUnavailableReason {
-    use amiss_wire::report::model::AnalysisErrorCode as Code;
-    if row.code == Code::ControlBindingMismatch {
+    use amiss_wire::report::model::AnalysisErrorCode;
+    if row.code == AnalysisErrorCode::ControlBindingMismatch {
         ControlsUnavailableReason::ControlBindingMismatch
-    } else if row.code == Code::TrustedTimeInvalid || row.code == Code::ConfigurationInvalid {
+    } else if row.code == AnalysisErrorCode::TrustedTimeInvalid
+        || row.code == AnalysisErrorCode::ConfigurationInvalid
+    {
         ControlsUnavailableReason::InvalidExternalControl
     } else {
         ControlsUnavailableReason::NotParsed

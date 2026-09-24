@@ -1,5 +1,5 @@
 use amiss_wire::model::Adapter;
-pub use amiss_wire::report::model::DocumentClassification as Classification;
+pub use amiss_wire::report::model::DocumentClassification;
 
 const EXTENSIONLESS: [&str; 6] = [
     "README",
@@ -24,16 +24,15 @@ pub const EXCLUDED_TREES: [&str; 9] = [
 
 /// A policy include needs an explicit binding; unparsed markup has no native adapter.
 #[must_use]
-pub const fn native_adapter(classification: Classification) -> Option<Adapter> {
+pub const fn native_adapter(classification: DocumentClassification) -> Option<Adapter> {
     match classification {
-        Classification::StructuredMarkdown | Classification::ExtensionlessMarkdown => {
-            Some(Adapter::Markdown)
-        }
-        Classification::StructuredMdx => Some(Adapter::Mdx),
-        Classification::StructuredAsciiDoc => Some(Adapter::AsciiDoc),
-        Classification::StructuredRst => Some(Adapter::Rst),
-        Classification::PlainAdvisory => Some(Adapter::PlainAdvisory),
-        Classification::UnparsedMarkup | Classification::PolicyIncluded => None,
+        DocumentClassification::StructuredMarkdown
+        | DocumentClassification::ExtensionlessMarkdown => Some(Adapter::Markdown),
+        DocumentClassification::StructuredMdx => Some(Adapter::Mdx),
+        DocumentClassification::StructuredAsciiDoc => Some(Adapter::AsciiDoc),
+        DocumentClassification::StructuredRst => Some(Adapter::Rst),
+        DocumentClassification::PlainAdvisory => Some(Adapter::PlainAdvisory),
+        DocumentClassification::UnparsedMarkup | DocumentClassification::PolicyIncluded => None,
     }
 }
 
@@ -42,28 +41,28 @@ pub const fn native_adapter(classification: Classification) -> Option<Adapter> {
 /// Other case or suffixes are not silently treated as equivalent, and the
 /// rows read raw bytes, so a path text cannot hold still classifies.
 #[must_use]
-pub fn classify(path: &[u8]) -> Option<Classification> {
+pub fn classify(path: &[u8]) -> Option<DocumentClassification> {
     if path.ends_with(b".md") || path.ends_with(b".markdown") {
-        return Some(Classification::StructuredMarkdown);
+        return Some(DocumentClassification::StructuredMarkdown);
     }
     if path.ends_with(b".mdx") {
-        return Some(Classification::StructuredMdx);
+        return Some(DocumentClassification::StructuredMdx);
     }
     if path.ends_with(b".adoc") || path.ends_with(b".asciidoc") {
-        return Some(Classification::StructuredAsciiDoc);
+        return Some(DocumentClassification::StructuredAsciiDoc);
     }
     if path.ends_with(b".rst") {
-        return Some(Classification::StructuredRst);
+        return Some(DocumentClassification::StructuredRst);
     }
     if path.ends_with(b".ipynb") || path.ends_with(b".org") {
-        return Some(Classification::UnparsedMarkup);
+        return Some(DocumentClassification::UnparsedMarkup);
     }
     let basename = path.rsplit(|byte| *byte == b'/').next().unwrap_or(path);
     if EXTENSIONLESS.iter().any(|name| name.as_bytes() == basename) {
-        return Some(Classification::ExtensionlessMarkdown);
+        return Some(DocumentClassification::ExtensionlessMarkdown);
     }
     if basename == b".cursorrules" || basename == b"llms.txt" {
-        return Some(Classification::PlainAdvisory);
+        return Some(DocumentClassification::PlainAdvisory);
     }
     None
 }

@@ -8,11 +8,11 @@ use amiss_git::{GitLimits, GitResources};
 use amiss_scan::correlate::{Side, correlate};
 use amiss_scan::evaluate::evaluate_with_policy;
 use amiss_scan::pipeline::{SetupShell, commit_pair};
-use amiss_scan::report::{CandidateBlock, RequestDigests, Setup, SnapshotIdentity, construct};
+use amiss_scan::report::{CandidateBlock, GitSnapshotIdentity, RequestDigests, Setup, construct};
 use amiss_scan::resolve::{ForgeContext, Resolver, TargetCache};
 use amiss_scan::{
-    Classification, DocumentRecord, DocumentStatus, Effects, ScanLimits, ScanResources, Scanned,
-    SnapshotDiscovery,
+    DocumentClassification, DocumentRecord, DocumentStatus, Effects, ScanLimits, ScanResources,
+    Scanned, SnapshotDiscovery,
 };
 use amiss_wire::branch_ref;
 use amiss_wire::controls::GitMode;
@@ -324,7 +324,7 @@ fn report_setup() -> Setup {
     let Some(oid) = Oid::new(ObjectFormat::Sha1, "a".repeat(40)) else {
         panic!("the benchmark OID is valid")
     };
-    let identity = SnapshotIdentity {
+    let identity = GitSnapshotIdentity {
         commit_oid: oid.clone(),
         kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
         object_format: ObjectFormat::Sha1,
@@ -362,7 +362,7 @@ fn document_discovery(count: usize, status: &DocumentStatus) -> SnapshotDiscover
         .map(|index| DocumentRecord {
             path: RepoPath::new(format!("docs/{index:05}.md"))
                 .unwrap_or_else(|| panic!("benchmark document path")),
-            classification: Classification::StructuredMarkdown,
+            classification: DocumentClassification::StructuredMarkdown,
             adapter,
             status: status.clone(),
             oid: oid.clone(),

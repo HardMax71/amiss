@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use amiss_wire::model::RepositoryIdentity;
 
-use crate::{AuthenticatedDelivery, CheckPlan, IntegrationId, ProviderIdentity, check_binding};
+use crate::{AuthenticatedDelivery, CheckPlan, OpaqueId, ProviderIdentity, check_binding};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PlanScope {
     pub provider: ProviderIdentity,
-    pub integration: IntegrationId,
+    pub integration: OpaqueId,
     pub repository: RepositoryIdentity,
 }
 
