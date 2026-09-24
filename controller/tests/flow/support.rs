@@ -1,3 +1,5 @@
+use amiss_controller::{CheckBinding, check_binding};
+
 mod adapter;
 mod external;
 mod fixtures;
@@ -7,8 +9,12 @@ mod runner;
 pub(crate) use adapter::FakeAdapter;
 pub(crate) use external::RecordingSink;
 pub(crate) use fixtures::{
-    binding, complete, controller, controller_with_ledger, delivery, locator, oid, provider,
-    repository, run, run_with_resolution, snapshot,
+    complete, controller, controller_with_ledger, delivery, locator, oid, provider, repository,
+    run, run_with_resolution, snapshot,
 };
 pub(crate) use ledger::{LedgerError, MemoryLedger, ScriptedLedger, lease, renewal_script};
 pub(crate) use runner::FakeRunner;
+
+pub(crate) fn binding() -> CheckBinding {
+    check_binding(&fixtures::plan()).unwrap()
+}

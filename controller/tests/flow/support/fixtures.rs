@@ -9,10 +9,10 @@ use std::time::Duration;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
     AdapterRegistry, AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, ChangeState,
-    CheckBinding, CheckPlan, Controller, Delivery, DeliveryIdentity, DeliveryLedger, IngressLimits,
+    CheckPlan, Controller, Delivery, DeliveryIdentity, DeliveryLedger, IngressLimits,
     IngressPolicy, OidPair, PlanRegistry, PlanScope, PolicyControls, ProviderIdentity, ProviderRun,
     ProviderRunAttempt, ProviderRunIdentity, ReplayWindow, RunIdentity, RunRefs, RunnerOutcome,
-    check_binding, check_plan, register_plan,
+    check_plan, register_plan,
 };
 use amiss_controller::{opaque_id, provider_namespace};
 use amiss_wire::controls::Profile;
@@ -139,10 +139,6 @@ pub(crate) fn plan() -> CheckPlan {
     ))
     .unwrap();
     check_plan(Profile::Enforce, PolicyControls::default(), execution).unwrap()
-}
-
-pub(crate) fn binding() -> CheckBinding {
-    check_binding(&plan()).unwrap()
 }
 
 fn ingress() -> IngressPolicy {
