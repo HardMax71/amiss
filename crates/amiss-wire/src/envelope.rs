@@ -7,6 +7,10 @@ use sha2::Digest as _;
 use crate::de::{self, Error, ErrorKind};
 use crate::model::Digest;
 
+/// The exact `machine-json-bytes` reservation: the report wire, canonical
+/// envelope plus the trailing newline, never exceeds this.
+pub const MACHINE_JSON_BYTES: u64 = 268_435_456;
+
 /// The domain-separated digest of one value's canonical bytes. Every digest in
 /// the system starts with the label naming its purpose, so a digest computed
 /// for one context cannot be replayed as a digest for another.

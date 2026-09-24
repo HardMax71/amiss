@@ -57,7 +57,7 @@ pub(crate) fn component_digests(
 }
 
 pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactError> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > amiss_wire::report::MACHINE_JSON_BYTES {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > amiss_wire::envelope::MACHINE_JSON_BYTES {
         return Err(ArtifactError::TooLarge);
     }
     let envelope = <ReportPayload>::parse(bytes).map_err(|_defect| ArtifactError::Corrupt)?;

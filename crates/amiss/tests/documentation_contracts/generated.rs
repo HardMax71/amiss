@@ -14,10 +14,11 @@ use amiss_scan::route::{
     TEMPLATE_EXPRESSIONS, UNROUTED_OPENING, declarable,
 };
 use amiss_wire::controls::{ORGANIZATION_POLICY_ENTRIES_LIMIT, ResourceName};
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::model::ForgeDialect;
 use amiss_wire::report::{
-    EVALUATOR_MANAGED_MEMORY_BYTES, FindingKind, MACHINE_JSON_BYTES,
-    PRIVATE_TEMPORARY_STORAGE_BYTES, model::AnalysisErrorCode,
+    EVALUATOR_MANAGED_MEMORY_BYTES, FindingKind, PRIVATE_TEMPORARY_STORAGE_BYTES,
+    model::AnalysisErrorCode,
 };
 use strum::IntoEnumIterator;
 

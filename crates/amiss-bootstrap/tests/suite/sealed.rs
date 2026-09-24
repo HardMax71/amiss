@@ -19,9 +19,10 @@ use amiss_bootstrap::supervise::{
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
 
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::model::RepositoryIdentity;
+use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::report::model::{BaseSnapshot, Evaluation, ReportEnvelope, ReportStatus, Snapshot};
-use amiss_wire::report::{MACHINE_JSON_BYTES, PAYLOAD_SCHEMA};
 use amiss_wire::requests::{CANDIDATE_IDENTITY_DOMAIN, CandidateSnapshot, RequestTrust};
 use serde_json::Value;
 

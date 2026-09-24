@@ -22,4 +22,4 @@ pub const PLAN_PAYLOAD_SCHEMA: &str = "amiss/external-plan-payload";
 pub const EVIDENCE_SCHEMA: &str = "amiss/external-evidence";
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/external-assessment-envelope";
 pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/external-assessment-payload";
-pub const EXTERNAL_DOCUMENT_BYTES: u64 = crate::report::MACHINE_JSON_BYTES;
+pub const EXTERNAL_DOCUMENT_BYTES: u64 = crate::envelope::MACHINE_JSON_BYTES;

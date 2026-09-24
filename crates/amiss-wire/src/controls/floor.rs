@@ -131,7 +131,7 @@ fn resource_maximum_valid(resource: ResourceName, maximum: i64) -> bool {
     if resource == ResourceName::TypedAnalysisErrorsRetained {
         (1..=64).contains(&maximum)
     } else if resource == ResourceName::MachineJsonBytes {
-        u64::try_from(maximum).is_ok_and(|value| value == crate::report::MACHINE_JSON_BYTES)
+        u64::try_from(maximum).is_ok_and(|value| value == crate::envelope::MACHINE_JSON_BYTES)
     } else {
         (0..=js_int::MAX_SAFE_INT).contains(&maximum)
     }

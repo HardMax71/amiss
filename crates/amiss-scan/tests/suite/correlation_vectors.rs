@@ -12,7 +12,7 @@ use amiss_scan::correlate::{Observation, Outcome, Side, correlate};
 use amiss_scan::observe::target_intent;
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::SpanDisplay;
-use amiss_wire::controls::SourceConstruct;
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{Adapter, RepoPath, RepoPathText};
 use amiss_wire::report::model::TargetIntent;

@@ -1,5 +1,5 @@
-use amiss_wire::controls::SourceConstruct;
 use amiss_wire::extraction::Fault;
+use amiss_wire::extraction::SourceConstruct;
 
 use super::{destination_token, skip_code_span, skip_whitespace};
 use crate::tree::ReferenceForm;

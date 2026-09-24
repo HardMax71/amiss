@@ -2,10 +2,12 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::controls::{SourceConstruct, TargetKind};
+use crate::controls::TargetKind;
+
 use crate::extraction::BlockKind;
+use crate::extraction::SourceConstruct;
 use crate::model::Digest;
-use crate::model::{Adapter, Oid};
+use crate::model::{Adapter, AddressKind, Oid};
 pub use crate::resolution::{
     ExternalReference as ExternalResolutionReason, InvalidReference as InvalidResolutionReason,
     UnsupportedSemanticsReason, UnsupportedTargetTag as UnsupportedTargetReason,
@@ -29,26 +31,6 @@ pub enum ObservationIdInputSchema {
 pub enum StructuralAddressSchema {
     #[strum(serialize = "amiss/scanner-structural-address")]
     Current,
-}
-
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Display,
-    EnumString,
-    SerializeDisplay,
-    DeserializeFromStr,
-    strum::IntoStaticStr,
-)]
-#[strum(serialize_all = "kebab-case")]
-pub enum AddressKind {
-    AsciidocBlockPath,
-    MarkdownAstNodePath,
-    MdxAstNodePath,
-    RstBlockPath,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

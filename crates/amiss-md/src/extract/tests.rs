@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use amiss_wire::controls::SourceConstruct;
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::extraction::{BlockKind, Fault, Heading, HeadingSource, Occurrence, Opaque};
 
 use super::source::image_label_end;

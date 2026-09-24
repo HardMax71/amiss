@@ -1,4 +1,4 @@
-use amiss_wire::controls::SourceConstruct;
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::Adapter;
 use amiss_wire::model::Digest;
 use amiss_wire::report::IntentKind;

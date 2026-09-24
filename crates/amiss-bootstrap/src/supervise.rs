@@ -147,7 +147,7 @@ pub fn settle(
         Supervised::Killed => return Err(Defect::Killed),
         Supervised::Completed(status) => status,
     };
-    if u64::try_from(stdout.len()).unwrap_or(u64::MAX) > amiss_wire::report::MACHINE_JSON_BYTES {
+    if u64::try_from(stdout.len()).unwrap_or(u64::MAX) > amiss_wire::envelope::MACHINE_JSON_BYTES {
         return Err(Defect::Oversize);
     }
     let code = status.code().ok_or(Defect::Signalled)?;

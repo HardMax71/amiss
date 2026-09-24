@@ -501,7 +501,7 @@ fn profile_work(adapter: Adapter, source: &[u8]) -> Value {
         }
         Err(error) => {
             let code = match error {
-                amiss_md::AnalyzeError::Fault(fault) => AnalysisErrorCode::from(fault),
+                amiss_md::AnalyzeError::Fault(fault) => amiss_wire::report::fault_code(fault),
                 amiss_md::AnalyzeError::EmbeddedCodeAllowance { .. } => {
                     AnalysisErrorCode::ResourceLimitExceeded
                 }

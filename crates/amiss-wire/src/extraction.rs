@@ -1,7 +1,74 @@
-use crate::controls::SourceConstruct;
-use crate::report::model::AnalysisErrorCode;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
-use strum::{Display, EnumString};
+use strum::{AsRefStr, Display, EnumIter, EnumString, IntoStaticStr};
+
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    AsRefStr,
+    EnumIter,
+    EnumString,
+    IntoStaticStr,
+    Display,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
+pub enum SourceConstruct {
+    #[strum(serialize = "markdown-inline-link")]
+    InlineLink,
+    #[strum(serialize = "markdown-full-reference-link")]
+    FullReferenceLink,
+    #[strum(serialize = "markdown-collapsed-reference-link")]
+    CollapsedReferenceLink,
+    #[strum(serialize = "markdown-shortcut-reference-link")]
+    ShortcutReferenceLink,
+    #[strum(serialize = "markdown-autolink")]
+    Autolink,
+    #[strum(serialize = "markdown-inline-image")]
+    InlineImage,
+    #[strum(serialize = "markdown-full-reference-image")]
+    FullReferenceImage,
+    #[strum(serialize = "markdown-collapsed-reference-image")]
+    CollapsedReferenceImage,
+    #[strum(serialize = "markdown-shortcut-reference-image")]
+    ShortcutReferenceImage,
+    #[strum(serialize = "asciidoc-xref-macro")]
+    AsciidocCrossReference,
+    #[strum(serialize = "asciidoc-internal-xref")]
+    AsciidocInternalCrossReference,
+    #[strum(serialize = "asciidoc-link-macro")]
+    AsciidocLinkMacro,
+    #[strum(serialize = "asciidoc-block-image")]
+    AsciidocBlockImage,
+    #[strum(serialize = "asciidoc-inline-image")]
+    AsciidocInlineImage,
+    #[strum(serialize = "asciidoc-include")]
+    AsciidocInclude,
+    #[strum(serialize = "rst-inline-hyperlink")]
+    RstInlineHyperlink,
+    #[strum(serialize = "rst-named-target")]
+    RstNamedTarget,
+    #[strum(serialize = "rst-image-directive")]
+    RstImageDirective,
+    #[strum(serialize = "rst-include-directive")]
+    RstIncludeDirective,
+    #[strum(serialize = "rst-file-option")]
+    RstFileOption,
+    #[strum(serialize = "rst-doc-role")]
+    RstDocRole,
+    #[strum(serialize = "rst-ref-role")]
+    RstRefRole,
+    #[strum(serialize = "markdown-link-reference-definition")]
+    LinkReferenceDefinition,
+    #[strum(serialize = "html-anchor")]
+    HtmlAnchor,
+    #[strum(serialize = "html-image")]
+    HtmlImage,
+}
 
 /// The frozen node resources of `parser-work-accounting`: `nodes` is the
 /// logical node count of one document and `nesting` its maximum node depth.
@@ -25,17 +92,6 @@ pub enum Fault {
     ParserError,
     ParserPanic,
     InvalidSourceSpan,
-}
-
-impl From<Fault> for AnalysisErrorCode {
-    fn from(fault: Fault) -> Self {
-        match fault {
-            Fault::DocumentInvalid | Fault::DocumentUnparsable => Self::DocumentInvalid,
-            Fault::ParserError => Self::ParserError,
-            Fault::ParserPanic => Self::ParserPanic,
-            Fault::InvalidSourceSpan => Self::InvalidSourceSpan,
-        }
-    }
 }
 
 /// How one guarded parse fails: a fault in the contract's precedence, or a

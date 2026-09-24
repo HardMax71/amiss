@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use amiss_bootstrap::result::BootstrapResult;
 use amiss_bootstrap::supervise::{Expectations, Supervised, settle, supervise};
-use amiss_wire::report::{MACHINE_JSON_BYTES, WATCHDOG_MILLISECONDS};
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
+use amiss_wire::report::WATCHDOG_MILLISECONDS;
 use amiss_wire::requests::{RequestStreams, SEALED_ENGINE_ARGUMENT};
 
 use super::{Accepted, Args, Execution, SealedRun, settlement_failure, tampered, unavailable};

@@ -6,7 +6,7 @@
 use std::fs;
 use std::process::{Command, Stdio};
 
-use amiss_wire::controls::SourceConstruct;
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::repo_path_text;
 use amiss_wire::report::model::{Occurrence, RepoPath, Resolution};
 use amiss_wire::resolution::{BlobTarget, Target};

@@ -11,8 +11,9 @@ use amiss_scan::report::{
 };
 use amiss_scan::resolve::Intent;
 use amiss_wire::branch_ref;
-use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
+use amiss_wire::controls::{GitMode, TargetKind};
 use amiss_wire::envelope::document_digest;
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity};
 use amiss_wire::report::model::ObservationIdInput;

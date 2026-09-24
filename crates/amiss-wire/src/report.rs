@@ -75,7 +75,7 @@ mod sandbox;
 
 use crate::ExitClass;
 
-pub use error::{ErrorDetail, error_row};
+pub use error::{ErrorDetail, error_row, fault_code};
 pub use failure::{
     EngineProvenance, adapter_contract, engine_block, invocation_failure_envelope,
     invocation_failure_wire, unavailable_evaluation_envelope, unavailable_evaluation_wire,
@@ -88,10 +88,6 @@ pub use output::{emit_report, emit_sealed};
 pub use sandbox::sandbox_descriptor;
 
 pub const ENGINE_CONTRACT: &str = "amiss/scanner";
-
-/// The exact `machine-json-bytes` reservation: the report wire, canonical
-/// envelope plus the trailing newline, never exceeds this.
-pub const MACHINE_JSON_BYTES: u64 = 268_435_456;
 
 /// The evaluator-managed memory ceiling asserted by the sandbox descriptor.
 pub const EVALUATOR_MANAGED_MEMORY_BYTES: u64 = 1_073_741_824;

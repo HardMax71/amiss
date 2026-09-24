@@ -6,7 +6,7 @@ use amiss_controller::{
     ArtifactComponent, ArtifactError, ArtifactStoreConfig, ControllerClock, FileArtifactStore,
     artifact_route,
 };
-use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::{Extension, Path};

@@ -1,5 +1,6 @@
 use amiss_wire::assessment::Nullable;
-use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, SourceConstruct, TargetKind};
+use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, TargetKind};
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model as report;

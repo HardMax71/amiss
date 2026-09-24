@@ -41,10 +41,10 @@ pub use policy::{
     ScannerPolicy, ScannerPolicySchema, TREE_PATHS_SOURCE, TreePathSelection,
     check_projection_source,
 };
-pub use resources::{ResourceName, ResourceNameIter};
+pub use resources::{AnalysisPhase, ResourceName, ResourceNameIter};
 pub use taxonomy::{
     ContentAvailability, Disposition, EligibleFindingKind, EntryKind, GitMode, IncludeKind,
-    Profile, PromotableFindingKind, SourceConstruct, TargetKind,
+    Profile, PromotableFindingKind, TargetKind,
 };
 pub use trusted_time::{
     STATEMENT_TTL_MAX_SECONDS, TRUSTED_TIME_CONTROLLER, TRUSTED_TIME_STATEMENT_SCHEMA,

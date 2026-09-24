@@ -1,7 +1,9 @@
 use sha2::Digest as _;
 use std::collections::{BTreeMap, HashMap};
 
-use amiss_wire::controls::{SourceConstruct, TargetKind};
+use amiss_wire::controls::TargetKind;
+
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{Adapter, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
