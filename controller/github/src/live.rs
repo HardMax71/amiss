@@ -16,16 +16,25 @@ use amiss_controller::{
     RelationStatusRecord, RelationStatusTarget, RelationSubject, RelationSubjectHead,
     WorkflowArtifactExpectation,
 };
-use amiss_wire::model::Oid;
+use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 
 use crate::{GitHubAcquisitionSource, GitHubApi, GitHubPullRequest};
 
+use self::model::CommitRecord;
 use self::publication::{
     CheckRunDecision, publication_decision, validate_created, validate_publication,
 };
 use self::refresh::{publication_target_is_current, snapshot, validate_request};
 use self::rest::{GitHubRest, HttpRest};
+
+trait GitHubRelationRest {
+    fn relation_head(
+        &self,
+        repository: &RepositoryIdentity,
+        target: &BranchRef,
+    ) -> Result<CommitRecord, ProviderError>;
+}
 
 const MAX_PRIVATE_KEY_BYTES: usize = 65_536;
 const MIN_PRIVATE_KEY_BYTES: usize = 512;
