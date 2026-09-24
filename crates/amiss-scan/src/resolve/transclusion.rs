@@ -1,15 +1,16 @@
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 
-use amiss_wire::controls::{GitMode, TargetKind};
+use amiss_wire::controls::GitMode;
 use amiss_wire::extraction::{Heading, Transclusion, TransclusionKind, TransclusionRefusal};
 use amiss_wire::model::{Adapter, RepoPath};
-use amiss_wire::uri::scheme;
 
 use crate::discovery::{DocumentStatus, SnapshotDiscovery};
 use crate::resources::{Aggregate, ScanResources};
 
-use super::syntax::{normalized_native_path, normalized_path_under};
+use crate::discovery::followed;
+use crate::discovery::local_target;
+use crate::discovery::snippet_root;
 
 #[derive(Clone, Copy)]
 pub(super) struct Source<'a> {
@@ -172,21 +173,6 @@ impl Expansion<'_, '_> {
     }
 }
 
-/// The includes an expansion walks. A call a template answers is no edge at
-/// all, since nothing in the tree stands in for what it writes, so `templated`
-/// answers it instead and the walk passes it by.
-fn followed(transclusions: &[Transclusion]) -> Vec<&Transclusion> {
-    transclusions
-        .iter()
-        .filter(|entry| {
-            !matches!(
-                entry.kind,
-                Err(TransclusionRefusal::Template | TransclusionRefusal::Liquid)
-            )
-        })
-        .collect()
-}
-
 /// Whether a template writes part of this document. A Hugo shortcode is
 /// answered by a layout rather than by a file, so a page that calls one holds
 /// headings and terms this engine cannot see, and its identity set is as far
@@ -212,65 +198,7 @@ pub(super) fn templated(
             && transclusions
                 .iter()
                 .any(|entry| entry.kind == Err(*refusal))
-            && crate::route::declared_root(snapshot, document.as_bytes(), rule.declared_by)
+            && crate::discovery::declared_root(snapshot, document.as_bytes(), rule.declared_by)
                 .is_some()
     })
-}
-
-/// The documents one document renders in place of its own includes, which is
-/// the edge the Sphinx walk follows to decide what a tree parses. A call a
-/// template answers names no file at all, so it is no edge here either; an
-/// option block still renders part of the named file, so that one is.
-pub(crate) fn included_documents(
-    snapshot: &SnapshotDiscovery,
-    document: &RepoPath,
-) -> Vec<RepoPath> {
-    let Some(DocumentStatus::Scanned(scanned)) = snapshot
-        .document(document.as_bytes())
-        .map(|record| &record.status)
-    else {
-        return Vec::new();
-    };
-    let Some(source) = scanned.anchor_source.as_ref() else {
-        return Vec::new();
-    };
-    let root = snippet_root(snapshot, Adapter::Markdown, document);
-    followed(&source.transclusions)
-        .into_iter()
-        .filter(|entry| entry.kind != Ok(TransclusionKind::Literal))
-        .filter_map(|entry| local_target(root.as_deref(), document, &entry.target))
-        .collect()
-}
-
-fn local_target(root: Option<&[u8]>, document: &RepoPath, target: &str) -> Option<RepoPath> {
-    if target.starts_with('/') || target.contains(['%', '?', '#']) || scheme(target).is_some() {
-        return None;
-    }
-    let located = match root {
-        Some(root) => normalized_path_under(root, false, target),
-        None => normalized_native_path(document, false, target),
-    };
-    located
-        .ok()
-        .filter(|(_, kind)| *kind != TargetKind::Tree)
-        .map(|(path, _)| path)
-}
-
-/// The directory a mkdocs snippet is resolved from, which is the one holding
-/// the file that declares mkdocs above the document rather than the document's
-/// own. Every other include stays relative to the file that writes it, so no
-/// root applies to one.
-fn snippet_root(
-    snapshot: &SnapshotDiscovery,
-    adapter: Adapter,
-    document: &RepoPath,
-) -> Option<Vec<u8>> {
-    if adapter != Adapter::Markdown {
-        return None;
-    }
-    crate::route::declared_root(
-        snapshot,
-        document.as_bytes(),
-        crate::route::MKDOCS.declared_by,
-    )
 }

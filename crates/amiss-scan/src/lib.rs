@@ -12,6 +12,7 @@ pub mod observe;
 pub mod pipeline;
 pub mod policy;
 mod projection;
+mod published;
 pub mod report;
 pub mod request;
 pub mod resolve;
