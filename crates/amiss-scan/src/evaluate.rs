@@ -13,6 +13,7 @@ mod run;
 mod tests;
 mod waiver;
 
+use amiss_wire::model::RepoPath;
 pub(crate) use claims::source_multiplicities;
 pub use claims::{ClaimGroup, claim_groups};
 pub use control::GovernedSeed;
@@ -36,7 +37,7 @@ pub(super) struct ResolutionKinds {
     pub(super) boundary: Option<FindingKind>,
 }
 
-pub(super) const fn resolution_kinds(resolution: &crate::resolve::Resolution) -> ResolutionKinds {
+pub(super) const fn resolution_kinds(resolution: &Resolution<RepoPath>) -> ResolutionKinds {
     match resolution {
         Resolution::Missing(_) => ResolutionKinds {
             structural: Some(FindingKind::ExplicitTargetMissing),

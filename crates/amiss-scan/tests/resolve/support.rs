@@ -3,12 +3,13 @@ use std::path::Path;
 use amiss_fixtures::{CommitChain, Staged, staged_repository};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::resolve::{ForgeContext, Resolver, TargetCache};
-use amiss_scan::{Error, Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover};
+use amiss_scan::{Error, ScanLimits, ScanResources, SnapshotDiscovery, discover};
 use amiss_wire::branch_ref;
 use amiss_wire::controls::TargetKind;
 use amiss_wire::model::ForgeDialect;
 use amiss_wire::model::{Adapter, BranchRef, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
+use amiss_wire::resolution::Resolution;
 use amiss_wire::resolution::{
     BlobContent, ExternalReference, InvalidReference, Target, UnsupportedSemantics, VersionScope,
 };
@@ -157,7 +158,7 @@ impl Bed {
         document: &str,
         is_image: bool,
         destination: &str,
-    ) -> Result<(amiss_scan::Intent, Resolution), Error> {
+    ) -> Result<(amiss_scan::Intent, Resolution<RepoPath>), Error> {
         #[expect(clippy::unwrap_used, reason = "test fixture helper")]
         let document = RepoPath::new(document.to_owned()).unwrap();
         self.resolver()

@@ -5,7 +5,7 @@ use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::ReportDefect;
 use amiss_wire::report::model::{
-    MissingResolution, Occurrence, ReportPayload, Resolution, UnsupportedSemanticsResolution,
+    MissingResolution, Occurrence, ReportPayload, ReportResolution, UnsupportedSemanticsResolution,
     occurrences,
 };
 use amiss_wire::resolution::{BlobTarget, Target, VersionScope};
@@ -58,30 +58,30 @@ fn matching_occurrences(bytes: &[u8], target: &RepoPath) -> Result<Vec<Occurrenc
         })
         .filter(|occurrence| {
             let resolution_path = match &occurrence.resolution {
-                Resolution::Resolved { target } | Resolution::TypeMismatch { target } => {
+                ReportResolution::Resolved { target } | ReportResolution::TypeMismatch { target } => {
                     match target {
                         Target::Tree { path } | Target::Blob(BlobTarget { path, .. }) => Some(path),
                     }
                 }
-                Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
+                ReportResolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
                     target, ..
                 }) => target.as_ref().map(|target| match target {
                     Target::Tree { path } | Target::Blob(BlobTarget { path, .. }) => path,
                 }),
-                Resolution::DeclaredUntracked { path, .. }
-                | Resolution::UnsupportedTarget { path, .. }
-                | Resolution::Missing(
+                ReportResolution::DeclaredUntracked { path, .. }
+                | ReportResolution::UnsupportedTarget { path, .. }
+                | ReportResolution::Missing(
                     MissingResolution::HeadingAnchorNotFound { path, .. }
                     | MissingResolution::LineFragmentOutOfRange { path }
                     | MissingResolution::PathNotFound { path, .. },
                 )
-                | Resolution::UnsupportedVersion {
+                | ReportResolution::UnsupportedVersion {
                     scope: VersionScope::KnownPath { path } | VersionScope::KnownCommit { path, .. },
                 } => Some(path),
-                Resolution::External { .. }
-                | Resolution::Invalid { .. }
-                | Resolution::Missing(MissingResolution::LabelNotDeclared {})
-                | Resolution::UnsupportedVersion { scope: VersionScope::UnknownPath {} } => None,
+                ReportResolution::External { .. }
+                | ReportResolution::Invalid { .. }
+                | ReportResolution::Missing(MissingResolution::LabelNotDeclared {})
+                | ReportResolution::UnsupportedVersion { scope: VersionScope::UnknownPath {} } => None,
             };
             resolution_path
                 .into_iter()

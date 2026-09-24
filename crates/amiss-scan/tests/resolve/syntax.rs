@@ -1,7 +1,7 @@
-use amiss_scan::Resolution;
 use amiss_wire::controls::TargetKind;
 use amiss_wire::model::Adapter;
 use amiss_wire::report::IntentKind;
+use amiss_wire::resolution::Resolution;
 use amiss_wire::resolution::{
     BlobContent, BlobMode, ExternalReference, InvalidReference, Missing, Target,
     UnsupportedSemantics, UnsupportedTarget,

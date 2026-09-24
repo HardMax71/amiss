@@ -10,7 +10,7 @@ use crate::report::{PAYLOAD_SCHEMA, ReportDefect, result_verdict};
 use super::{
     AnalysisError, Controls, DocumentGitMode, DocumentResult, DocumentSide, Engine, Evaluation,
     Feedback, Finding, FindingFactEvidence, ObservationComparison, ProjectionDifference,
-    Resolution, Summary,
+    ReportResolution, Summary,
 };
 
 use crate::model::RepoPath;
@@ -87,7 +87,7 @@ where
 #[serde(deny_unknown_fields)]
 pub struct ReportPayload<
     P = RepoPath,
-    R = Resolution<P>,
+    R = ReportResolution<P>,
     M = DocumentGitMode,
     E = FindingFactEvidence<P, R, ProjectionSource, ProjectionDifference, M>,
 > {

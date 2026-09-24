@@ -14,9 +14,10 @@ use crate::scanned::Verdict;
 use crate::scanned::unavailable;
 
 use super::content::{Content, content_cache, read_target, target_projection};
-use super::{LineRange, Resolution, Resolver, TARGET_LINE_PROJECTION_DOMAIN};
+use super::{LineRange, Resolver, TARGET_LINE_PROJECTION_DOMAIN};
 use crate::scanned::safe_line_number;
 use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
+use amiss_wire::resolution::Resolution;
 
 impl Resolver<'_> {
     /// Answers one value claim against the snapshot: the target must be a
@@ -287,7 +288,7 @@ pub(super) fn line_resolution(
     mode: GitMode,
     mut blob: BlobTarget<RepoPath>,
     range: LineRange,
-) -> Result<Resolution, Error> {
+) -> Result<Resolution<RepoPath>, Error> {
     let Some(cached) = content_cache(resolver.cache, resolver.commit_oid.as_ref()).get_mut(path)
     else {
         return Err(Error::Internal);

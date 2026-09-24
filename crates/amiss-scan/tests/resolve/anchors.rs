@@ -1,8 +1,9 @@
 use amiss_fixtures::{CommitChain, Staged, staged_repository};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::resolve::{Resolver, TargetCache};
-use amiss_scan::{Resolution, ScanLimits, ScanResources, discover};
+use amiss_scan::{ScanLimits, ScanResources, discover};
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
+use amiss_wire::resolution::Resolution;
 use amiss_wire::resolution::{Missing, Target, UnsupportedSemantics};
 
 use crate::support::{ANCHORS, bed, bed_at, bed_with};
@@ -310,7 +311,7 @@ fn transclusion_fixture() -> CommitChain {
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn transcluded(resolver: &mut Resolver<'_>, destination: &str) -> Resolution {
+fn transcluded(resolver: &mut Resolver<'_>, destination: &str) -> Resolution<RepoPath> {
     resolver
         .resolve(
             None,

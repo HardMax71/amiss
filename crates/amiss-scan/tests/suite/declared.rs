@@ -2,8 +2,9 @@ use amiss_fixtures::{CommitChain, Staged, staged_repository};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::declared::Declarations;
 use amiss_scan::resolve::{Resolver, TargetCache};
-use amiss_scan::{Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover};
+use amiss_scan::{ScanLimits, ScanResources, SnapshotDiscovery, discover};
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
+use amiss_wire::resolution::Resolution;
 use amiss_wire::resolution::{Missing, UnsupportedSemantics};
 
 const DOCS_IGNORE: &[u8] =
@@ -73,7 +74,7 @@ impl Bed {
     }
 
     #[expect(clippy::unwrap_used, reason = "test fixture helper")]
-    fn resolve(&mut self, destination: &str) -> Resolution {
+    fn resolve(&mut self, destination: &str) -> Resolution<RepoPath> {
         let document = RepoPath::new("docs/index.md".to_owned()).unwrap();
         self.resolver()
             .resolve(None, Adapter::Markdown, &document, false, destination)
@@ -82,7 +83,7 @@ impl Bed {
     }
 }
 
-fn declared_by(resolution: &Resolution) -> Option<String> {
+fn declared_by(resolution: &Resolution<RepoPath>) -> Option<String> {
     match resolution {
         Resolution::DeclaredUntracked(declared) => Some(format!(
             "{}|{}",

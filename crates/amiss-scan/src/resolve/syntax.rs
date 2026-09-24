@@ -3,7 +3,10 @@ use amiss_wire::resolution::{InvalidReference, UnsupportedSemantics};
 
 use crate::route::bundler_request;
 
-use super::{Intent, Resolution};
+use super::Intent;
+
+use amiss_wire::model::RepoPath;
+use amiss_wire::resolution::Resolution;
 
 /// The recognition opening: `https://`, the declared host byte-exact, then
 /// the path separator. Anything less exact is not this repository's forge.
@@ -16,7 +19,7 @@ pub(super) fn same_repo_suffix<'a>(path_part: &'a str, host: &str) -> Option<&'a
 
 /// A destination no tree answers whatever the document above it: a protocol
 /// relative network path, and the inline request syntax a bundler owns.
-pub(super) fn unreadable(path_part: &str) -> Option<Resolution> {
+pub(super) fn unreadable(path_part: &str) -> Option<Resolution<RepoPath>> {
     if path_part.starts_with("//") {
         return Some(Resolution::UnsupportedSemantics(
             UnsupportedSemantics::NetworkPath,

@@ -10,7 +10,7 @@ use amiss_wire::model::{
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
     BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, InvalidReference, Missing,
-    Resolution as WireResolution, Target, UnsupportedSemantics, UnsupportedTarget, VersionScope,
+    Resolution, Target, UnsupportedSemantics, UnsupportedTarget, VersionScope,
 };
 use amiss_wire::uri::{absolute_valid, decode_fragment, scheme};
 
@@ -75,9 +75,6 @@ pub struct Intent {
     pub query: Option<String>,
     pub fragment: Option<String>,
 }
-
-/// One occurrence's typed resolution against a binary-safe repository path.
-pub type Resolution = WireResolution<RepoPath>;
 
 /// The trusted run context for same-repository recognition: the declared
 /// host, dialect and object format, lowercase owner and repository, the two
@@ -161,7 +158,7 @@ impl<'a> Resolver<'a> {
         document_path: &RepoPath,
         is_image: bool,
         semantic: &str,
-    ) -> Result<(Intent, Resolution), Error> {
+    ) -> Result<(Intent, Resolution<RepoPath>), Error> {
         resolve_destination(
             self,
             context,
@@ -180,7 +177,7 @@ impl<'a> Resolver<'a> {
         adapter: Adapter,
         document_path: &RepoPath,
         occurrence: &crate::scanned::ScannedOccurrence,
-    ) -> Result<(Intent, Resolution, Option<String>), Error> {
+    ) -> Result<(Intent, Resolution<RepoPath>, Option<String>), Error> {
         if occurrence.occurrence.construct == SourceConstruct::RstRefRole {
             return self.resolve_label(&occurrence.occurrence.semantic_destination, semantic);
         }
@@ -237,7 +234,7 @@ fn absolute(
     scheme: &str,
     query: Option<String>,
     fragment: Option<String>,
-) -> Result<(Intent, Resolution), Error> {
+) -> Result<(Intent, Resolution<RepoPath>), Error> {
     let invalid = |query: Option<String>, fragment: Option<String>| {
         (
             unsupported_intent(query, fragment),
@@ -283,7 +280,7 @@ fn resolve_destination(
     construct: Option<SourceConstruct>,
     is_image: bool,
     semantic: &str,
-) -> Result<(Intent, Resolution), Error> {
+) -> Result<(Intent, Resolution<RepoPath>), Error> {
     let (path_part, query, fragment) = split_components(semantic);
     let beside = directory(document_path.as_bytes());
     let mut anchors = anchors(
@@ -403,7 +400,7 @@ fn native(
     query: Option<String>,
     fragment: Option<String>,
     forge: Option<ForgeDialect>,
-) -> Result<(Intent, Resolution), Error> {
+) -> Result<(Intent, Resolution<RepoPath>), Error> {
     let beside = directory(document.as_bytes());
     let authored = anchors
         .iter()
@@ -446,7 +443,7 @@ fn undecodable_fragment(
     path_part: &str,
     query: Option<String>,
     fragment: Option<String>,
-) -> (Intent, Resolution) {
+) -> (Intent, Resolution<RepoPath>) {
     let intent = if path_part.starts_with('/') && !path_part.starts_with("//") {
         Intent {
             kind: IntentKind::SiteRoute,
@@ -517,7 +514,10 @@ fn awaits_attribute(semantic: &str) -> bool {
 /// The last question a path the tree does not hold is asked. Only ignore files
 /// on its own ancestor chain can name it, and the nearest one answers, so the
 /// report carries the declaration closest to the target.
-fn declared_untracked(resolver: &mut Resolver<'_>, path: &RepoPath) -> Result<Resolution, Error> {
+fn declared_untracked(
+    resolver: &mut Resolver<'_>,
+    path: &RepoPath,
+) -> Result<Resolution<RepoPath>, Error> {
     let raw = path.as_bytes();
     let separators = raw
         .iter()
@@ -633,7 +633,7 @@ pub(super) fn lookup(
     query: Option<&str>,
     fragment: Option<&str>,
     forge: Option<ForgeDialect>,
-) -> Result<Resolution, Error> {
+) -> Result<Resolution<RepoPath>, Error> {
     let (mode, entry) = match resolver.snapshot.locate(path) {
         None => {
             return declared_untracked(resolver, path);
@@ -686,7 +686,7 @@ fn refusal(
     target_kind: TargetKind,
     query: Option<&str>,
     entry: Target<RepoPath>,
-) -> Option<Resolution> {
+) -> Option<Resolution<RepoPath>> {
     let is_tree = mode == GitMode::Tree;
     let compatible = match target_kind {
         TargetKind::Blob => !is_tree,

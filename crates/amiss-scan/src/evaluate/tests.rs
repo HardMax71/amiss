@@ -77,7 +77,7 @@ fn derived_resolutions_match_produced_bytes_and_the_report_reader() -> Result<()
         assert_eq!(cases.len(), 56);
         for resolution in cases {
             let encoded = serde_json_canonicalizer::to_vec(&resolution)?;
-            let decoded: report::Resolution = serde_json::from_slice(&encoded)?;
+            let decoded: report::ReportResolution = serde_json::from_slice(&encoded)?;
             assert_eq!(decoded.as_ref(), resolution.discriminant().as_ref());
             assert_eq!(serde_json_canonicalizer::to_vec(&decoded)?, encoded);
         }

@@ -2,7 +2,7 @@ use amiss_wire::envelope::{Payload as _, document_digest, sealed_digest};
 use amiss_wire::report::{
     PAYLOAD_SCHEMA, ReportDefect, emit_report, emit_sealed,
     model::{
-        DocumentStatus, ReportEnvelope, ReportPayload, ReportStatus, Resolution, Sides,
+        DocumentStatus, ReportEnvelope, ReportPayload, ReportResolution, ReportStatus, Sides,
         UnsupportedReason, UnsupportedSemanticsResolution,
     },
 };
@@ -174,7 +174,7 @@ fn an_unfamiliar_reason_survives_a_read_and_a_rewrite() {
             Sides::Each(pair) => pair.base.as_mut().or(pair.candidate.as_mut()),
         };
         if let Some(occurrence) = side {
-            occurrence.resolution = Resolution::UnsupportedSemantics(semantics.clone());
+            occurrence.resolution = ReportResolution::UnsupportedSemantics(semantics.clone());
             carried += 1;
         }
     }

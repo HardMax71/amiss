@@ -8,7 +8,7 @@ use amiss_scan::evaluate::{
 };
 use amiss_scan::observe::{ObservationIdentity, observation_input};
 use amiss_scan::policy::{Effects, TimeContext, WaiverContext};
-use amiss_scan::resolve::{Intent, Resolution};
+use amiss_scan::resolve::Intent;
 use amiss_scan::scanned::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{Profile, TargetKind};
 use amiss_wire::envelope::document_digest;
@@ -18,6 +18,7 @@ use amiss_wire::report::model::{ControlStateSource, FindingKeyScope};
 use amiss_wire::report::{
     Disposition, EngineProvenance, FindingKind, IntentKind, adapter_contract,
 };
+use amiss_wire::resolution::Resolution;
 use amiss_wire::resolution::{
     BlobContent, BlobMode, BlobTarget, InvalidReference, Missing, TaggedBlobTarget, Target,
     UnsupportedSemantics, UnsupportedTarget, VersionScope,
@@ -82,13 +83,13 @@ fn available_blob(path: &str, body: &[u8]) -> BlobTarget<RepoPath> {
     }
 }
 
-fn resolved_blob(path: &str, body: &[u8]) -> Resolution {
+fn resolved_blob(path: &str, body: &[u8]) -> Resolution<RepoPath> {
     Resolution::Resolved {
         target: Target::Blob(available_blob(path, body)),
     }
 }
 
-fn lfs_pointer(path: &str) -> Resolution {
+fn lfs_pointer(path: &str) -> Resolution<RepoPath> {
     Resolution::Resolved {
         target: Target::Blob(BlobTarget {
             path: repo_path(path),
@@ -106,7 +107,7 @@ fn lfs_pointer(path: &str) -> Resolution {
     }
 }
 
-fn path_not_found(path: &str) -> Resolution {
+fn path_not_found(path: &str) -> Resolution<RepoPath> {
     Resolution::Missing(Missing::PathNotFound {
         path: repo_path(path),
         near: None,
@@ -119,10 +120,10 @@ struct Spec {
     node_path: Vec<usize>,
     block: String,
     intent: Intent,
-    resolution: Resolution,
+    resolution: Resolution<RepoPath>,
 }
 
-fn spec(document: &str, target: &str, resolution: Resolution) -> Spec {
+fn spec(document: &str, target: &str, resolution: Resolution<RepoPath>) -> Spec {
     Spec {
         document: repo_path(document),
         node_path: vec![0, 0],
@@ -357,7 +358,7 @@ fn boundary_kinds_follow_the_mapping() {
 
 #[test]
 fn record_boundaries_fold_to_one_row_per_document() {
-    let at = |document: &str, node: usize, resolution: Resolution| {
+    let at = |document: &str, node: usize, resolution: Resolution<RepoPath>| {
         let mut row = spec(document, "t.md", resolution);
         row.node_path = vec![node, 0];
         observation(&row)

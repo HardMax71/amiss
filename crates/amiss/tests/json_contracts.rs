@@ -7,7 +7,8 @@ use amiss_wire::{
     report::{
         PAYLOAD_SCHEMA,
         model::{
-            MissingResolution, Occurrence, Pair, ReportEnvelope, Resolution, Sides, occurrences,
+            MissingResolution, Occurrence, Pair, ReportEnvelope, ReportResolution, Sides,
+            occurrences,
         },
     },
     resolution::{Target, VersionScope},
@@ -121,13 +122,13 @@ fn refs_query_each_path_source_and_raw_byte_targets() {
     for (intent, resolution, flag, target) in [
         (
             Some(text_target.clone()),
-            Resolution::Missing(MissingResolution::LabelNotDeclared {}),
+            ReportResolution::Missing(MissingResolution::LabelNotDeclared {}),
             "--target",
             "docs/query.md",
         ),
         (
             None,
-            Resolution::Missing(MissingResolution::PathNotFound {
+            ReportResolution::Missing(MissingResolution::PathNotFound {
                 path: text_target.clone(),
                 near: None,
                 same_object_at: None,
@@ -137,7 +138,7 @@ fn refs_query_each_path_source_and_raw_byte_targets() {
         ),
         (
             None,
-            Resolution::Resolved {
+            ReportResolution::Resolved {
                 target: Target::Tree {
                     path: text_target.clone(),
                 },
@@ -147,7 +148,7 @@ fn refs_query_each_path_source_and_raw_byte_targets() {
         ),
         (
             None,
-            Resolution::UnsupportedVersion {
+            ReportResolution::UnsupportedVersion {
                 scope: VersionScope::KnownPath { path: text_target },
             },
             "--target",
@@ -155,7 +156,7 @@ fn refs_query_each_path_source_and_raw_byte_targets() {
         ),
         (
             Some(RepoPath::from_bytes(b"docs/\xff.md".to_vec()).unwrap()),
-            Resolution::Missing(MissingResolution::LabelNotDeclared {}),
+            ReportResolution::Missing(MissingResolution::LabelNotDeclared {}),
             "--target-bytes-hex",
             "646f63732fff2e6d64",
         ),

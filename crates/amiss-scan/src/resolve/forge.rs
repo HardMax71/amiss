@@ -8,8 +8,10 @@ use crate::Error;
 
 use super::syntax::unsupported_intent;
 
-use super::{ForgeContext, Intent, Resolution, Resolver, lookup};
+use super::{ForgeContext, Intent, Resolver, lookup};
+
 use crate::route::invalid_path_byte;
+use amiss_wire::resolution::Resolution;
 
 pub(super) fn resolve(
     resolver: &mut Resolver<'_>,
@@ -17,7 +19,7 @@ pub(super) fn resolve(
     suffix: &str,
     query: Option<String>,
     fragment: Option<String>,
-) -> Result<(Intent, Resolution), Error> {
+) -> Result<(Intent, Resolution<RepoPath>), Error> {
     let route = match context.dialect {
         ForgeDialect::Github => github(context, suffix),
         ForgeDialect::Gitlab => gitlab(context, suffix),
@@ -98,7 +100,7 @@ pub(super) fn resolve(
 
 enum ForgeRoute {
     Foreign,
-    Unsupported(Resolution),
+    Unsupported(Resolution<RepoPath>),
     Same(ForgeMatch),
 }
 
@@ -123,7 +125,7 @@ enum TailVersions {
 
 /// A recognized URL that is not this repository: a valid external HTTPS
 /// destination whose repository is someone else's.
-fn foreign_row(query: Option<String>, fragment: Option<String>) -> (Intent, Resolution) {
+fn foreign_row(query: Option<String>, fragment: Option<String>) -> (Intent, Resolution<RepoPath>) {
     (
         Intent {
             kind: IntentKind::ExternalUrl,
@@ -303,7 +305,7 @@ fn bitbucket_cloud_split(
     identity: &ForgeContext,
     directory_hint: bool,
     raw_tail: &[&str],
-) -> Result<(ForgeVersion, RepoPath), Resolution> {
+) -> Result<(ForgeVersion, RepoPath), Resolution<RepoPath>> {
     let decoded = decoded_tail(directory_hint, raw_tail)?;
     let version = decoded.first().ok_or(Resolution::Invalid {
         reason: InvalidReference::Syntax,
@@ -402,7 +404,7 @@ fn bitbucket_data_center_version(
     identity: &ForgeContext,
     query: Option<&str>,
     path: &RepoPath,
-) -> Result<ForgeVersion, Resolution> {
+) -> Result<ForgeVersion, Resolution<RepoPath>> {
     let unsupported = || Resolution::UnsupportedVersion {
         scope: VersionScope::KnownPath { path: path.clone() },
     };
@@ -501,7 +503,7 @@ fn source_segments<'a>(identity: &ForgeContext, suffix: &'a str) -> Option<Vec<&
 fn same_route(
     intent_kind: IntentKind,
     target_kind: TargetKind,
-    split: Result<(ForgeVersion, RepoPath), Resolution>,
+    split: Result<(ForgeVersion, RepoPath), Resolution<RepoPath>>,
 ) -> ForgeRoute {
     split.map_or_else(ForgeRoute::Unsupported, |(version, path)| {
         ForgeRoute::Same(ForgeMatch {
@@ -520,7 +522,7 @@ fn versioned_split(
     tolerate_terminal_slash: bool,
     raw_tail: &[&str],
     versions: TailVersions,
-) -> Result<(ForgeVersion, RepoPath), Resolution> {
+) -> Result<(ForgeVersion, RepoPath), Resolution<RepoPath>> {
     let decoded = decoded_tail(tolerate_terminal_slash, raw_tail)?;
     let candidate = identity
         .candidate_ref
@@ -575,7 +577,7 @@ fn versioned_split(
 fn decoded_tail(
     tolerate_terminal_slash: bool,
     raw_tail: &[&str],
-) -> Result<Vec<Vec<u8>>, Resolution> {
+) -> Result<Vec<Vec<u8>>, Resolution<RepoPath>> {
     let tail = if tolerate_terminal_slash && raw_tail.len() > 1 && raw_tail.last() == Some(&"") {
         raw_tail
             .get(..raw_tail.len().saturating_sub(1))
@@ -600,7 +602,7 @@ fn decoded_tail(
 
 /// The remaining segments as a contained repository path: nonempty, no dot
 /// segments, and inside the frozen byte grammar.
-fn contained_path(remaining: &[Vec<u8>]) -> Result<RepoPath, Resolution> {
+fn contained_path(remaining: &[Vec<u8>]) -> Result<RepoPath, Resolution<RepoPath>> {
     if remaining.is_empty() {
         return Err(Resolution::Invalid {
             reason: InvalidReference::Syntax,

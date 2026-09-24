@@ -23,7 +23,7 @@ use amiss_wire::model::{ArtifactId, ForgeDialect, ObjectFormat, Oid, RepositoryI
 use amiss_wire::report::IntentKind;
 use amiss_wire::report::model::{
     MissingResolution, ObservationComparison, Occurrence, ReportEnvelope, ReportPayload,
-    Resolution, UnsupportedSemanticsResolution, occurrences,
+    ReportResolution, UnsupportedSemanticsResolution, occurrences,
 };
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestStreams, RequestTrust, SEALED_ENGINE_ARGUMENT,
@@ -387,7 +387,7 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     assert!(labels.iter().any(|row| {
         matches!(
             row.resolution,
-            Resolution::External {
+            ReportResolution::External {
                 reason: ExternalReference::IntersphinxInventory
             }
         ) && row.external_destination.as_deref()
@@ -395,14 +395,14 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     }));
     assert!(labels.iter().any(|row| matches!(
         row.resolution,
-        Resolution::Missing(MissingResolution::LabelNotDeclared {})
+        ReportResolution::Missing(MissingResolution::LabelNotDeclared {})
     )));
     assert_eq!(
         labels
             .iter()
             .filter(|row| matches!(
                 row.resolution,
-                Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
+                ReportResolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
                     reason: UnsupportedSemanticsReason::ExternalInventory,
                     ..
                 })
@@ -533,7 +533,7 @@ fn assert_site_routes(payload: &ReportPayload) {
             .filter(
                 |(row, _)| occurrences(row).base.is_some_and(|base| matches!(
                     base.resolution,
-                    Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
+                    ReportResolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
                         reason: UnsupportedSemanticsReason::SiteRoute,
                         ..
                     })
@@ -548,7 +548,7 @@ fn assert_site_routes(payload: &ReportPayload) {
             .filter(
                 |(row, _)| occurrences(row).base.is_some_and(|base| matches!(
                     base.resolution,
-                    Resolution::Invalid {
+                    ReportResolution::Invalid {
                         reason: InvalidReference::FragmentEncoding
                     }
                 ))
@@ -560,17 +560,17 @@ fn assert_site_routes(payload: &ReportPayload) {
         routes
             .iter()
             .filter(|(_, side)| match &side.resolution {
-                Resolution::Resolved {
+                ReportResolution::Resolved {
                     target: Target::Tree { path } | Target::Blob(BlobTarget { path, .. }),
                 } => *path == RepoPath::from(&repo_path_text!("docs/guide.md")),
-                Resolution::DeclaredUntracked { .. }
-                | Resolution::External { .. }
-                | Resolution::Invalid { .. }
-                | Resolution::Missing(_)
-                | Resolution::TypeMismatch { .. }
-                | Resolution::UnsupportedSemantics(_)
-                | Resolution::UnsupportedTarget { .. }
-                | Resolution::UnsupportedVersion { .. } => false,
+                ReportResolution::DeclaredUntracked { .. }
+                | ReportResolution::External { .. }
+                | ReportResolution::Invalid { .. }
+                | ReportResolution::Missing(_)
+                | ReportResolution::TypeMismatch { .. }
+                | ReportResolution::UnsupportedSemantics(_)
+                | ReportResolution::UnsupportedTarget { .. }
+                | ReportResolution::UnsupportedVersion { .. } => false,
             })
             .count(),
         9
@@ -582,7 +582,7 @@ fn assert_site_routes(payload: &ReportPayload) {
             .iter()
             .filter(|side| matches!(
                 side.resolution,
-                Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
+                ReportResolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
                     reason: UnsupportedSemanticsReason::SiteRoute,
                     ..
                 })
@@ -601,7 +601,7 @@ fn assert_generated_routes(sides: &[&Occurrence]) {
         .filter(|side| {
             matches!(
                 side.resolution,
-                Resolution::External {
+                ReportResolution::External {
                     reason: ExternalReference::SiteBuild
                 }
             )

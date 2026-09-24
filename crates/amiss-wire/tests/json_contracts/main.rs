@@ -90,7 +90,7 @@ fn document_row_enums_match_the_report_schema() {
 #[test]
 fn resolver_reasons_fill_report_rows_without_changing_the_contract() {
     use amiss_wire::model::RepoPath;
-    use amiss_wire::report::model::Resolution;
+    use amiss_wire::report::model::ReportResolution;
     use amiss_wire::resolution::{ExternalReference, InvalidReference, UnsupportedTargetTag};
 
     let schema: serde_json::Value = serde_json::from_slice(include_bytes!(
@@ -102,13 +102,23 @@ fn resolver_reasons_fill_report_rows_without_changing_the_contract() {
         (
             "InvalidResolution",
             InvalidReference::iter()
-                .map(|reason| (reason.as_ref().to_owned(), Resolution::Invalid { reason }))
+                .map(|reason| {
+                    (
+                        reason.as_ref().to_owned(),
+                        ReportResolution::Invalid { reason },
+                    )
+                })
                 .collect::<Vec<_>>(),
         ),
         (
             "ExternalResolution",
             ExternalReference::iter()
-                .map(|reason| (reason.as_ref().to_owned(), Resolution::External { reason }))
+                .map(|reason| {
+                    (
+                        reason.as_ref().to_owned(),
+                        ReportResolution::External { reason },
+                    )
+                })
                 .collect(),
         ),
         (
@@ -117,7 +127,7 @@ fn resolver_reasons_fill_report_rows_without_changing_the_contract() {
                 .map(|reason| {
                     (
                         reason.as_ref().to_owned(),
-                        Resolution::UnsupportedTarget {
+                        ReportResolution::UnsupportedTarget {
                             path: path.clone(),
                             reason,
                         },
@@ -136,13 +146,16 @@ fn resolver_reasons_fill_report_rows_without_changing_the_contract() {
         for (name, row) in rows {
             let bytes = serde_json::to_vec(&row).unwrap();
             assert_eq!(bytes, serde_json_canonicalizer::to_vec(&row).unwrap());
-            assert_eq!(serde_json::from_slice::<Resolution>(&bytes).unwrap(), row);
+            assert_eq!(
+                serde_json::from_slice::<ReportResolution>(&bytes).unwrap(),
+                row
+            );
             let mut value = serde_json::to_value(&row).unwrap();
             assert_eq!(value["reason"].as_str(), Some(name.as_str()));
             generated.insert(name);
             for invalid in [serde_json::Value::Null, "unknown-reason".into(), 0.into()] {
                 value["reason"] = invalid;
-                assert!(serde_json::from_value::<Resolution>(value.clone()).is_err());
+                assert!(serde_json::from_value::<ReportResolution>(value.clone()).is_err());
             }
         }
         assert_eq!(declared, generated, "{definition}");

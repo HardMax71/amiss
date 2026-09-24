@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use amiss_wire::ExitClass;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::human::atom;
-use amiss_wire::report::model::{MissingResolution, ReportPayload, Resolution as WireResolution};
+use amiss_wire::report::model::{MissingResolution, ReportPayload, ReportResolution};
 use amiss_wire::report::result_verdict;
 use amiss_wire::resolution::{MissingTag, ResolutionTag, VersionScopeTag};
 
@@ -53,11 +53,11 @@ pub(crate) fn run(invocation: &RenderInvocation, reserve: &mut BufWriter<Stdout>
 /// A resolution read back from a report, spelled for a human place line over
 /// the path form that report carries.
 pub(crate) fn wire_resolution<P, F: Fn(&P) -> String>(
-    resolution: &WireResolution<P>,
+    resolution: &ReportResolution<P>,
     path: F,
 ) -> (ResolutionTag, Option<String>) {
     match resolution {
-        WireResolution::Missing(missing) => {
+        ReportResolution::Missing(missing) => {
             let (tag, near) = match missing {
                 MissingResolution::PathNotFound { near, .. } => {
                     (MissingTag::PathNotFound, near.as_ref().map(path))
@@ -73,24 +73,24 @@ pub(crate) fn wire_resolution<P, F: Fn(&P) -> String>(
             };
             (ResolutionTag::Missing, Some(missing_detail(tag, near)))
         }
-        WireResolution::Invalid { reason } => {
+        ReportResolution::Invalid { reason } => {
             (ResolutionTag::Invalid, Some(reason.as_ref().to_owned()))
         }
-        WireResolution::UnsupportedTarget { reason, .. } => (
+        ReportResolution::UnsupportedTarget { reason, .. } => (
             ResolutionTag::UnsupportedTarget,
             Some(reason.as_ref().to_owned()),
         ),
-        WireResolution::UnsupportedSemantics(semantics) => (
+        ReportResolution::UnsupportedSemantics(semantics) => (
             ResolutionTag::UnsupportedSemantics,
             Some(semantics.reason.to_string()),
         ),
-        WireResolution::UnsupportedVersion { scope } => (
+        ReportResolution::UnsupportedVersion { scope } => (
             ResolutionTag::UnsupportedVersion,
             Some(VersionScopeTag::from(scope).as_ref().to_owned()),
         ),
-        WireResolution::Resolved { .. } => (ResolutionTag::Resolved, None),
-        WireResolution::TypeMismatch { .. } => (ResolutionTag::TypeMismatch, None),
-        WireResolution::DeclaredUntracked { .. } => (ResolutionTag::DeclaredUntracked, None),
-        WireResolution::External { .. } => (ResolutionTag::External, None),
+        ReportResolution::Resolved { .. } => (ResolutionTag::Resolved, None),
+        ReportResolution::TypeMismatch { .. } => (ResolutionTag::TypeMismatch, None),
+        ReportResolution::DeclaredUntracked { .. } => (ResolutionTag::DeclaredUntracked, None),
+        ReportResolution::External { .. } => (ResolutionTag::External, None),
     }
 }

@@ -2,7 +2,7 @@ use amiss_wire::model::RepoPath;
 use amiss_wire::repo_path_text;
 use amiss_wire::report::IntentKind;
 use amiss_wire::report::model::{
-    MissingResolution, Resolution, UnsupportedSemanticsResolution, occurrences,
+    MissingResolution, ReportResolution, UnsupportedSemanticsResolution, occurrences,
 };
 use amiss_wire::resolution::UnsupportedSemanticsReason;
 use amiss_wire::resolution::{BlobTarget, Target};
@@ -62,7 +62,7 @@ fn a_sphinx_doc_role_resolves_through_the_path_lane() {
         doc.iter().any(|side| {
             side.observation_id_input.extracted_intent.repository_path
                 == Some(RepoPath::from(&repo_path_text!("docs/guide.rst")))
-                && matches!(side.resolution, Resolution::Resolved { .. })
+                && matches!(side.resolution, ReportResolution::Resolved { .. })
         }),
         "the :doc: role resolves through the ordinary path lane: {doc:?}"
     );
@@ -92,21 +92,21 @@ fn sphinx_labels_resolve_through_the_label_table() {
         .filter(|side| side.observation_id_input.extracted_intent.kind == IntentKind::Label)
         .collect();
     assert_eq!(labels.len(), 5, "five :ref: observations: {labels:?}");
-    let count = |expected: fn(&Resolution) -> bool| {
+    let count = |expected: fn(&ReportResolution) -> bool| {
         labels
             .iter()
             .filter(|side| expected(&side.resolution))
             .count()
     };
     assert_eq!(
-        count(|resolution| matches!(resolution, Resolution::Resolved { .. })),
+        count(|resolution| matches!(resolution, ReportResolution::Resolved { .. })),
         2,
         "two held including the quoted phrase: {labels:?}"
     );
     assert_eq!(
         count(|resolution| matches!(
             resolution,
-            Resolution::Missing(MissingResolution::LabelNotDeclared {})
+            ReportResolution::Missing(MissingResolution::LabelNotDeclared {})
         )),
         1,
         "one dead: {labels:?}"
@@ -114,7 +114,7 @@ fn sphinx_labels_resolve_through_the_label_table() {
     assert_eq!(
         count(|resolution| matches!(
             resolution,
-            Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
+            ReportResolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
                 reason: UnsupportedSemanticsReason::DuplicateLabel,
                 ..
             })
@@ -125,7 +125,7 @@ fn sphinx_labels_resolve_through_the_label_table() {
     assert_eq!(
         count(|resolution| matches!(
             resolution,
-            Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
+            ReportResolution::UnsupportedSemantics(UnsupportedSemanticsResolution {
                 reason: UnsupportedSemanticsReason::ExternalInventory,
                 ..
             })
@@ -136,15 +136,15 @@ fn sphinx_labels_resolve_through_the_label_table() {
     let held = labels
         .iter()
         .find_map(|side| match &side.resolution {
-            Resolution::Resolved { target } => Some(target),
-            Resolution::DeclaredUntracked { .. }
-            | Resolution::External { .. }
-            | Resolution::Invalid { .. }
-            | Resolution::Missing(_)
-            | Resolution::TypeMismatch { .. }
-            | Resolution::UnsupportedSemantics(_)
-            | Resolution::UnsupportedTarget { .. }
-            | Resolution::UnsupportedVersion { .. } => None,
+            ReportResolution::Resolved { target } => Some(target),
+            ReportResolution::DeclaredUntracked { .. }
+            | ReportResolution::External { .. }
+            | ReportResolution::Invalid { .. }
+            | ReportResolution::Missing(_)
+            | ReportResolution::TypeMismatch { .. }
+            | ReportResolution::UnsupportedSemantics(_)
+            | ReportResolution::UnsupportedTarget { .. }
+            | ReportResolution::UnsupportedVersion { .. } => None,
         })
         .unwrap();
     let (Target::Tree { path } | Target::Blob(BlobTarget { path, .. })) = held;

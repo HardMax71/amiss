@@ -1,5 +1,5 @@
-use amiss_scan::Resolution;
 use amiss_wire::model::{ForgeDialect, RepoPath};
+use amiss_wire::resolution::Resolution;
 use amiss_wire::resolution::{Missing, Target};
 
 use amiss_wire::model::Adapter;

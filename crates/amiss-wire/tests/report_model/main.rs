@@ -4,7 +4,7 @@ mod projection;
 
 use amiss_wire::report::model::{
     BaseSnapshot, Evaluation, FindingFactEvidence, FindingKeyScope, MissingResolution,
-    ReportEnvelope, Resolution, Snapshot,
+    ReportEnvelope, ReportResolution, Snapshot,
 };
 
 use amiss_wire::model::RepoPath;
@@ -98,7 +98,7 @@ fn every_report_variant_streams_in_canonical_order() -> Result<(), Box<dyn std::
         r#"{"kind":"unsupported-target","path":"a","reason":"symlink"}"#,
         r#"{"kind":"unsupported-version","scope":{"kind":"unknown-path"}}"#,
     ] {
-        assert_canonical::<Resolution>(wire)?;
+        assert_canonical::<ReportResolution>(wire)?;
     }
     for template in [
         r#"{"control_path":null,"kind":"control","rule_id":"rule"}"#,

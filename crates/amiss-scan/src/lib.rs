@@ -44,7 +44,7 @@ pub use projection::{
     project_repository,
 };
 pub use report::{Built, GitSnapshotIdentity, Setup, construct, construct_incomplete};
-pub use resolve::{ForgeContext, Intent, Resolution, Resolver, TargetCache};
+pub use resolve::{ForgeContext, Intent, Resolver, TargetCache};
 pub use resources::{ScanLimits, ScanResources};
 pub use scan::{scan_bytes, scan_document};
 pub use scanned::{Scanned, ScannedOccurrence, SpanDisplay};
