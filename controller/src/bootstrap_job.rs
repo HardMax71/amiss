@@ -261,3 +261,22 @@ fn provider_run_id(run: &ProviderRun) -> String {
         ProviderRun::Job(job) => format!("pipeline/{}/job/{}", job.pipeline_id, job.job_id),
     }
 }
+
+fn normalized_expectations(
+    expectations: &[SemanticEvidenceExpectation],
+) -> Result<Vec<SemanticEvidenceExpectation>, BootstrapJobError> {
+    if expectations.iter().any(|expectation| {
+        !amiss_wire::semantic::producer_version_valid(&expectation.producer_version)
+    }) {
+        return Err(BootstrapJobError::SemanticEvidence);
+    }
+    let mut normalized = expectations.to_vec();
+    normalized.sort();
+    if normalized.windows(2).any(|pair| {
+        matches!(pair, [left, right] if left.acquisition_identity == right.acquisition_identity)
+    })
+    {
+        return Err(BootstrapJobError::SemanticEvidence);
+    }
+    Ok(normalized)
+}
