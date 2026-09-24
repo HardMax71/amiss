@@ -16,6 +16,7 @@ use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
 use crate::GitHubPullRequest;
 
 use super::Config;
+use super::GitHubRelationRest;
 use super::artifact::{
     EXACT_PAGE_SIZE, WorkflowArtifactPage, WorkflowArtifactQuery, WorkflowRunPage,
     WorkflowRunQuery, finish_workflow_artifact, select_workflow_artifact, select_workflow_run,
@@ -26,7 +27,6 @@ use super::model::{
     GitCommitRecord, PullRequestRecord, RefRecord, RefreshData, RepositoryCommitRecord,
     RepositoryRecord,
 };
-use super::relation::GitHubRelationRest;
 use super::{GitHubClientError, GitHubTimeouts};
 
 mod transport;

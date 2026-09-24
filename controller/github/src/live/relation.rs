@@ -6,24 +6,16 @@ use amiss_controller::{
     IntegrationId, PlanScope, ProviderError, RelationStatusRecord, RelationStatusTarget,
     RelationSubject, RelationSubjectHead, relation_status_publication,
 };
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::relation::RelationSnapshot;
 
-use super::Client;
-use super::model::{CommitRecord, CreateCheckRun, CreateCheckRunOutput};
+use super::model::{CreateCheckRun, CreateCheckRunOutput};
 use super::publication::{CheckRunDecision, check_run_decision, validate_created};
 use super::rest::GitHubRest;
+use super::{Client, GitHubRelationRest};
 
 const CHECK_RUN_DOMAIN: &str = "amiss/controller-github-relation-check-run-v1";
 const TITLE: &str = "Amiss cross-repository relation";
-
-pub(super) trait GitHubRelationRest {
-    fn relation_head(
-        &self,
-        repository: &RepositoryIdentity,
-        target: &BranchRef,
-    ) -> Result<CommitRecord, ProviderError>;
-}
 
 impl<R: GitHubRelationRest> Client<R> {
     pub(super) fn resolve_relation_head(
