@@ -24,11 +24,11 @@ pub enum DeliveryClaim {
     Execute(DeliveryLease),
     Publish(StagedPublication),
     Busy {
-        evaluation_id: ControllerEvaluationId,
+        evaluation_id: OpaqueId,
         retry_at_unix_millis: i64,
     },
     Duplicate {
-        evaluation_id: ControllerEvaluationId,
+        evaluation_id: OpaqueId,
     },
     BindingConflict,
 }

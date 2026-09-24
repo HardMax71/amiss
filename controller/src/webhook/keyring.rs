@@ -5,7 +5,7 @@ use std::fmt;
 use base64::Engine as _;
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 
-use crate::{TrustAnchorId, TrustSetId};
+use crate::OpaqueId;
 
 use super::{WebhookError, WebhookKeyringError};
 
@@ -18,7 +18,7 @@ const MAX_STANDARD_ENCODED_BYTES: usize = 88;
 
 /// One HMAC key and its controller-owned acceptance window.
 pub struct WebhookKey {
-    anchor: TrustAnchorId,
+    anchor: OpaqueId,
     secret: SecretSlice<u8>,
     active_from_unix_millis: i64,
     active_until_unix_millis: Option<i64>,
@@ -32,7 +32,7 @@ impl WebhookKey {
     ///
     /// Returns an error for a weak or oversized secret or an invalid window.
     pub fn new(
-        anchor: TrustAnchorId,
+        anchor: OpaqueId,
         secret: Vec<u8>,
         active_from_unix_millis: i64,
         active_until_unix_millis: Option<i64>,
@@ -46,7 +46,7 @@ impl WebhookKey {
     }
 
     fn from_secret(
-        anchor: TrustAnchorId,
+        anchor: OpaqueId,
         secret: SecretSlice<u8>,
         active_from_unix_millis: i64,
         active_until_unix_millis: Option<i64>,
@@ -75,7 +75,7 @@ impl WebhookKey {
     /// Returns an error unless the prefix and canonical padded Base64 are
     /// exact and the decoded Standard Webhooks key is 24 through 64 bytes.
     pub fn from_standard_token(
-        anchor: TrustAnchorId,
+        anchor: OpaqueId,
         token: SecretString,
         active_from_unix_millis: i64,
         active_until_unix_millis: Option<i64>,
@@ -134,7 +134,7 @@ fn format_webhook_key(key: &WebhookKey, formatter: &mut fmt::Formatter<'_>) -> f
 /// permit rotation; the newest matching active anchor is reported.
 #[derive(Debug)]
 pub struct WebhookKeyring {
-    trust_set: TrustSetId,
+    trust_set: OpaqueId,
     keys: Vec<WebhookKey>,
 }
 
@@ -146,7 +146,7 @@ impl WebhookKeyring {
     /// Returns an error when the set is empty, exceeds the rotation bound, or
     /// repeats an anchor ID or secret.
     pub fn new(
-        trust_set: TrustSetId,
+        trust_set: OpaqueId,
         mut keys: Vec<WebhookKey>,
     ) -> Result<Self, WebhookKeyringError> {
         if keys.is_empty() {
@@ -174,7 +174,7 @@ impl WebhookKeyring {
         Ok(Self { trust_set, keys })
     }
 
-    pub fn trust_set(&self) -> &TrustSetId {
+    pub fn trust_set(&self) -> &OpaqueId {
         &self.trust_set
     }
 
@@ -183,7 +183,7 @@ impl WebhookKeyring {
         received_at_unix_millis: i64,
         signatures: &[[u8; 32]],
         message_parts: &[&[u8]],
-    ) -> Result<TrustAnchorId, WebhookError> {
+    ) -> Result<OpaqueId, WebhookError> {
         if received_at_unix_millis < 0 {
             return Err(WebhookError::ReceiptTime);
         }

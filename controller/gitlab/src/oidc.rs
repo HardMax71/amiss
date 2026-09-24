@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use amiss_controller::{
-    IngressCheck, ProviderError, ProviderIdentity, ReplayIdentity, SignedRequestProof,
-    SignedTimePolicy, TrustSetId, VerifiedDelivery,
+    IngressCheck, OpaqueId, ProviderError, ProviderIdentity, ReplayIdentity, SignedRequestProof,
+    SignedTimePolicy, VerifiedDelivery,
 };
 use jsonwebtoken::{Algorithm, Validation, decode, decode_header};
 
@@ -21,7 +21,7 @@ const MAX_TOKEN_BYTES: usize = 16 * 1024;
 #[derive(Clone)]
 pub struct GitLabOidc {
     pub provider: ProviderIdentity,
-    pub trust_set: TrustSetId,
+    pub trust_set: OpaqueId,
     pub issuer: String,
     pub audience: String,
     pub policy: PolicyBinding,
@@ -52,7 +52,7 @@ impl GitLabOidc {
     /// Provider, issuer, policy, runner, or public-key bindings are invalid.
     pub fn new(
         provider: ProviderIdentity,
-        trust_set: TrustSetId,
+        trust_set: OpaqueId,
         issuer: String,
         audience: String,
         policy: PolicyBinding,

@@ -1,6 +1,6 @@
 use crate::states::{CheckConclusion as GitHubConclusion, CheckStatus};
 use amiss_controller::{Change, ProviderRun};
-use amiss_controller::{CheckConclusion, IntegrationId, ProviderError, Publication};
+use amiss_controller::{CheckConclusion, OpaqueId, ProviderError, Publication};
 use amiss_wire::model::{ForgeDialect, ObjectFormat};
 
 use super::Config;
@@ -19,7 +19,7 @@ pub(super) fn validate_publication(
     pull_request: GitHubPullRequest<'_>,
     publication: &Publication,
 ) -> Result<(), ProviderError> {
-    let integration = IntegrationId::try_from(config.installation_id.to_string())
+    let integration = OpaqueId::try_from(config.installation_id.to_string())
         .map_err(|_defect| ProviderError::InvalidResponse)?;
     let expected_run = crate::provider_run(
         &integration,

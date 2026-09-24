@@ -229,7 +229,7 @@ fn jwks(kids: &[String]) -> jsonwebtoken::jwk::JwkSet {
     serde_json::from_value(json!({ "keys": keys })).unwrap()
 }
 
-fn anchors(kids: &[String]) -> std::collections::BTreeMap<String, amiss_controller::TrustAnchorId> {
+fn anchors(kids: &[String]) -> std::collections::BTreeMap<String, amiss_controller::OpaqueId> {
     use amiss_controller::OpaqueId;
     kids.iter()
         .map(|kid| {

@@ -6,8 +6,8 @@
 
 use amiss_scan::observe::{ObservationIdentity, observation_input, target_intent};
 use amiss_scan::report::{
-    CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, Setup,
-    SnapshotIdentity, candidate_identity_digest, synthetic_candidate,
+    CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, GitSnapshotIdentity, INDEX_PROJECTION_SCHEMA,
+    SNAPSHOT_SCHEMA, Setup, candidate_identity_digest, synthetic_candidate,
 };
 use amiss_scan::resolve::Intent;
 use amiss_wire::branch_ref;
@@ -99,8 +99,8 @@ fn fixture_digest(name: &str, definition: &str, domain: &str) -> Digest {
     document_digest(domain, &value).unwrap()
 }
 
-fn snapshot(commit: char, tree: char) -> SnapshotIdentity {
-    SnapshotIdentity {
+fn snapshot(commit: char, tree: char) -> GitSnapshotIdentity {
+    GitSnapshotIdentity {
         commit_oid: Oid::new(ObjectFormat::Sha1, commit.to_string().repeat(40)).unwrap(),
         kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
         object_format: ObjectFormat::Sha1,

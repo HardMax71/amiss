@@ -2,7 +2,7 @@ mod tests;
 
 use std::sync::Arc;
 
-use amiss_controller::{DeliveryRoute, FileLedgerConfig, SignedTimePolicy, TrustSetId};
+use amiss_controller::{DeliveryRoute, FileLedgerConfig, OpaqueId, SignedTimePolicy};
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_gitlab::{GitLabClient, GitLabOidc, GitLabTimeouts};
 use amiss_controller_service::{
@@ -79,7 +79,7 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
         objects,
     )
     .map_err(|defect| ConfigError::caused_by("GitLab API configuration is invalid", defect))?;
-    let trust_set = TrustSetId::try_from(raw.gitlab.oidc.trust_set)
+    let trust_set = OpaqueId::try_from(raw.gitlab.oidc.trust_set)
         .map_err(|_defect| ConfigError::invalid("GitLab OIDC trust set is invalid"))?;
     let source = Arc::new(
         GitLabOidc::new(

@@ -8,12 +8,12 @@ use amiss_git::{GitLimits, GitResources, ObjectKind, Repository, parse_commit};
 use amiss_scan::correlate::{Observation, Side, correlate};
 use amiss_scan::observe::{OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_input};
 use amiss_scan::report::{
-    Built, CandidateBlock, Setup, SnapshotIdentity, construct, construct_incomplete,
+    Built, CandidateBlock, GitSnapshotIdentity, Setup, construct, construct_incomplete,
 };
 use amiss_scan::resolve::{Resolver, TargetCache};
 use amiss_scan::{
-    Classification, DocumentRecord, DocumentStatus, ScanLimits, ScanResources, SnapshotDiscovery,
-    discover,
+    DocumentClassification, DocumentRecord, DocumentStatus, ScanLimits, ScanResources,
+    SnapshotDiscovery, discover,
 };
 use amiss_wire::controls::GitMode;
 
@@ -45,7 +45,7 @@ fn snapshot(
     repo: &Repository,
     git_resources: &mut GitResources,
     commit_hex: &str,
-) -> (SnapshotIdentity, SnapshotDiscovery, Side) {
+) -> (GitSnapshotIdentity, SnapshotDiscovery, Side) {
     let commit_oid = Oid::new(ObjectFormat::Sha1, commit_hex.to_owned()).unwrap();
     let commit_object = repo
         .read_expected(git_resources, &commit_oid, ObjectKind::Commit)
@@ -134,7 +134,7 @@ fn snapshot(
             });
         }
     }
-    let identity = SnapshotIdentity {
+    let identity = GitSnapshotIdentity {
         commit_oid: Oid::new(ObjectFormat::Sha1, commit_hex.to_owned()).unwrap(),
         kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
         object_format: ObjectFormat::Sha1,
@@ -541,7 +541,7 @@ fn the_summary_counts_each_attribution_it_names() {
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn bare_setup(errors_retained: u64) -> Setup {
     let oid = Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap();
-    let identity = SnapshotIdentity {
+    let identity = GitSnapshotIdentity {
         commit_oid: oid.clone(),
         kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
         object_format: ObjectFormat::Sha1,
@@ -680,7 +680,7 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
             .iter()
             .map(|path| DocumentRecord {
                 path: RepoPath::new((*path).to_owned()).unwrap(),
-                classification: Classification::StructuredMarkdown,
+                classification: DocumentClassification::StructuredMarkdown,
                 adapter: Some(amiss_wire::model::Adapter::Markdown),
                 status: DocumentStatus::ExcludedBuiltIn,
                 oid: oid.clone(),

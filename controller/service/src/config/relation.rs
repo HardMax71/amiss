@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use amiss_controller::{
-    IntegrationId, OpaqueId, PlanScope, ProviderIdentity, RelationLimits, RelationPlan,
-    RelationRegistry, RelationStatusDestination, RelationSubject, relation_registry,
+    OpaqueId, PlanScope, ProviderIdentity, RelationLimits, RelationPlan, RelationRegistry,
+    RelationStatusDestination, RelationSubject, relation_registry,
 };
 use amiss_wire::controls::{ProjectionKind, ProjectionSource};
 use amiss_wire::model::Digest;
@@ -45,7 +45,7 @@ struct SubjectFile {
 #[serde(deny_unknown_fields)]
 struct ScopeFile {
     provider: ProviderIdentity,
-    integration: IntegrationId,
+    integration: OpaqueId,
     repository: RepositoryFile,
 }
 

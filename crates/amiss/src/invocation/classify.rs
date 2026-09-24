@@ -8,8 +8,8 @@ use strum::IntoEnumIterator as _;
 
 use super::arguments::{Gathered, Slot, counts, optional, required};
 use super::{
-    Adoption, CandidateSelector, Code, Command, Invocation, OutputFormat, ProviderIdentity,
-    Refusal, Verb,
+    Adoption, AnalysisErrorCode, CandidateSelector, Command, Invocation, OutputFormat,
+    ProviderIdentity, Refusal, Verb,
 };
 
 mod authoring;
@@ -23,7 +23,7 @@ use report::classify_report_command;
 type Validation<T> = Result<T, Refusal>;
 
 fn invalid(reason: String) -> Refusal {
-    (Code::InvalidInvocation, reason)
+    (AnalysisErrorCode::InvalidInvocation, reason)
 }
 
 fn record<T>(refusals: &mut BTreeSet<Refusal>, validation: Validation<T>) -> Option<T> {
@@ -149,7 +149,7 @@ pub(super) fn command(
     )
     else {
         return Err(BTreeSet::from([invalid(
-            Code::InvalidInvocation.meaning().to_owned(),
+            AnalysisErrorCode::InvalidInvocation.meaning().to_owned(),
         )]));
     };
     let candidate = candidate.map_or(CandidateSelector::Index, CandidateSelector::Commit);
@@ -201,7 +201,7 @@ fn classify_profile(gathered: &Gathered, verb: Verb) -> Validation<Profile> {
     let value = required(&gathered.profile, "--profile")?;
     value.parse().map_err(|_unknown| {
         (
-            Code::InvalidProfile,
+            AnalysisErrorCode::InvalidProfile,
             format!(
                 "--profile must be observe, enforce-introduced, or enforce, got {}",
                 atom(value)
@@ -374,7 +374,7 @@ fn classify_forge(
         .or_else(|| ForgeDialect::default_for_host(host))
         .ok_or_else(|| {
             (
-                Code::InvalidEvent,
+                AnalysisErrorCode::InvalidEvent,
                 format!(
                     "--forge must name the dialect of {}, a host outside the known table",
                     atom(host)
@@ -390,7 +390,7 @@ fn classify_forge(
     ) && identity.repository.owner().contains('/')
     {
         Err((
-            Code::InvalidEvent,
+            AnalysisErrorCode::InvalidEvent,
             format!(
                 "--forge {} cannot match the nested owner {}",
                 dialect.as_ref(),
@@ -483,7 +483,7 @@ fn identity_of(value: &str) -> Validation<RepositoryIdentity> {
     let (owner, name) = owner_and_name.rsplit_once('/').ok_or_else(shape)?;
     RepositoryIdentity::new(host.to_owned(), owner.to_owned(), name.to_owned()).ok_or_else(|| {
         (
-            Code::InvalidEvent,
+            AnalysisErrorCode::InvalidEvent,
             format!(
                 "--repository must be <host>/<owner>/<name> with a lowercase owner and name, got {}",
                 atom(value)
@@ -496,7 +496,7 @@ fn branch_of(slot: &Slot, option: &str) -> Validation<BranchRef> {
     let value = required(slot, option)?;
     BranchRef::try_from(value.to_owned()).map_err(|_invalid| {
         (
-            Code::InvalidEvent,
+            AnalysisErrorCode::InvalidEvent,
             format!("{option} must be refs/heads/<name>, got {}", atom(value)),
         )
     })

@@ -4,7 +4,8 @@ use std::ffi::OsString;
 use amiss_wire::human::atom;
 use strum::IntoEnumIterator as _;
 
-use super::{Code, HELP_FLAGS, OutputFormat, Refusal, VERSION_FLAGS, Verb};
+use super::AnalysisErrorCode::InvalidInvocation;
+use super::{HELP_FLAGS, OutputFormat, Refusal, VERSION_FLAGS, Verb};
 
 #[derive(Default)]
 pub(super) struct Slot {
@@ -73,12 +74,12 @@ pub(super) fn gather(argv: &[OsString]) -> Gathered {
         None => {
             gathered
                 .refusals
-                .insert((Code::InvalidInvocation, "a verb must come first".to_owned()));
+                .insert((InvalidInvocation, "a verb must come first".to_owned()));
         }
         Some(None) => {
             gathered
                 .refusals
-                .insert((Code::InvalidInvocation, "the verb is not UTF-8".to_owned()));
+                .insert((InvalidInvocation, "the verb is not UTF-8".to_owned()));
         }
         Some(Some(token)) => match token.parse() {
             Ok(verb) => gathered.verb = Some(verb),
@@ -88,22 +89,21 @@ pub(super) fn gather(argv: &[OsString]) -> Gathered {
                 } else {
                     format!("unknown verb {}", atom(token))
                 };
-                gathered.refusals.insert((Code::InvalidInvocation, reason));
+                gathered.refusals.insert((InvalidInvocation, reason));
             }
         },
     }
 
     while let Some(token) = tokens.next() {
         let Some(token) = token else {
-            gathered.refusals.insert((
-                Code::InvalidInvocation,
-                "an argument is not UTF-8".to_owned(),
-            ));
+            gathered
+                .refusals
+                .insert((InvalidInvocation, "an argument is not UTF-8".to_owned()));
             continue;
         };
         if !token.starts_with("--") {
             gathered.refusals.insert((
-                Code::InvalidInvocation,
+                InvalidInvocation,
                 format!("unexpected argument {}", atom(token)),
             ));
             continue;
@@ -126,7 +126,7 @@ pub(super) fn gather(argv: &[OsString]) -> Gathered {
             } else {
                 format!("unknown option {}", atom(token))
             };
-            gathered.refusals.insert((Code::InvalidInvocation, reason));
+            gathered.refusals.insert((InvalidInvocation, reason));
             continue;
         };
         let value = match tokens.peek() {
@@ -227,17 +227,16 @@ pub(super) fn optional<'a>(slot: &'a Slot, option: &str) -> Result<Option<&'a st
         1 => slot
             .unique_value()
             .map(Some)
-            .ok_or_else(|| (Code::InvalidInvocation, format!("{option} needs a value"))),
+            .ok_or_else(|| (InvalidInvocation, format!("{option} needs a value"))),
         _ => Err((
-            Code::InvalidInvocation,
+            InvalidInvocation,
             format!("{option} appears more than once"),
         )),
     }
 }
 
 pub(super) fn required<'a>(slot: &'a Slot, option: &str) -> Result<&'a str, Refusal> {
-    optional(slot, option)?
-        .ok_or_else(|| (Code::InvalidInvocation, format!("{option} is required")))
+    optional(slot, option)?.ok_or_else(|| (InvalidInvocation, format!("{option} is required")))
 }
 
 pub(super) fn output_selection(format: &Slot) -> Result<OutputFormat, String> {

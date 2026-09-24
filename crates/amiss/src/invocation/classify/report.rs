@@ -6,8 +6,8 @@ use amiss_wire::model::RepoPath;
 
 use super::super::arguments::{Gathered, Slot, optional, required};
 use super::super::{
-    AssessInvocation, Code, Command, OutputFormat, PlanInvocation, RecordSetInvocation,
-    RefsInvocation, Refusal, RenderInvocation, Verb,
+    AnalysisErrorCode, AssessInvocation, Command, OutputFormat, PlanInvocation,
+    RecordSetInvocation, RefsInvocation, Refusal, RenderInvocation, Verb,
 };
 use super::{invalid, refuse_foreign};
 
@@ -73,7 +73,9 @@ pub(super) fn classify_report_command(
         | Verb::Claim
         | Verb::PolicyInclude
         | Verb::LocaleInventory => {
-            refusals.insert(invalid(Code::InvalidInvocation.meaning().to_owned()));
+            refusals.insert(invalid(
+                AnalysisErrorCode::InvalidInvocation.meaning().to_owned(),
+            ));
             Err(refusals)
         }
     }
@@ -171,6 +173,8 @@ fn classify_pure<const N: usize>(
         return Err(refusals);
     }
     paths.try_into().map_err(|_mismatch| {
-        BTreeSet::from([invalid(Code::InvalidInvocation.meaning().to_owned())])
+        BTreeSet::from([invalid(
+            AnalysisErrorCode::InvalidInvocation.meaning().to_owned(),
+        )])
     })
 }

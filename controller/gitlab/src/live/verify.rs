@@ -1,9 +1,9 @@
 mod tests;
 
 use amiss_controller::{
-    ForgeFact, ForgeNegative, ForgePresence as Presence, ForgeProducer,
-    ForgeRefFamily as RefFamily, ForgeTail, ForgeVisibility as Visibility, ProviderError,
-    forge_evidence, forge_repository_evidence, ref_span, spelled_segments,
+    ForgeFact, ForgeNegative, ForgePresence, ForgeProducer, ForgeRefFamily, ForgeRepository,
+    ForgeTail, ProviderError, forge_evidence, forge_repository_evidence, ref_span,
+    spelled_segments,
 };
 use amiss_wire::model::ForgeDialect;
 use serde::Deserialize;
@@ -22,7 +22,7 @@ pub(super) trait GitLabVerification: Send + Sync {
         &self,
         project: &str,
         budget: Budget,
-    ) -> Result<(Visibility, Budget), ProviderError>;
+    ) -> Result<(ForgeRepository, Budget), ProviderError>;
 
     /// Ref names in the family sharing the prefix; `None` when the project
     /// stopped answering for them or the listing could not be proven
@@ -30,7 +30,7 @@ pub(super) trait GitLabVerification: Send + Sync {
     fn matching_refs(
         &self,
         project: &str,
-        family: RefFamily,
+        family: ForgeRefFamily,
         prefix: &str,
         budget: Budget,
     ) -> Result<(Option<Vec<String>>, Budget), ProviderError>;
@@ -41,7 +41,7 @@ pub(super) trait GitLabVerification: Send + Sync {
         reference: &str,
         path: &str,
         budget: Budget,
-    ) -> Result<(Presence, Budget), ProviderError>;
+    ) -> Result<(ForgePresence, Budget), ProviderError>;
 
     fn tree_presence(
         &self,
@@ -49,14 +49,14 @@ pub(super) trait GitLabVerification: Send + Sync {
         reference: &str,
         path: &str,
         budget: Budget,
-    ) -> Result<(Presence, Budget), ProviderError>;
+    ) -> Result<(ForgePresence, Budget), ProviderError>;
 
     fn commit_presence(
         &self,
         project: &str,
         revision: &str,
         budget: Budget,
-    ) -> Result<(Presence, Budget), ProviderError>;
+    ) -> Result<(ForgePresence, Budget), ProviderError>;
 }
 
 /// Verifies the plan's introduced destinations shaped for this host through
@@ -128,7 +128,7 @@ fn resolve_tail<R: GitLabVerification>(
     };
     let rewritten = segments.iter().any(|segment| segment.contains('/'));
     let mut matches = Vec::new();
-    for family in [RefFamily::Heads, RefFamily::Tags] {
+    for family in [ForgeRefFamily::Heads, ForgeRefFamily::Tags] {
         let (names, spent) = rest.matching_refs(project, family, first, *budget)?;
         *budget = spent;
         let Some(names) = names else {
@@ -159,10 +159,10 @@ fn resolve_tail<R: GitLabVerification>(
         let (presence, spent) = rest.commit_presence(project, first, *budget)?;
         *budget = spent;
         match presence {
-            Presence::Present => (first.to_owned(), 1),
-            Presence::Absent if rewritten => return Ok(None),
-            Presence::Absent => return Ok(Some(ForgeTail::RevisionMissing)),
-            Presence::Unknown => return Ok(None),
+            ForgePresence::Present => (first.to_owned(), 1),
+            ForgePresence::Absent if rewritten => return Ok(None),
+            ForgePresence::Absent => return Ok(Some(ForgeTail::RevisionMissing)),
+            ForgePresence::Unknown => return Ok(None),
         }
     };
     let path = segments.get(span..).unwrap_or_default();
@@ -181,10 +181,10 @@ fn resolve_tail<R: GitLabVerification>(
     };
     *budget = spent;
     Ok(match presence {
-        Presence::Present => Some(ForgeTail::Resolved),
-        Presence::Absent if rewritten => None,
-        Presence::Absent => Some(ForgeTail::PathMissing),
-        Presence::Unknown => None,
+        ForgePresence::Present => Some(ForgeTail::Resolved),
+        ForgePresence::Absent if rewritten => None,
+        ForgePresence::Absent => Some(ForgeTail::PathMissing),
+        ForgePresence::Unknown => None,
     })
 }
 
@@ -193,11 +193,11 @@ struct NamedRef {
     name: String,
 }
 
-fn presence<T>(fact: &ForgeFact<T>) -> Presence {
+fn presence<T>(fact: &ForgeFact<T>) -> ForgePresence {
     match fact {
-        Ok(_) => Presence::Present,
-        Err(ForgeNegative::Missing) => Presence::Absent,
-        Err(ForgeNegative::Denied) => Presence::Unknown,
+        Ok(_) => ForgePresence::Present,
+        Err(ForgeNegative::Missing) => ForgePresence::Absent,
+        Err(ForgeNegative::Denied) => ForgePresence::Unknown,
     }
 }
 
@@ -210,16 +210,16 @@ impl GitLabVerification for GitLabClient {
         &self,
         project: &str,
         budget: Budget,
-    ) -> Result<(Visibility, Budget), ProviderError> {
+    ) -> Result<(ForgeRepository, Budget), ProviderError> {
         let url = self.transport.endpoint(["projects", project])?;
         let (fact, budget) = self
             .transport
             .get_fact::<serde::de::IgnoredAny>(url, budget)?;
         Ok((
             match fact {
-                Ok(_) => Visibility::Readable,
-                Err(ForgeNegative::Missing) => Visibility::Missing,
-                Err(ForgeNegative::Denied) => Visibility::Denied,
+                Ok(_) => ForgeRepository::Readable,
+                Err(ForgeNegative::Missing) => ForgeRepository::Missing,
+                Err(ForgeNegative::Denied) => ForgeRepository::Denied,
             },
             budget,
         ))
@@ -228,13 +228,13 @@ impl GitLabVerification for GitLabClient {
     fn matching_refs(
         &self,
         project: &str,
-        family: RefFamily,
+        family: ForgeRefFamily,
         prefix: &str,
         budget: Budget,
     ) -> Result<(Option<Vec<String>>, Budget), ProviderError> {
         let route = match family {
-            RefFamily::Heads => "branches",
-            RefFamily::Tags => "tags",
+            ForgeRefFamily::Heads => "branches",
+            ForgeRefFamily::Tags => "tags",
         };
         let mut budget = budget;
         let mut names = Vec::new();
@@ -279,7 +279,7 @@ impl GitLabVerification for GitLabClient {
         reference: &str,
         path: &str,
         budget: Budget,
-    ) -> Result<(Presence, Budget), ProviderError> {
+    ) -> Result<(ForgePresence, Budget), ProviderError> {
         let mut url =
             self.transport
                 .endpoint(["projects", project, "repository", "files", path])?;
@@ -294,7 +294,7 @@ impl GitLabVerification for GitLabClient {
         reference: &str,
         path: &str,
         budget: Budget,
-    ) -> Result<(Presence, Budget), ProviderError> {
+    ) -> Result<(ForgePresence, Budget), ProviderError> {
         let mut url = self
             .transport
             .endpoint(["projects", project, "repository", "tree"])?;
@@ -309,7 +309,7 @@ impl GitLabVerification for GitLabClient {
             match &fact {
                 // An empty page is either an empty directory or a path the
                 // route ignores, and GitLab does not say which: no fact.
-                Ok(rows) if rows.is_empty() => Presence::Unknown,
+                Ok(rows) if rows.is_empty() => ForgePresence::Unknown,
                 Ok(_) | Err(ForgeNegative::Missing | ForgeNegative::Denied) => presence(&fact),
             },
             budget,
@@ -321,7 +321,7 @@ impl GitLabVerification for GitLabClient {
         project: &str,
         revision: &str,
         budget: Budget,
-    ) -> Result<(Presence, Budget), ProviderError> {
+    ) -> Result<(ForgePresence, Budget), ProviderError> {
         let url =
             self.transport
                 .endpoint(["projects", project, "repository", "commits", revision])?;

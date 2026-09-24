@@ -9,7 +9,8 @@ use amiss_wire::model::{Adapter, RepoPathText};
 
 use super::super::arguments::{Gathered, required};
 use super::super::{
-    AuthorInvocation, Code, PolicyIncludeInvocation, PolicyIncludePreview, Refusal, Verb,
+    AnalysisErrorCode, AuthorInvocation, PolicyIncludeInvocation, PolicyIncludePreview, Refusal,
+    Verb,
 };
 use super::{Validation, classify_object_format, classify_repo, invalid, record, refuse_foreign};
 
@@ -28,7 +29,11 @@ pub(super) fn classify_claim(
     if !refusals.is_empty() {
         return Err(refusals);
     }
-    authored.ok_or_else(|| BTreeSet::from([invalid(Code::InvalidInvocation.meaning().to_owned())]))
+    authored.ok_or_else(|| {
+        BTreeSet::from([invalid(
+            AnalysisErrorCode::InvalidInvocation.meaning().to_owned(),
+        )])
+    })
 }
 
 /// The claim itself: the checkout it reads, the path and line it pins, and
@@ -143,7 +148,11 @@ pub(super) fn classify_policy_include(
                 preview,
             },
         )
-        .ok_or_else(|| BTreeSet::from([invalid(Code::InvalidInvocation.meaning().to_owned())]))
+        .ok_or_else(|| {
+            BTreeSet::from([invalid(
+                AnalysisErrorCode::InvalidInvocation.meaning().to_owned(),
+            )])
+        })
 }
 
 /// The one include row the selector spells, built and accepted by the

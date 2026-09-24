@@ -16,7 +16,7 @@ use amiss_wire::semantic::{SemanticEvidence, SemanticProducerKind};
 
 use super::record::insert_record_set;
 use super::site::site_build_inputs;
-use super::{Inputs, InventoryLabel, Provenance};
+use super::{Inputs, InventoryLabel, SemanticEvidenceProvenance};
 
 mod tests;
 
@@ -100,7 +100,7 @@ pub(crate) fn parse<'a>(
             }
         }
         inputs.candidate_bindings.push(candidate_identity_digest);
-        inputs.provenance.push(Provenance {
+        inputs.provenance.push(SemanticEvidenceProvenance {
             payload_digest: envelope.payload_digest,
             producer: SemanticEvidenceProducer {
                 kind: producer.kind,

@@ -10,7 +10,7 @@ use std::sync::Arc;
 use amiss_controller::PullRequestChange;
 use amiss_controller::opaque_id;
 use amiss_controller::{
-    Change, ChangeLocator, Delivery, DeliveryIdentity, IntegrationId, OidPair, PolicyControls,
+    Change, ChangeLocator, Delivery, DeliveryIdentity, OidPair, OpaqueId, PolicyControls,
     ProviderIdentity, ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
     RunIdentity, RunRefs, RunRequest, check_binding, check_plan,
 };
@@ -164,7 +164,7 @@ fn execution() -> ExecutionConstraintDescriptor {
 }
 
 fn provider_run(
-    reviewer: &IntegrationId,
+    reviewer: &OpaqueId,
     change: &ChangeLocator,
     candidate: &Oid,
     candidate_ref: &BranchRef,

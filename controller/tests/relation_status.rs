@@ -11,8 +11,8 @@ use std::time::Duration;
 use amiss_controller::opaque_id;
 use amiss_controller::{
     ArtifactAuditBundle, ArtifactAuditReference, ArtifactError, ArtifactStoreConfig,
-    ControllerClock, ControllerEvaluationId, FileArtifactStore, FileRelationScheduleStore,
-    LeaseFence, PendingRelation, RelationAdmission, RelationAuditBundle, RelationRegistry,
+    ControllerClock, FileArtifactStore, FileRelationScheduleStore, LeaseFence, OpaqueId,
+    PendingRelation, RelationAdmission, RelationAuditBundle, RelationRegistry,
     RelationScheduleError, RelationScheduleStoreError, RelationStatusDestination,
     RelationStatusError, RelationStatusRecord, RelationSubjectHead, complete_relation_status,
     relation_registry, stage_relation_status,
@@ -75,7 +75,7 @@ fn retain(
 ) -> ArtifactAuditReference {
     store
         .retain_audit(
-            &ControllerEvaluationId::try_from(evaluation.to_owned()).unwrap(),
+            &OpaqueId::try_from(evaluation.to_owned()).unwrap(),
             ArtifactAuditBundle::Relation(bundle(fixture)),
         )
         .unwrap()

@@ -12,8 +12,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use amiss_controller::{
-    ArtifactReference, Change, ChangeLocator, ChangeState, CheckBinding, CheckConclusion,
-    IntegrationId, ProviderError, ProviderIdentity, Publication, RunFailure,
+    ArtifactReference, Change, ChangeLocator, ChangeState, CheckBinding, CheckConclusion, OpaqueId,
+    ProviderError, ProviderIdentity, Publication, RunFailure,
 };
 use amiss_controller::{ProviderRun, PullRequestChange};
 use amiss_controller::{opaque_id, provider_namespace};
@@ -778,7 +778,7 @@ impl Fixture {
                 .finalize()
                 .0,
         );
-        let integration = IntegrationId::try_from(INSTALLATION_ID.to_string()).unwrap();
+        let integration = OpaqueId::try_from(INSTALLATION_ID.to_string()).unwrap();
         let provider_run = crate::provider_run(
             &integration,
             &self.change,

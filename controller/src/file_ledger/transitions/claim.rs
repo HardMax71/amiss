@@ -1,4 +1,4 @@
-use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId, DeliveryClaim};
+use crate::{AcceptedDelivery, CheckBinding, DeliveryClaim, OpaqueId};
 
 use super::make_lease;
 use crate::file_ledger::format::{self, Record, State};
@@ -36,7 +36,7 @@ impl FileLedger {
         &self,
         row: &Row,
         record: Record,
-        evaluation_id: ControllerEvaluationId,
+        evaluation_id: OpaqueId,
         check: &CheckBinding,
     ) -> Result<DeliveryClaim, FileLedgerError> {
         let State::Running {
@@ -69,7 +69,7 @@ impl FileLedger {
         &self,
         row: &Row,
         mut record: Record,
-        evaluation_id: ControllerEvaluationId,
+        evaluation_id: OpaqueId,
         check: &CheckBinding,
         fence: u64,
         now: i64,

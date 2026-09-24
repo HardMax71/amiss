@@ -2,10 +2,9 @@ use sha2::Digest as _;
 use std::sync::Arc;
 
 use amiss_controller::{
-    IntegrationId, OidPair, OpaqueId, PlanScope, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, RelationLimits, RelationPlan, RelationStatusDestination, RelationSubject,
-    RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_audit_plan,
-    relation_transition,
+    OidPair, OpaqueId, PlanScope, ProviderIdentity, ProviderNamespace, RelationLimits,
+    RelationPlan, RelationStatusDestination, RelationSubject, RelationSubjectTransition,
+    RelationTransition, TriggeredRelation, relation_audit_plan, relation_transition,
 };
 use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
 use amiss_wire::envelope::{Envelope, Payload as _};
@@ -171,9 +170,9 @@ fn subject(
         scope: PlanScope {
             provider: ProviderIdentity {
                 namespace: ProviderNamespace::try_from(provider.to_owned()).ok()?,
-                instance: ProviderInstance::try_from(instance.to_owned()).ok()?,
+                instance: OpaqueId::try_from(instance.to_owned()).ok()?,
             },
-            integration: IntegrationId::try_from(format!("integration/{role}")).ok()?,
+            integration: OpaqueId::try_from(format!("integration/{role}")).ok()?,
             repository,
         },
         target: branch_ref!("refs/heads/main"),

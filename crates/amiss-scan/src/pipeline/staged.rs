@@ -7,7 +7,7 @@ use crate::Error;
 use crate::correlate::Side;
 use crate::discovery::SnapshotDiscovery;
 use crate::report::{
-    Built, CandidateBlock, Setup, SnapshotIdentity, construct_incomplete, synthetic_candidate,
+    Built, CandidateBlock, GitSnapshotIdentity, Setup, construct_incomplete, synthetic_candidate,
 };
 use crate::resolve::ForgeContext;
 use crate::resources::{ScanLimits, ScanResources};
@@ -36,7 +36,7 @@ fn staged_candidate(
     forge: Option<&ForgeContext>,
     semantic: crate::semantic::View<'_>,
     setup_shell: &SetupShell,
-    base_identity: &SnapshotIdentity,
+    base_identity: &GitSnapshotIdentity,
     includes: &crate::policy::Includes,
     index: &amiss_git::LogicalIndex,
     candidate: CandidateEvaluation<'_>,
@@ -70,7 +70,7 @@ fn staged_candidate(
 
 fn candidate_unavailable(
     setup_shell: &SetupShell,
-    base: SnapshotIdentity,
+    base: GitSnapshotIdentity,
     defect: &Error,
 ) -> PipelineFailure {
     let setup = setup_shell.with(
@@ -101,7 +101,7 @@ fn pinned_index(
 
 fn not_evaluated(
     setup_shell: &SetupShell,
-    base: &SnapshotIdentity,
+    base: &GitSnapshotIdentity,
     detail: ErrorDetail,
 ) -> PipelineFailure {
     PipelineFailure::one(
@@ -123,7 +123,7 @@ fn staged_policy(
     base_scan: &mut ScanResources,
     candidate_scan: &mut ScanResources,
     setup_shell: &SetupShell,
-    base_placeholder: &SnapshotIdentity,
+    base_placeholder: &GitSnapshotIdentity,
     base_tree: &Oid,
     index: &amiss_git::LogicalIndex,
 ) -> PipelineResult<(
@@ -267,7 +267,7 @@ fn recheck_index(
     repo: &Repository,
     git_resources: &mut GitResources,
     setup_shell: &SetupShell,
-    base_identity: SnapshotIdentity,
+    base_identity: GitSnapshotIdentity,
     initial: &[u8],
     built: Built,
 ) -> Result<Built, Error> {
@@ -308,7 +308,7 @@ struct StagedOpen {
     initial: Vec<u8>,
     index: amiss_git::LogicalIndex,
     skip_worktree_paths: u64,
-    base_placeholder: SnapshotIdentity,
+    base_placeholder: GitSnapshotIdentity,
     base_tree: ResolvedTree,
 }
 
@@ -324,7 +324,7 @@ fn staged_open(
 ) -> PipelineResult<StagedOpen> {
     let (scan_limits, git_limits) = effective_limits(verified_floor);
     let mut git_resources = GitResources::new(git_limits);
-    let base_placeholder = SnapshotIdentity {
+    let base_placeholder = GitSnapshotIdentity {
         commit_oid: base_oid.clone(),
         kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
         object_format: repo.object_format(),

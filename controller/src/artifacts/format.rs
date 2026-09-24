@@ -15,9 +15,7 @@ use std::time::Duration;
 
 use amiss_wire::assessment::AssessmentVerdict;
 use amiss_wire::envelope::MACHINE_JSON_BYTES;
-use amiss_wire::locale::{
-    ASSESSMENT_DOCUMENT_BYTES as LOCALE_AUDIT_DOCUMENT_BYTES, LOCALE_DOCUMENT_BYTES,
-};
+use amiss_wire::locale::{ASSESSMENT_DOCUMENT_BYTES, LOCALE_DOCUMENT_BYTES};
 use amiss_wire::model::Digest;
 use amiss_wire::publication::PUBLICATION_DOCUMENT_BYTES;
 use amiss_wire::relation::{RELATION_DOCUMENT_BYTES, RelationVerdict};
@@ -27,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use super::{ArtifactReference, ArtifactStoreConfig};
 
 use crate::ArtifactError;
-use crate::{ControllerEvaluationId, ExternalTally};
+use crate::{ExternalTally, OpaqueId};
 
 pub(super) const ROOT_SCHEMA: RootSchema = RootSchema::Current;
 const RECORD_SCHEMA: RecordSchema = RecordSchema::Current;
@@ -83,7 +81,7 @@ impl Blob {
 pub(super) struct Record {
     schema: RecordSchema,
     pub(super) id: String,
-    pub(super) evaluation_id: ControllerEvaluationId,
+    pub(super) evaluation_id: OpaqueId,
     pub(super) created_at_unix_millis: i64,
     pub(super) expires_at_unix_millis: i64,
     pub(super) report: Blob,
@@ -127,7 +125,7 @@ pub(super) struct RecordInput {
 
 impl Record {
     pub(super) fn new(
-        evaluation_id: &ControllerEvaluationId,
+        evaluation_id: &OpaqueId,
         created_at_unix_millis: i64,
         retention: Duration,
         input: RecordInput,
@@ -189,7 +187,7 @@ impl Record {
                 valid_sidecar(
                     audit,
                     LOCALE_DOCUMENT_BYTES,
-                    LOCALE_AUDIT_DOCUMENT_BYTES,
+                    ASSESSMENT_DOCUMENT_BYTES,
                     &AssessmentVerdict::Unproven,
                 )
             }),
@@ -285,7 +283,7 @@ impl Record {
     fn expected_id(&self) -> Result<String, ArtifactError> {
         #[derive(Serialize)]
         struct Identity<'a> {
-            evaluation_id: &'a ControllerEvaluationId,
+            evaluation_id: &'a OpaqueId,
             report: &'a Blob,
             plan: &'a Option<Blob>,
             evidence: &'a Option<Blob>,

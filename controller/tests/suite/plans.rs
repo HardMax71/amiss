@@ -14,9 +14,9 @@ use amiss_controller::MergeRequestChange;
 use amiss_controller::PipelineJob;
 use amiss_controller::{
     AuthenticatedDelivery, Change, ChangeLocator, CheckPlan, Delivery, DeliveryIdentity,
-    ExternalPolicy, IntegrationId, PlanError, PlanRegistry, PlanScope, PolicyControls,
-    ProviderIdentity, ProviderRun, ProviderRunAttempt, ProviderRunIdentity, check_binding,
-    check_plan, register_plan, resolve_plan,
+    ExternalPolicy, OpaqueId, PlanError, PlanRegistry, PlanScope, PolicyControls, ProviderIdentity,
+    ProviderRun, ProviderRunAttempt, ProviderRunIdentity, check_binding, check_plan, register_plan,
+    resolve_plan,
 };
 use amiss_controller::{opaque_id, provider_namespace};
 use amiss_wire::controls::Profile;
@@ -52,7 +52,7 @@ fn repository() -> RepositoryIdentity {
     .unwrap()
 }
 
-fn integration() -> IntegrationId {
+fn integration() -> OpaqueId {
     opaque_id!("project-hook/7")
 }
 

@@ -9,7 +9,7 @@ use amiss_controller::{
     AcquiredSemanticTemplate, ForgeNegative, ProviderError, WorkflowArtifactExpectation,
 };
 pub(super) use amiss_controller::{
-    ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeVisibility as Visibility,
+    ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeRepository as Visibility,
 };
 use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
 

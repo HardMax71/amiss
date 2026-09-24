@@ -1,14 +1,14 @@
 use crate::{IngressCheck, ReplayIdentity};
 
 use super::headers::Headers;
-use super::{WebhookError, WebhookKeyring, WebhookProof};
+use super::{SignedRequestProof, WebhookError, WebhookKeyring};
 
 pub(super) fn verify(
     keys: &WebhookKeyring,
     check: IngressCheck<'_>,
     header_name: &str,
     prefix: &[u8],
-) -> Result<WebhookProof, WebhookError> {
+) -> Result<SignedRequestProof, WebhookError> {
     verify_one_of(keys, check, &[header_name], prefix)
 }
 
@@ -17,7 +17,7 @@ pub(super) fn verify_one_of(
     check: IngressCheck<'_>,
     header_names: &[&str],
     prefix: &[u8],
-) -> Result<WebhookProof, WebhookError> {
+) -> Result<SignedRequestProof, WebhookError> {
     let delivery = check.delivery();
     let headers = Headers::new(delivery.headers)?;
     let raw = headers.one_of(header_names, prefix.len().saturating_add(64))?;
@@ -29,7 +29,7 @@ fn authenticate(
     check: IngressCheck<'_>,
     raw: &[u8],
     prefix: &[u8],
-) -> Result<WebhookProof, WebhookError> {
+) -> Result<SignedRequestProof, WebhookError> {
     let delivery = check.delivery();
     let encoded = raw.strip_prefix(prefix).ok_or(WebhookError::Headers)?;
     if encoded.len() != 64 || encoded.iter().any(u8::is_ascii_uppercase) {
@@ -42,7 +42,7 @@ fn authenticate(
         &[signature],
         &[delivery.body],
     )?;
-    Ok(WebhookProof::verified(
+    Ok(SignedRequestProof::verified(
         check,
         keys.trust_set().clone(),
         anchor,

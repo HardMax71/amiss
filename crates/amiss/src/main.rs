@@ -38,7 +38,7 @@ use amiss_wire::requests::{
     SnapshotMaterialization, SnapshotRequest,
 };
 use amiss_wire::resolution::ResolutionTag;
-use invocation::{CandidateSelector, Code, Invocation, Outcome, OutputFormat, Verb};
+use invocation::{CandidateSelector, Invocation, Outcome, OutputFormat, Verb};
 
 /// Self-restriction, in safe Rust only: no child processes (the contract's
 /// zero repository-process budget), no core dumps (the address space holds
@@ -223,7 +223,7 @@ fn projection_exit(result: std::io::Result<()>, verdict: ExitCode) -> ExitCode {
 /// caller prints on stderr, and the artifact lane still answers its empty
 /// array, the one machine answer that needs no envelope.
 fn machine_refusal(
-    codes: &BTreeSet<Code>,
+    codes: &BTreeSet<AnalysisErrorCode>,
 ) -> Result<ReportEnvelope<ReportPayload<amiss_wire::model::RepoPath>>, AnalysisErrorCode> {
     let Some(engine) = engine_provenance() else {
         return Err(AnalysisErrorCode::InternalError);
@@ -552,9 +552,9 @@ fn fatal(
     details: &[ErrorDetail],
     reserve: &mut BufWriter<Stdout>,
 ) -> ExitCode {
-    use amiss_scan::report::{Setup, SnapshotIdentity, construct_incomplete};
+    use amiss_scan::report::{GitSnapshotIdentity, Setup, construct_incomplete};
 
-    let identity = |oid: &Oid| SnapshotIdentity {
+    let identity = |oid: &Oid| GitSnapshotIdentity {
         commit_oid: oid.clone(),
         kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
         object_format: invocation.object_format,

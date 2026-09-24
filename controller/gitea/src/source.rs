@@ -1,7 +1,7 @@
 use crate::states::WebhookAction;
 use amiss_controller::{
-    Change, ChangeLocator, GiteaWebhook, IngressCheck, IntegrationId, ProviderError, ProviderFacts,
-    ProviderIdentity, PullRequestChange, SignedTimePolicy, VerifiedDelivery, WebhookProof,
+    Change, ChangeLocator, GiteaWebhook, IngressCheck, OpaqueId, ProviderError, ProviderFacts,
+    ProviderIdentity, PullRequestChange, SignedRequestProof, SignedTimePolicy, VerifiedDelivery,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use serde::Deserialize;
@@ -62,7 +62,7 @@ impl GiteaPullRequestSource {
     fn authenticate_facts(
         &self,
         check: IngressCheck<'_>,
-    ) -> Result<(WebhookProof, PullRequestFacts), ProviderError> {
+    ) -> Result<(SignedRequestProof, PullRequestFacts), ProviderError> {
         let proof = self
             .webhook
             .verify(check)
@@ -116,7 +116,7 @@ impl PullRequestFacts {
             repository,
             change: Change::PullRequest(change),
         };
-        let integration = IntegrationId::try_from(reviewer.id.to_string()).ok()?;
+        let integration = OpaqueId::try_from(reviewer.id.to_string()).ok()?;
         let candidate = Oid::new(ObjectFormat::Sha1, payload.pull_request.head.sha)?;
         let candidate_ref = branch_ref(&payload.pull_request.head.branch)?;
         let target_ref = branch_ref(&payload.pull_request.base.branch)?;

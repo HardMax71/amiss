@@ -9,7 +9,7 @@ use sha2::Digest as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use amiss_controller::{
-    ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, IntegrationId, LeaseFence,
+    ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, LeaseFence, OpaqueId,
     ProviderError, RelationAuditBundle, RelationStatusRecord, RelationStatusTarget,
     RelationStatusTargets, RelationSubject, validate_relation_audit,
 };
@@ -258,7 +258,7 @@ fn fixture() -> (Config, RelationSubject) {
         .find(|subject| subject.scope.provider.namespace.as_str() == "github")
         .unwrap()
         .clone();
-    subject.scope.integration = IntegrationId::try_from(INSTALLATION_ID.to_string()).unwrap();
+    subject.scope.integration = OpaqueId::try_from(INSTALLATION_ID.to_string()).unwrap();
     (
         Config {
             provider: subject.scope.provider.clone(),
@@ -281,7 +281,7 @@ fn status_fixture() -> (Config, RelationStatusRecord, RelationStatusTarget) {
         .find(|subject| subject.scope.provider.namespace.as_str() == "github")
         .unwrap()
         .clone();
-    subject.scope.integration = IntegrationId::try_from(INSTALLATION_ID.to_string()).unwrap();
+    subject.scope.integration = OpaqueId::try_from(INSTALLATION_ID.to_string()).unwrap();
     let frozen = fixture
         .transition
         .subjects

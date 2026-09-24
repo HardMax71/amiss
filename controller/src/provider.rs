@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    ArtifactReference, AuthenticatedDelivery, ChangeSnapshot, CheckBinding, ControllerEvaluationId,
-    IngressCheck, ProviderNamespace, ProviderRunIdentity, RunIdentity, VerifiedDelivery,
+    ArtifactReference, AuthenticatedDelivery, ChangeSnapshot, CheckBinding, IngressCheck, OpaqueId,
+    ProviderNamespace, ProviderRunIdentity, RunIdentity, VerifiedDelivery,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -180,7 +180,7 @@ pub enum CheckConclusion {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Publication {
     pub provider_run: ProviderRunIdentity,
-    pub evaluation_id: ControllerEvaluationId,
+    pub evaluation_id: OpaqueId,
     pub check: CheckBinding,
     pub run: RunIdentity,
     pub gate_commit: amiss_wire::model::Oid,
