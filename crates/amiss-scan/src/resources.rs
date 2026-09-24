@@ -5,7 +5,7 @@ use amiss_wire::controls::ResourceName;
 use amiss_wire::model::{Adapter, Oid};
 
 use crate::Error;
-use crate::scan::Scanned;
+use crate::scanned::Scanned;
 
 /// The built-in discovery and parse ceilings. A future organization floor may
 /// tighten them and may never raise them.

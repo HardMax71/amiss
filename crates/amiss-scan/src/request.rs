@@ -1,11 +1,11 @@
 use amiss_wire::controls::{FloorDefect, ResourceName};
 use amiss_wire::de::Document as _;
-use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::envelope::document_digest;
 use amiss_wire::report::{ErrorDetail, model::AnalysisErrorCode};
 use amiss_wire::requests::ControlsRequest;
 
 use crate::policy::{ConstraintInput, DebtInput, FloorInput, TimeInput, WaiverInput};
+use crate::semantic::{code, configuration_detail};
 
 /// Typed external inputs after the request's embedded values and independent
 /// expected digests have both been verified.
@@ -166,40 +166,5 @@ fn floor_detail(error: FloorDefect) -> ErrorDetail {
             )),
             ..code(AnalysisErrorCode::ResourceLimitExceeded)
         },
-    }
-}
-
-/// Maps one strict external-input defect into the scanner's public analysis taxonomy.
-#[must_use]
-pub fn configuration_detail(error: &Error) -> ErrorDetail {
-    let analysis = match &error.kind {
-        ErrorKind::Json(message)
-            if message.starts_with("invalid utf-8") || message.starts_with("incomplete utf-8") =>
-        {
-            AnalysisErrorCode::InvalidUtf8
-        }
-        ErrorKind::Json(message) if message.starts_with("duplicate JSON key") => {
-            AnalysisErrorCode::DuplicateJsonKey
-        }
-        ErrorKind::Json(_) => AnalysisErrorCode::InvalidJson,
-        ErrorKind::UnknownField => AnalysisErrorCode::UnknownField,
-        ErrorKind::DigestMismatch => AnalysisErrorCode::DigestMismatch,
-        ErrorKind::UnsortedSet | ErrorKind::DuplicateMember => AnalysisErrorCode::NoncanonicalArray,
-        ErrorKind::MissingField
-        | ErrorKind::WrongType
-        | ErrorKind::InvalidValue
-        | ErrorKind::LimitExceeded
-        | ErrorKind::Inconsistent
-        | ErrorKind::Noncanonical => AnalysisErrorCode::ConfigurationInvalid,
-    };
-    code(analysis)
-}
-
-const fn code(code: AnalysisErrorCode) -> ErrorDetail {
-    ErrorDetail {
-        code,
-        path: None,
-        path_bytes: None,
-        resource: None,
     }
 }

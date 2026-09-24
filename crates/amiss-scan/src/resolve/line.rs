@@ -7,14 +7,15 @@ use memchr::memmem::Finder;
 use sha2::Digest as _;
 
 use crate::Error;
-use crate::projection::{Verdict, normalized_line_endings, unavailable};
 use crate::resources::Aggregate;
-use crate::scan::SemanticCodeSink;
+use crate::scan::normalized_line_endings;
+use crate::scanned::SemanticCodeSink;
+use crate::scanned::Verdict;
+use crate::scanned::unavailable;
 
 use super::content::{Content, content_cache, read_target, target_projection};
 use super::{LineRange, RAW_EVIDENCE_DOMAIN, Resolution, Resolver, TARGET_LINE_PROJECTION_DOMAIN};
-
-const MAX_SAFE: u64 = 9_007_199_254_740_991;
+use crate::scanned::safe_line_number;
 
 impl Resolver<'_> {
     /// Answers one value claim against the snapshot: the target must be a
@@ -25,7 +26,7 @@ impl Resolver<'_> {
     /// A Git defect or a crossed resource ceiling while reading the target.
     pub fn resolve_claim(
         &mut self,
-        claim: &crate::claim::ValueClaim,
+        claim: &crate::scanned::ValueClaim,
     ) -> Result<crate::claim::ClaimVerdict, Error> {
         use crate::claim::{ClaimMissingReason, ClaimVerdict};
 
@@ -193,7 +194,7 @@ impl Resolver<'_> {
         Ok(Verdict::Drift {
             reason: ProjectionObserved::ContentDiffers,
             expected_digest: Some(amiss_wire::model::Digest::from(
-                sha2::Sha256::new_with_prefix(crate::projection::CODE_TEXT_SOURCE_DOMAIN)
+                sha2::Sha256::new_with_prefix(crate::scanned::CODE_TEXT_SOURCE_DOMAIN)
                     .chain_update([0_u8])
                     .chain_update(expected)
                     .finalize()
@@ -333,19 +334,6 @@ pub(super) fn line_resolution(
     Ok(Resolution::Resolved {
         target: Target::Blob(blob),
     })
-}
-
-/// One safe line number: nonzero first digit, at most sixteen digits, and
-/// within the range every consumer of the report can hold exactly.
-pub(crate) fn safe_line_number(text: &str) -> Option<u64> {
-    let bytes = text.as_bytes();
-    if bytes.is_empty() || bytes.len() > 16 || bytes.first() == Some(&b'0') {
-        return None;
-    }
-    if !bytes.iter().all(u8::is_ascii_digit) {
-        return None;
-    }
-    text.parse::<u64>().ok().filter(|value| *value <= MAX_SAFE)
 }
 
 /// Line-fragment syntax after one decode, in the dialect's spelling. A native

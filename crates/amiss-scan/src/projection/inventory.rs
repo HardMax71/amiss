@@ -12,9 +12,11 @@ use amiss_wire::report::model::{
 use crate::Error;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::resources::{Aggregate, ScanResources};
-use crate::scan::SemanticCodeSink;
+use crate::scanned::SemanticCodeSink;
 
-use super::{Verdict, unavailable};
+use crate::scanned::unavailable;
+
+use crate::scanned::Verdict;
 
 const SOURCE_DOMAIN: &str = "amiss/scanner-sorted-rows-source";
 const COUNT_SOURCE_DOMAIN: &str = "amiss/scanner-decimal-count-source";

@@ -12,7 +12,7 @@ use amiss_wire::report::model::{
 };
 use amiss_wire::resolution::Resolution;
 
-use crate::scan::SpanDisplay;
+use crate::scanned::SpanDisplay;
 
 use super::finding::candidate_fact_finding;
 use super::{Finding, FindingKeyScope, Location, LocationSide};

@@ -337,11 +337,11 @@ fn governed_seeds(
         let DocumentStatus::Scanned(scanned) = &record.status else {
             continue;
         };
-        let unanswered: Vec<&crate::scan::GovernedSource> = scanned
+        let unanswered: Vec<&crate::scanned::GovernedSource> = scanned
             .governed
             .iter()
             .filter(|governed| {
-                matches!(governed.form, crate::claim::GovernedForm::Unknown)
+                matches!(governed.form, crate::scanned::GovernedForm::Unknown)
                     || !answered
                         .get(&record.path)
                         .is_some_and(|spans| spans.contains(&governed.span))

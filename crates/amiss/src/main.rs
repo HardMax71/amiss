@@ -531,7 +531,7 @@ fn semantic_input(
         },
     )?;
     let template = amiss_wire::semantic::SemanticEvidenceTemplate::parse(&bytes)
-        .map_err(|error| amiss_scan::request::configuration_detail(&error))?;
+        .map_err(|error| amiss_scan::semantic::configuration_detail(&error))?;
     Ok(amiss_scan::semantic::Input::Template(template))
 }
 

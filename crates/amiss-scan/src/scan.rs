@@ -2,86 +2,19 @@ use sha2::Digest as _;
 use std::borrow::Cow;
 
 use amiss_md::lines::scan;
-use amiss_md::{Analysis, AnalyzeError, Occurrence, Opaque, Work, analyze};
+use amiss_md::{Analysis, AnalyzeError, Opaque, analyze};
 use amiss_wire::extraction::GovernedDefinition;
 use amiss_wire::model::Adapter;
 use amiss_wire::model::Digest;
 
 use crate::resources::ScanResources;
+use crate::scanned::{
+    AnchorSource, GovernedSource, Scanned, ScannedOccurrence, SemanticCodeSink, SpanDisplay,
+};
 use crate::{Error, RAW_DESTINATION_DOMAIN, SOURCE_PROJECTION_DOMAIN};
-
-/// One-based Unicode-scalar display positions for a machine byte span, after
-/// the same CRLF and bare-CR to LF conversion the projection applies. A tab is
-/// one scalar and no display-width expansion occurs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SpanDisplay {
-    pub start_line: u64,
-    pub start_column: u64,
-    pub end_line: u64,
-    pub end_column: u64,
-}
-
-/// One extracted occurrence enriched with what the report needs beyond the
-/// corpus goldens: display positions, the containing block's projection
-/// digest, and the raw destination digest, where an empty destination hashes
-/// zero bytes.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ScannedOccurrence {
-    pub occurrence: Occurrence,
-    pub display: SpanDisplay,
-    pub projection_digest: Digest,
-    pub raw_destination_digest: Digest,
-}
-
-/// One reserved governed definition with its raw span, display positions,
-/// the digest of its exact contributing source bytes, and the claim form
-/// its words spell.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GovernedSource {
-    pub span: (usize, usize),
-    pub display: SpanDisplay,
-    pub digest: Digest,
-    pub form: crate::claim::GovernedForm,
-    pub previous_code: Option<SemanticCodeSink>,
-}
 
 pub const GOVERNED_SOURCE_DOMAIN: &str = "amiss/scanner-governed-definition-source";
 pub const PROJECTION_SINK_DOMAIN: &str = "amiss/scanner-projection-sink";
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SemanticCodeSink {
-    pub span: (usize, usize),
-    pub display: SpanDisplay,
-    pub digest: Digest,
-    pub value: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Scanned {
-    pub adapter: Adapter,
-    pub work: Work,
-    pub embedded_code_bytes: u64,
-    pub occurrences: Vec<ScannedOccurrence>,
-    pub opaque: Opaque,
-    pub governed: Vec<GovernedSource>,
-    pub declared_anchors: Vec<String>,
-    pub declared_name: Option<String>,
-    pub declared_redirects: Vec<String>,
-    pub anchor_source: Option<AnchorSource>,
-    /// Read only once the HTML comments the MDX grammar refused were read as
-    /// comments, which a Docusaurus site does and MDX alone does not.
-    pub commented: bool,
-}
-
-/// The raw anchor inputs a scanned document retains so the resolve lane never
-/// parses an in-set target twice; slugging stays lazy, paid only for targets
-/// a fragment actually asks.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AnchorSource {
-    pub headings: Vec<amiss_wire::extraction::Heading>,
-    pub html_anchors: Vec<String>,
-    pub transclusions: Vec<amiss_wire::extraction::Transclusion>,
-}
 
 /// Scans one selected document body under the snapshot's budgets: admission
 /// first, then the guarded parse, then node work, then each reference in
@@ -250,7 +183,7 @@ fn governed_sources(
                     .ok_or(Error::Parse(amiss_md::Fault::InvalidSourceSpan))?;
                 let (start_line, start_column) = position(source, line_ends, code.span.0);
                 let (end_line, end_column) = position(source, line_ends, code.span.1);
-                let value = crate::projection::normalized_line_endings(code.value.as_bytes());
+                let value = normalized_line_endings(code.value.as_bytes());
                 let value = std::str::from_utf8(value.as_ref())
                     .map_err(|_invalid| Error::Internal)?
                     .to_owned();
@@ -288,7 +221,7 @@ fn governed_sources(
                     .finalize()
                     .0,
             ),
-            form: crate::claim::classify(definition),
+            form: crate::scanned::classify(definition),
             previous_code,
         });
     }
@@ -395,4 +328,23 @@ fn position(source: &[u8], line_ends: &[usize], at: usize) -> (u64, u64) {
         line,
         u64::try_from(scalars).unwrap_or(u64::MAX).saturating_add(1),
     )
+}
+
+pub(crate) fn normalized_line_endings(selected: &[u8]) -> Cow<'_, [u8]> {
+    if !selected.contains(&b'\r') {
+        return Cow::Borrowed(selected);
+    }
+    let mut normalized = Vec::with_capacity(selected.len());
+    let mut bytes = selected.iter().copied().peekable();
+    while let Some(byte) = bytes.next() {
+        if byte == b'\r' {
+            if bytes.peek() == Some(&b'\n') {
+                let _line_feed = bytes.next();
+            }
+            normalized.push(b'\n');
+        } else {
+            normalized.push(byte);
+        }
+    }
+    Cow::Owned(normalized)
 }

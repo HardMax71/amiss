@@ -3,7 +3,9 @@ mod tests;
 use std::fs;
 use std::process::ExitCode;
 
-use amiss_scan::claim::{GovernedForm, classify};
+use amiss_scan::scanned::classify;
+
+use amiss_scan::scanned::GovernedForm;
 use amiss_wire::model::Adapter;
 
 use crate::invocation::AuthorInvocation;
