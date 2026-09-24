@@ -157,7 +157,7 @@ impl HttpRest {
         let run_query = WorkflowRunQuery {
             event: expectation.event.as_str(),
             head_sha: candidate.as_str(),
-            status: crate::states::CheckConclusion::Success,
+            status: crate::states::GitHubConclusion::Success,
             exclude_pull_requests: true,
             per_page: EXACT_PAGE_SIZE,
             page: 1,

@@ -1,4 +1,4 @@
-use crate::states::{CheckConclusion as GitHubConclusion, CheckStatus};
+use crate::states::{CheckStatus, GitHubConclusion};
 use amiss_controller::{Change, ProviderRun};
 use amiss_controller::{CheckConclusion, OpaqueId, ProviderError, Publication};
 use amiss_wire::model::{ForgeDialect, ObjectFormat};
