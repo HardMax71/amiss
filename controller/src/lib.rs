@@ -98,9 +98,9 @@ pub use relation_audit::{
     RelationAuditBundle, RelationAuditDigests, relation_audit_plan, validate_relation_audit,
 };
 pub use relation_plan::{
-    RelationAcquisitionError, RelationLimits, RelationPlan, RelationRegistryError,
-    RelationStatusDestination, RelationSubject, RelationSubjectTransition, RelationTransition,
-    TriggeredRelation, relation_transition,
+    RegisteredRelation, RegisteredSubject, RelationAcquisitionError, RelationLimits,
+    RelationRegistryError, RelationStatusDestination, RelationSubjectTransition,
+    RelationTransition, TriggeredRelation, relation_transition,
 };
 pub use relations::{
     FileRelationScheduleStore, PendingRelation, RELATION_REGISTRY_LIMIT,

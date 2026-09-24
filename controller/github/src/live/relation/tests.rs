@@ -10,8 +10,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use amiss_controller::{
     ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, LeaseFence, OpaqueId,
-    ProviderError, RelationAuditBundle, RelationStatusRecord, RelationStatusTarget,
-    RelationStatusTargets, RelationSubject, validate_relation_audit,
+    ProviderError, RegisteredSubject, RelationAuditBundle, RelationStatusRecord,
+    RelationStatusTarget, RelationStatusTargets, validate_relation_audit,
 };
 use amiss_controller::{opaque_id, provider_namespace};
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
@@ -56,7 +56,7 @@ fn exact_subject_resolves_one_current_head() {
 #[test]
 fn request_scope_is_checked_before_provider_io() {
     let (config, subject) = fixture();
-    let defects: [fn(&mut RelationSubject); 6] = [
+    let defects: [fn(&mut RegisteredSubject); 6] = [
         |subject| {
             subject.scope.provider.instance = opaque_id!("github.example");
         },
@@ -247,7 +247,7 @@ fn relation_check_run_reconciliation_reuses_only_one_exact_result() {
     ));
 }
 
-fn fixture() -> (Config, RelationSubject) {
+fn fixture() -> (Config, RegisteredSubject) {
     let relation = relation_audit(true).unwrap();
     let mut subject = relation
         .transition

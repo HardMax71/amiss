@@ -3,8 +3,8 @@ use sha2::Digest as _;
 mod tests;
 
 use amiss_controller::{
-    OpaqueId, PlanScope, ProviderError, RelationStatusRecord, RelationStatusTarget,
-    RelationSubject, RelationSubjectHead, relation_status_publication,
+    OpaqueId, PlanScope, ProviderError, RegisteredSubject, RelationStatusRecord,
+    RelationStatusTarget, RelationSubjectHead, relation_status_publication,
 };
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::relation::RelationSnapshot;
@@ -20,7 +20,7 @@ const TITLE: &str = "Amiss cross-repository relation";
 impl<R: GitHubRelationRest> Client<R> {
     pub(super) fn resolve_relation_head(
         &self,
-        subject: &RelationSubject,
+        subject: &RegisteredSubject,
     ) -> Result<RelationSubjectHead, ProviderError> {
         let repository = &subject.scope.repository;
         validate_relation_scope(&self.config, &subject.scope, subject.object_format)?;

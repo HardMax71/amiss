@@ -3,8 +3,8 @@ use std::sync::Arc;
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, ChangeState, CheckConclusion, HandleOutcome,
     IngressCheck, PlanScope, ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace,
-    Publication, RelationStatusRecord, RelationStatusTarget, RelationSubject, RelationSubjectHead,
-    VerifiedDelivery, relation_status_publication,
+    Publication, RegisteredSubject, RelationStatusRecord, RelationStatusTarget,
+    RelationSubjectHead, VerifiedDelivery, relation_status_publication,
 };
 use amiss_controller::{Change, Delivery, MergeRequestChange, OidcToken, PipelineJob, ProviderRun};
 use amiss_wire::model::ObjectFormat;
@@ -58,7 +58,7 @@ impl<A: GitLabApi> GitLabMergeTrainAdapter<A> {
     pub fn resolve_relation_head(
         &self,
         delivery: &AuthenticatedDelivery,
-        subject: &RelationSubject,
+        subject: &RegisteredSubject,
     ) -> Result<RelationSubjectHead, ProviderError> {
         validate_relation_scope(
             &self.source,

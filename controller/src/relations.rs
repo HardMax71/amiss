@@ -9,11 +9,11 @@ use std::sync::Arc;
 
 use amiss_wire::envelope::Envelope;
 use amiss_wire::model::{ArtifactId, ObjectFormat};
-use amiss_wire::relation::RelationPlan as PlanPayload;
+use amiss_wire::relation::RelationPlan;
 
 use crate::{
-    AuthenticatedDelivery, OpaqueId, PlanScope, ProviderIdentity, RelationAcquisitionError,
-    RelationPlan, RelationRegistryError, RelationTransition, TriggeredRelation,
+    AuthenticatedDelivery, OpaqueId, PlanScope, ProviderIdentity, RegisteredRelation,
+    RelationAcquisitionError, RelationRegistryError, RelationTransition, TriggeredRelation,
 };
 
 use crate::relation_plan::validate_relation;
@@ -44,7 +44,7 @@ pub const RELATION_REGISTRY_LIMIT: usize = 1_024;
 /// The envelope digest or any operator, trigger, subject, or snapshot field
 /// differs from the frozen transition.
 pub fn verify_relation_plan(
-    plan: &Envelope<PlanPayload>,
+    plan: &Envelope<RelationPlan>,
     transition: &RelationTransition,
 ) -> Result<(), RelationAcquisitionError> {
     plan.validate()
@@ -91,7 +91,7 @@ struct TriggerScope {
 }
 
 pub struct RelationRegistry {
-    plans: BTreeMap<ArtifactId, Arc<RelationPlan>>,
+    plans: BTreeMap<ArtifactId, Arc<RegisteredRelation>>,
     triggers: BTreeMap<TriggerScope, Vec<TriggeredRelation>>,
     credentials: BTreeMap<OpaqueId, (ProviderIdentity, OpaqueId)>,
 }
@@ -105,7 +105,7 @@ pub struct RelationRegistry {
 /// The registry is too large, repeats a relation identity or external status destination, rebinds
 /// one credential identity, or contains an invalid subject, selector, budget, or destination.
 pub fn relation_registry(
-    mut plans: Vec<RelationPlan>,
+    mut plans: Vec<RegisteredRelation>,
 ) -> Result<RelationRegistry, RelationRegistryError> {
     if plans.len() > RELATION_REGISTRY_LIMIT {
         return Err(RelationRegistryError::TooManyRelations);
