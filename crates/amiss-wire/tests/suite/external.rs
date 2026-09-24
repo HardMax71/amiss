@@ -12,10 +12,11 @@ use amiss_wire::external::ExternalPlan;
 use amiss_wire::external::{
     ASSESSMENT_PAYLOAD_SCHEMA, AssessDefect, AssessmentDefect, EVIDENCE_SCHEMA, ExternalEvidence,
     ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema, ExternalVerdict,
-    PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod, assess, plan,
+    PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, ProbeMethod, assess, plan,
 };
 use amiss_wire::model::Digest;
 use amiss_wire::report::PAYLOAD_SCHEMA;
+use amiss_wire::report::ReportDefect;
 use serde_json::Value;
 use sha2::Digest as _;
 
@@ -398,7 +399,7 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
             "0.0.0",
             sample_digest()
         ),
-        Err(PlanDefect::MalformedExternal)
+        Err(ReportDefect::MalformedExternal)
     );
 }
 
@@ -533,14 +534,14 @@ fn a_tampered_payload_is_refused() {
     let wire = String::from_utf8(serde_json_canonicalizer::to_vec(&envelope).unwrap()).unwrap();
     assert_eq!(
         plan(wire.as_bytes(), "0.0.0", sample_digest()),
-        Err(PlanDefect::DigestMismatch)
+        Err(ReportDefect::DigestMismatch)
     );
     let result = serde_json::to_string(&envelope.payload.result).unwrap();
     let malformed = wire.replace(&format!("\"result\":{result}"), "\"result\":null");
     assert_ne!(malformed, wire);
     assert_eq!(
         plan(malformed.as_bytes(), "0.0.0", sample_digest()),
-        Err(PlanDefect::NotAReport)
+        Err(ReportDefect::NotAReport)
     );
 }
 
@@ -553,7 +554,7 @@ fn an_incomplete_report_is_refused() {
     let envelope = refresh_payload_digest(&mut document, PAYLOAD_SCHEMA);
     assert_eq!(
         plan(&envelope, "0.0.0", sample_digest()),
-        Err(PlanDefect::Incomplete)
+        Err(ReportDefect::Incomplete)
     );
 }
 
@@ -561,7 +562,7 @@ fn an_incomplete_report_is_refused() {
 fn a_foreign_value_is_not_a_report() {
     assert_eq!(
         plan(b"null", "0.0.0", sample_digest()),
-        Err(PlanDefect::NotAReport)
+        Err(ReportDefect::NotAReport)
     );
     assert_eq!(
         plan(
@@ -569,7 +570,7 @@ fn a_foreign_value_is_not_a_report() {
             "0.0.0",
             sample_digest()
         ),
-        Err(PlanDefect::NotAReport)
+        Err(ReportDefect::NotAReport)
     );
 }
 
@@ -1465,6 +1466,6 @@ fn an_external_occurrence_missing_its_promise_is_refused() {
             "0.0.0",
             sample_digest()
         ),
-        Err(PlanDefect::MalformedExternal)
+        Err(ReportDefect::MalformedExternal)
     );
 }

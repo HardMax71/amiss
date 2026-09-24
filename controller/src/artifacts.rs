@@ -13,7 +13,7 @@ use crate::{
     RelationAuditBundle, RelationAuditDigests,
 };
 
-pub(crate) use format::valid_id as valid_artifact_id;
+pub(crate) use format::valid_artifact_id;
 pub use store::FileArtifactStore;
 
 pub const MAX_ARTIFACT_RECORDS: u64 = 100_000;
@@ -154,7 +154,7 @@ pub(crate) fn checked_reference(reference: ArtifactReference) -> Option<Artifact
 }
 
 pub(crate) fn valid_reference(reference: &ArtifactReference) -> bool {
-    format::valid_id(&reference.id)
+    valid_artifact_id(&reference.id)
         && reference
             .locator
             .strip_suffix("/report")

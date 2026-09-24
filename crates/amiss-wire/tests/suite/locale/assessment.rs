@@ -15,9 +15,11 @@ use amiss_wire::envelope::{Envelope, Payload as _};
 
 use amiss_wire::locale::{
     ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessment, LocaleCoverageEvidence,
-    LocaleCoveragePlan, LocaleCoverageReason, LocaleCoverageVerdict, LocaleFallbackStatus,
-    LocaleLineageStatus, LocalePageRequirement, LocaleSourcePage, assess,
+    LocaleCoveragePlan, LocaleCoverageReason, LocaleFallbackStatus, LocaleLineageStatus,
+    LocalePageRequirement, LocaleSourcePage, assess,
 };
+
+use amiss_wire::assessment::AssessmentVerdict;
 use serde_json::Value;
 
 fn plan_envelope() -> Envelope<LocaleCoveragePlan> {
@@ -49,7 +51,7 @@ fn complete_inventories_report_exact_missing_and_orphan_pages() {
     let evidence = evidence_envelope(&input);
     let assessment = assessed(&plan, Some(&evidence));
 
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
         vec![
@@ -93,7 +95,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
     partial_source.source.complete = false;
     let evidence = evidence_envelope(&partial_source);
     let assessment = assessed(&all_source, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Refuted);
     assert!(!assessment.payload.coverage.complete);
     assert_eq!(
         assessment.payload.coverage.target_missing,
@@ -110,7 +112,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
     );
     let evidence = evidence_envelope(&partial_target);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Refuted);
     assert!(!assessment.payload.coverage.complete);
     assert!(assessment.payload.coverage.target_missing.is_empty());
     assert_eq!(
@@ -127,7 +129,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
         .retain(|page| page.key != "reference/api");
     let evidence = evidence_envelope(&both_partial);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Unproven);
     assert_eq!(
         assessment.payload.reasons,
         vec![
@@ -149,7 +151,7 @@ fn named_policy_can_be_exhaustive_without_an_unneeded_full_source_inventory() {
     let evidence = evidence_envelope(&input);
     let assessment = assessed(&plan, Some(&evidence));
 
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Matched);
     assert!(assessment.payload.coverage.complete);
     assert!(assessment.payload.reasons.is_empty());
 }
@@ -164,7 +166,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
     );
     let evidence = evidence_envelope(&allowed);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Matched);
     assert_eq!(assessment.payload.coverage.fallbacks.len(), 1);
     assert_eq!(
         assessment.payload.coverage.fallbacks[0].status,
@@ -178,7 +180,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
     );
     let evidence = evidence_envelope(&unauthorized);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
         vec![LocaleCoverageReason::FallbackUnauthorized]
@@ -195,7 +197,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
     );
     let evidence = evidence_envelope(&wrong_page);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
         vec![LocaleCoverageReason::FallbackUnauthorized]
@@ -212,7 +214,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
     );
     let evidence = evidence_envelope(&stale);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
         vec![LocaleCoverageReason::FallbackSourceMismatch]
@@ -239,7 +241,7 @@ fn fallback_source_absence_in_a_partial_inventory_stays_unproven() {
     let evidence = evidence_envelope(&input);
     let assessment = assessed(&plan, Some(&evidence));
 
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Unproven);
     assert_eq!(
         assessment.payload.reasons,
         vec![
@@ -273,7 +275,7 @@ fn all_source_fallback_rules_authorize_each_observed_source_page() {
     let evidence = evidence_envelope(&input);
     let assessment = assessed(&plan, Some(&evidence));
 
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Matched);
     assert!(
         assessment
             .payload
@@ -303,7 +305,7 @@ fn required_target_lineage_distinguishes_current_stale_and_unproven() {
     );
     let evidence = evidence_envelope(&current);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Matched);
     assert_eq!(assessment.payload.coverage.lineage.len(), 1);
     assert_eq!(
         assessment.payload.coverage.lineage[0].status,
@@ -317,7 +319,7 @@ fn required_target_lineage_distinguishes_current_stale_and_unproven() {
     );
     let evidence = evidence_envelope(&stale);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
         vec![LocaleCoverageReason::LineageStale]
@@ -335,7 +337,7 @@ fn required_target_lineage_distinguishes_current_stale_and_unproven() {
     );
     let evidence = evidence_envelope(&unproven);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Unproven);
     assert_eq!(
         assessment.payload.reasons,
         vec![LocaleCoverageReason::LineageUnproven]
@@ -361,7 +363,7 @@ fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
     );
     let evidence = evidence_envelope(&ignored);
     let assessment = assessed(&coverage_plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Matched);
     assert!(assessment.payload.coverage.lineage.is_empty());
 
     let mut input_plan = locale_plan();
@@ -393,7 +395,7 @@ fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
     );
     let evidence = evidence_envelope(&input);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
         vec![LocaleCoverageReason::LineageStale]
@@ -425,7 +427,7 @@ fn lineage_is_not_inferred_without_an_observed_current_source() {
     let evidence = evidence_envelope(&input);
     let assessment = assessed(&plan, Some(&evidence));
 
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Unproven);
     assert_eq!(
         assessment.payload.reasons,
         vec![LocaleCoverageReason::SourceIncomplete]
@@ -454,18 +456,18 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
 
     let evidence = evidence_envelope(&aligned);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Matched);
     let Nullable::Value(product) = assessment.payload.product else {
         panic!("selected product comparison was omitted");
     };
-    assert_eq!(product.source, LocaleCoverageVerdict::Matched);
-    assert_eq!(product.target, LocaleCoverageVerdict::Matched);
+    assert_eq!(product.source, AssessmentVerdict::Matched);
+    assert_eq!(product.target, AssessmentVerdict::Matched);
 
     let mut missing = aligned.clone();
     missing.source.product = Nullable::Null;
     let evidence = evidence_envelope(&missing);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Unproven);
     assert_eq!(
         assessment.payload.reasons,
         vec![LocaleCoverageReason::SourceProductUnproven]
@@ -477,14 +479,14 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
     mismatched.target.product = Nullable::Null;
     let evidence = evidence_envelope(&mismatched);
     let assessment = assessed(&plan, Some(&evidence));
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
         vec![LocaleCoverageReason::SourceProductMismatch]
     );
     assert!(matches!(
         assessment.payload.product,
-        Nullable::Value(product) if product.target == LocaleCoverageVerdict::Unproven
+        Nullable::Value(product) if product.target == AssessmentVerdict::Unproven
     ));
 
     mismatched.target.product = Nullable::Value(product_resource('e'));
@@ -512,7 +514,7 @@ fn coverage_only_policy_ignores_unselected_product_receipts() {
     let evidence = evidence_envelope(&input);
     let assessment = assessed(&plan, Some(&evidence));
 
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Matched);
     assert_eq!(assessment.payload.product, Nullable::Null);
 }
 
@@ -565,7 +567,7 @@ fn all_source_and_named_source_absence_remain_distinct() {
 fn absent_unbound_and_foreign_producer_evidence_stays_unproven() {
     let plan = plan_envelope();
     let absent = assessed(&plan, None);
-    assert_eq!(absent.payload.verdict, LocaleCoverageVerdict::Unproven);
+    assert_eq!(absent.payload.verdict, AssessmentVerdict::Unproven);
     assert_eq!(
         absent.payload.reasons,
         vec![LocaleCoverageReason::EvidenceAbsent]
@@ -605,7 +607,7 @@ fn bound_fact_disagreements_refute_without_comparing_foreign_inventories() {
     let evidence = evidence_envelope(&foreign);
     let assessment = assessed(&plan, Some(&evidence));
 
-    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(assessment.payload.verdict, AssessmentVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
         vec![

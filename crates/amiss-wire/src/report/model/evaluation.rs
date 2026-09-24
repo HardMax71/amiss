@@ -4,14 +4,9 @@ use strum::{Display, EnumString};
 
 use crate::model::Digest;
 use crate::model::{BranchRef, ForgeDialect, RepositoryIdentity, UtcInstant};
+use crate::requests::GitSnapshotIdentity;
 use crate::requests::{
     CandidateEventKind, CandidateFinality, CandidateSnapshot, RequestMode, SnapshotMaterialization,
-};
-
-pub use crate::requests::{
-    GitSnapshotIdentity as GitSnapshot, GitSnapshotKind,
-    IndexIdentityScope as SyntheticIdentityScope, IndexSnapshotIdentity as SyntheticSnapshot,
-    IndexSnapshotKind as SyntheticSnapshotKind, IndexSnapshotSchema as SyntheticSnapshotSchema,
 };
 
 #[derive(
@@ -62,7 +57,7 @@ pub struct UnavailableSnapshot {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BaseSnapshot {
-    Git(GitSnapshot),
+    Git(GitSnapshotIdentity),
     Unavailable(UnavailableSnapshot),
 }
 

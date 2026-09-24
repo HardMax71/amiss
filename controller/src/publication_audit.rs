@@ -1,10 +1,10 @@
 mod tests;
 
+use amiss_wire::assessment::AssessmentVerdict;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::Digest;
 use amiss_wire::publication::{
     PUBLICATION_DOCUMENT_BYTES, PublicationAssessment, PublicationEvidence, PublicationPlan,
-    PublicationVerdict,
 };
 
 use crate::ArtifactError;
@@ -24,7 +24,7 @@ pub struct PublicationAuditDigests {
     pub plan_digest: Digest,
     pub evidence_digest: Option<Digest>,
     pub assessment_digest: Digest,
-    pub verdict: PublicationVerdict,
+    pub verdict: AssessmentVerdict,
 }
 
 /// Validates one complete, report-bound publication audit before retention.

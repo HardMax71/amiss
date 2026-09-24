@@ -15,11 +15,7 @@ use super::{
     DocumentGitMode, DocumentResult, DocumentSide, ObservationComparison, RepoPath, Resolution,
     SourceSpan,
 };
-
-pub use crate::controls::{
-    FindingOccurrence as ReferenceOccurrence, OccurrenceKind as ReferenceOccurrenceKind,
-    TargetIntentKind as RepositoryIntentKind,
-};
+use crate::controls::FindingOccurrence;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
@@ -55,7 +51,7 @@ pub enum FindingKeyScope<P = RepoPath> {
     Reference {
         document: P,
         normalized_target_intent: RepositoryTargetIntent<P>,
-        occurrence: ReferenceOccurrence,
+        occurrence: FindingOccurrence,
         source_construct: SourceConstruct,
     },
 }

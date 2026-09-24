@@ -375,13 +375,13 @@ pub(super) fn component_path(root: &Path, id: &str, component: ArtifactComponent
 
 fn metadata_id(name: &str) -> Option<&str> {
     name.strip_suffix(".artifact")
-        .filter(|id| format::valid_id(id))
+        .filter(|id| format::valid_artifact_id(id))
 }
 
 fn component_id(name: &str) -> Option<(&str, ArtifactComponent)> {
     ArtifactComponent::iter().find_map(|component| {
         name.strip_suffix(&format!(".{}", component.as_ref()))
-            .filter(|id| format::valid_id(id))
+            .filter(|id| format::valid_artifact_id(id))
             .map(|id| (id, component))
     })
 }

@@ -8,14 +8,13 @@ use crate::extraction::BlockKind;
 use crate::extraction::SourceConstruct;
 use crate::model::Digest;
 use crate::model::{Adapter, AddressKind, Oid};
-pub use crate::resolution::{
-    ExternalReference as ExternalResolutionReason, InvalidReference as InvalidResolutionReason,
-    UnsupportedSemanticsReason, UnsupportedTargetTag as UnsupportedTargetReason,
-};
 use crate::resolution::{Target, VersionScope};
 
 use super::RepoPath;
 use crate::report::ReportDefect;
+use crate::resolution::{
+    ExternalReference, InvalidReference, UnsupportedSemanticsReason, UnsupportedTargetTag,
+};
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
@@ -102,10 +101,10 @@ pub enum Resolution<P = RepoPath> {
         path: P,
     },
     External {
-        reason: ExternalResolutionReason,
+        reason: ExternalReference,
     },
     Invalid {
-        reason: InvalidResolutionReason,
+        reason: InvalidReference,
     },
     Missing(MissingResolution<P>),
     Resolved {
@@ -117,7 +116,7 @@ pub enum Resolution<P = RepoPath> {
     UnsupportedSemantics(UnsupportedSemanticsResolution<P>),
     UnsupportedTarget {
         path: P,
-        reason: UnsupportedTargetReason,
+        reason: UnsupportedTargetTag,
     },
     UnsupportedVersion {
         scope: VersionScope<P>,

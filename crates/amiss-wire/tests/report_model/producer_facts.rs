@@ -23,13 +23,13 @@ fn fact_producers_borrow_the_key_and_actual_resolution() -> Result<(), serde_jso
                 normalized_target_intent: report::RepositoryTargetIntent {
                     commit_oid: None,
                     fragment_digest: None,
-                    kind: report::RepositoryIntentKind::RepositoryPath,
+                    kind: amiss_wire::controls::TargetIntentKind::RepositoryPath,
                     path: report::RepositoryIntentPath::Path(&path),
                     query_digest: None,
                     target_kind: TargetKind::Blob,
                 },
-                occurrence: report::ReferenceOccurrence {
-                    kind: report::ReferenceOccurrenceKind::SourceProjection,
+                occurrence: amiss_wire::controls::FindingOccurrence {
+                    kind: amiss_wire::controls::OccurrenceKind::SourceProjection,
                     source_projection_digest: digest,
                 },
                 source_construct: SourceConstruct::InlineLink,

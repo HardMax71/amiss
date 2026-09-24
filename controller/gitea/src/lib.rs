@@ -15,9 +15,7 @@ use amiss_controller::{ChangeLocator, ChangeSnapshot, ProviderError, Publication
 use amiss_wire::model::Oid;
 
 pub use adapter::GiteaPullRequestAdapter;
-pub use fetch_plan::{
-    GiteaFetchPlan, GiteaPlanError, gitea_fetch_plan, repository_url as gitea_repository_url,
-};
+pub use fetch_plan::{GiteaFetchPlan, GiteaPlanError, gitea_fetch_plan, gitea_repository_url};
 pub use live::{GiteaClient, GiteaClientError, GiteaObjectResolver, GiteaTimeouts};
 pub use source::GiteaPullRequestSource;
 

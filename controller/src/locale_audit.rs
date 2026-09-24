@@ -1,9 +1,10 @@
 mod tests;
 
+use amiss_wire::assessment::AssessmentVerdict;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::locale::{
     ASSESSMENT_DOCUMENT_BYTES, EVIDENCE_DOCUMENT_BYTES, LOCALE_DOCUMENT_BYTES,
-    LocaleCoverageAssessment, LocaleCoverageEvidence, LocaleCoveragePlan, LocaleCoverageVerdict,
+    LocaleCoverageAssessment, LocaleCoverageEvidence, LocaleCoveragePlan,
 };
 use amiss_wire::model::Digest;
 
@@ -24,7 +25,7 @@ pub struct LocaleAuditDigests {
     pub plan_digest: Digest,
     pub evidence_digest: Option<Digest>,
     pub assessment_digest: Digest,
-    pub verdict: LocaleCoverageVerdict,
+    pub verdict: AssessmentVerdict,
 }
 
 /// Validates one complete, report-bound locale coverage audit before retention.

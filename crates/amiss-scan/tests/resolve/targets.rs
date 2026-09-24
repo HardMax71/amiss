@@ -2,9 +2,10 @@ use sha2::Digest as _;
 use std::fs;
 
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_scan::resolve::{RAW_EVIDENCE_DOMAIN, Resolver, TARGET_PROJECTION_DOMAIN, TargetCache};
+use amiss_scan::resolve::{Resolver, TARGET_PROJECTION_DOMAIN, TargetCache};
 use amiss_scan::{Error, Resolution, ScanLimits, ScanResources, discover, discover_index};
 use amiss_wire::controls::ResourceName;
+use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::resolution::{BlobContent, BlobMode, Target, UnsupportedSemantics};
 

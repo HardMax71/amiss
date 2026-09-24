@@ -3,8 +3,6 @@ use std::cmp::Ordering;
 use crate::de::{Error, ErrorKind, fail};
 use crate::model::{OwnerId, RepositoryIdentity, TreeIdentity, UtcInstant};
 
-pub use crate::semantic::RECORD_KEY_BYTES;
-
 mod debt;
 /// Execution-constraint descriptor, forge-neutral action-repository
 /// identity, and closed platform grammar.

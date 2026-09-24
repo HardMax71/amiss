@@ -1,9 +1,9 @@
 use amiss_wire::repo_path_text;
 use amiss_wire::report::IntentKind;
 use amiss_wire::report::model::{
-    MissingResolution, RepoPath, Resolution, UnsupportedSemanticsReason,
-    UnsupportedSemanticsResolution, occurrences,
+    MissingResolution, RepoPath, Resolution, UnsupportedSemanticsResolution, occurrences,
 };
+use amiss_wire::resolution::UnsupportedSemanticsReason;
 use amiss_wire::resolution::{BlobTarget, Target};
 
 use crate::support::{amiss, payload};

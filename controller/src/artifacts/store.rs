@@ -5,9 +5,8 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use amiss_wire::locale::LocaleCoverageVerdict;
+use amiss_wire::assessment::AssessmentVerdict;
 use amiss_wire::model::Digest;
-use amiss_wire::publication::PublicationVerdict;
 use amiss_wire::relation::RelationVerdict;
 
 use super::format::{Blob, Record, RecordInput, Root, SidecarAudit};
@@ -58,9 +57,9 @@ struct AuditDigests {
 
 #[derive(Clone, Copy)]
 enum AuditKind {
-    Publication(PublicationVerdict),
+    Publication(AssessmentVerdict),
     Relation(RelationVerdict),
-    Locale(LocaleCoverageVerdict),
+    Locale(AssessmentVerdict),
 }
 
 impl FileArtifactStore {
@@ -342,7 +341,7 @@ impl FileArtifactStore {
         &self,
         id: &str,
     ) -> Result<RetainedRelationAudit, ArtifactError> {
-        if !super::format::valid_id(id) {
+        if !super::format::valid_artifact_id(id) {
             return Err(ArtifactError::NotFound);
         }
         let mut state = self.lock_state()?;
@@ -401,7 +400,7 @@ impl FileArtifactStore {
     ///
     /// The artifact or component is absent, expired, oversized, or corrupt.
     pub fn read(&self, id: &str, component: ArtifactComponent) -> Result<Vec<u8>, ArtifactError> {
-        if !super::format::valid_id(id) {
+        if !super::format::valid_artifact_id(id) {
             return Err(ArtifactError::NotFound);
         }
         let mut state = self.lock_state()?;

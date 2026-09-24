@@ -2,13 +2,15 @@ use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::collections::BTreeMap;
 
+use amiss_wire::controls::FindingOccurrence;
+use amiss_wire::controls::OccurrenceKind;
+use amiss_wire::controls::TargetIntentKind;
 use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, Profile, TargetKind};
 use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
     EmptyRepositoryPath, FindingFactEvidence, FindingFactInput, FindingKeyInput, PolicySource,
-    ReferenceOccurrence, ReferenceOccurrenceKind, RepositoryIntentKind, RepositoryIntentPath,
-    RepositoryTargetIntent,
+    RepositoryIntentPath, RepositoryTargetIntent,
 };
 use amiss_wire::report::{Disposition, FindingKind};
 
@@ -86,7 +88,7 @@ fn collect_structural<'a>(
                             .0,
                     )
                 }),
-                kind: RepositoryIntentKind::RepositoryPath,
+                kind: TargetIntentKind::RepositoryPath,
                 path: intent.repository_path.clone().map_or(
                     RepositoryIntentPath::Empty(EmptyRepositoryPath::Empty),
                     RepositoryIntentPath::Path,
@@ -102,8 +104,8 @@ fn collect_structural<'a>(
                 }),
                 target_kind: intent.target_kind.unwrap_or(TargetKind::Either),
             },
-            occurrence: ReferenceOccurrence {
-                kind: ReferenceOccurrenceKind::SourceProjection,
+            occurrence: FindingOccurrence {
+                kind: OccurrenceKind::SourceProjection,
                 source_projection_digest: observation.projection_digest,
             },
             source_construct: observation.construct,

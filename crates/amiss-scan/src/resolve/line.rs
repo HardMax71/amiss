@@ -14,8 +14,9 @@ use crate::scanned::Verdict;
 use crate::scanned::unavailable;
 
 use super::content::{Content, content_cache, read_target, target_projection};
-use super::{LineRange, RAW_EVIDENCE_DOMAIN, Resolution, Resolver, TARGET_LINE_PROJECTION_DOMAIN};
+use super::{LineRange, Resolution, Resolver, TARGET_LINE_PROJECTION_DOMAIN};
 use crate::scanned::safe_line_number;
+use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 
 impl Resolver<'_> {
     /// Answers one value claim against the snapshot: the target must be a
