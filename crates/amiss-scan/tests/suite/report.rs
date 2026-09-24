@@ -1061,31 +1061,7 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
     let (candidate_identity, candidate_discovery, candidate_side) =
         snapshot(&repo, &mut git_resources, &candidate_commit);
     let comparisons = correlate(base_side, candidate_side).unwrap();
-    let template = comparisons.first().unwrap().clone();
-
-    let filler = template
-        .candidate
-        .as_ref()
-        .or(template.base.as_ref())
-        .unwrap()
-        .clone();
-    let inflated: Vec<_> = (0..300_u32)
-        .map(|index| {
-            let mut row = template.clone();
-            row.alternatives_candidate = (0..64_u32)
-                .map(|slot| {
-                    let mut alternative = filler.clone();
-                    alternative.document =
-                        RepoPath::new(format!("{index:03}{slot:02}{}", "a".repeat(4_000))).unwrap();
-                    alternative.external_destination = Some("b".repeat(8_000));
-                    alternative
-                })
-                .collect();
-            row
-        })
-        .collect();
-
-    let setup = Setup {
+    let setup = |machine_json_bytes| Setup {
         engine: engine(),
         profile: amiss_wire::controls::Profile::Observe,
         repository: None,
@@ -1093,24 +1069,43 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
         candidate_ref: None,
         target_ref: None,
         default_branch_ref: None,
-        base: base_identity,
-        candidate: CandidateBlock::Commit(candidate_identity),
-        policy: amiss_scan::Effects::default(),
+        base: base_identity.clone(),
+        candidate: CandidateBlock::Commit(candidate_identity.clone()),
+        policy: amiss_scan::Effects {
+            machine_json_bytes,
+            ..amiss_scan::Effects::default()
+        },
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
-    let built = construct(&setup, &base_discovery, &candidate_discovery, inflated, &[]).unwrap();
+    let report = |machine_json_bytes| {
+        let built = construct(
+            &setup(machine_json_bytes),
+            &base_discovery,
+            &candidate_discovery,
+            comparisons.clone(),
+            &[],
+        )
+        .unwrap();
+        let wire = amiss_scan::report::wire(&built).unwrap();
+        (built, wire)
+    };
 
+    let (full, full_wire) = report(MACHINE_JSON_BYTES);
+    assert!(!full.envelope.payload.observations.is_empty());
+    let length = u64::try_from(full_wire.len()).unwrap();
+    assert_eq!(
+        report(length).1,
+        full_wire,
+        "a report exactly at the ceiling is untouched"
+    );
+
+    let (built, wire) = report(length - 1);
     assert_eq!(
         built.status,
         amiss_wire::report::model::ReportStatus::Incomplete
     );
     assert_eq!(built.exit_code, 2);
-    let wire = amiss_scan::report::wire(&built).unwrap();
-    assert!(
-        u64::try_from(wire.len()).unwrap_or(u64::MAX) < MACHINE_JSON_BYTES,
-        "the projection itself fits the reservation"
-    );
     let parsed = crate::support::generated_report(&wire).unwrap();
     let errors = parsed["payload"]["errors"].as_array().unwrap();
     assert_eq!(errors.len(), 1);
@@ -1118,8 +1113,11 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
     assert_eq!(row["code"], "OUTPUT_LIMIT_EXCEEDED");
     assert_eq!(row["phase"], "output");
     assert_eq!(row["resource"], "machine-json-bytes");
-    assert_eq!(row["configured_limit"], MACHINE_JSON_BYTES);
-    assert!(row["observed_lower_bound"].as_u64().unwrap() > MACHINE_JSON_BYTES);
+    assert_eq!(row["configured_limit"], length - 1);
+    assert_eq!(
+        row["observed_lower_bound"], length,
+        "the crossing counts the exact wire length"
+    );
     assert_eq!(parsed["payload"]["findings"].as_array().unwrap().len(), 0);
     assert_eq!(
         parsed["payload"]["observations"].as_array().unwrap().len(),
