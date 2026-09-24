@@ -1,6 +1,7 @@
+use amiss_wire::controls::AnalysisPhase;
 use amiss_wire::report::model::{
-    AnalysisError, AnalysisErrorCode, AnalysisPhase, Feedback, RepoPath, RepoPathBytes,
-    ReportEnvelope, ReportStatus, UnavailableFeedback, UnavailableStatus,
+    AnalysisError, AnalysisErrorCode, Feedback, RepoPath, RepoPathBytes, ReportEnvelope,
+    ReportStatus, UnavailableFeedback, UnavailableStatus,
 };
 
 #[expect(

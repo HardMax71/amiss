@@ -1,10 +1,11 @@
 #![cfg(test)]
 
+use amiss_wire::controls::AnalysisPhase;
 use amiss_wire::model::RepoPathText;
 use amiss_wire::repo_path_text;
 use amiss_wire::report::model::{
-    AnalysisError, AnalysisPhase, ByteSpan, FindingFix, RepoPath, RepoPathBytes, ReportEnvelope,
-    ReportStatus, SourceSpan,
+    AnalysisError, ByteSpan, FindingFix, RepoPath, RepoPathBytes, ReportEnvelope, ReportStatus,
+    SourceSpan,
 };
 use amiss_wire::report::{Disposition, FindingKind, model::AnalysisErrorCode};
 

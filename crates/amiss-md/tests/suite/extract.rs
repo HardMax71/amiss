@@ -1,5 +1,5 @@
 use amiss_md::{Analysis, BlockKind, Extraction, TransclusionKind, TransclusionRefusal, analyze};
-use amiss_wire::controls::SourceConstruct;
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::Adapter;
 
 use crate::fixtures::harvest;

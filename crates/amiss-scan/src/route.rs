@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use amiss_wire::controls::{GitMode, SourceConstruct};
+use amiss_wire::controls::GitMode;
+
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::uri::scheme;
 

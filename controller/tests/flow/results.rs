@@ -3,7 +3,7 @@ use std::sync::Arc;
 use amiss_controller::{
     ChangeState, CheckConclusion, Evaluation, HandleOutcome, RunFailure, RunnerOutcome,
 };
-use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 
 use crate::support::{
     FakeAdapter, complete, controller, delivery, locator, provider, repository, run, snapshot,

@@ -1,9 +1,9 @@
 use sha2::Digest as _;
 mod tests;
 
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::model::Digest;
 use amiss_wire::model::Oid;
-use amiss_wire::report::MACHINE_JSON_BYTES;
 use serde::{Deserialize, Serialize};
 
 use crate::{ArtifactReference, CheckBinding, ControllerEvaluationId, Publication};

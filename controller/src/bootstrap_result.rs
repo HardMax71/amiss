@@ -1,5 +1,5 @@
 use amiss_bootstrap::result::{BootstrapResult, RESULT_BYTES, parse_result, result_exit_code};
-use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 
 use crate::{Evaluation, RunRequest, RunnerOutcome};
 

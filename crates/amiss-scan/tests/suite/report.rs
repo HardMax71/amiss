@@ -17,14 +17,14 @@ use amiss_scan::{
 };
 use amiss_wire::controls::GitMode;
 
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model::{
     DocumentCounts, FindingCounts, FindingFactEvidence, ObservationComparison, Occurrence,
     ReferenceCounts, Sides, Summary, occurrences,
 };
 use amiss_wire::report::{
-    EngineProvenance, ErrorDetail, FindingKind, MACHINE_JSON_BYTES, adapter_contract,
-    model::AnalysisErrorCode,
+    EngineProvenance, ErrorDetail, FindingKind, adapter_contract, model::AnalysisErrorCode,
 };
 use tempfile::TempDir;
 

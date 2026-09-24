@@ -5,7 +5,10 @@ use strum::{Display, EnumString};
 use crate::controls::ConstraintPlatform;
 use crate::manifest::ReleaseManifest;
 use crate::model::Digest;
-use crate::model::{Adapter, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
+use crate::model::{
+    Adapter, FrontmatterContract, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
+    SourceProjection,
+};
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
@@ -13,24 +16,6 @@ use crate::model::{Adapter, ObjectFormat, Oid, RepoPathText, RepositoryIdentity}
 pub enum AdapterContractSchema {
     #[strum(serialize = "amiss/scanner-adapter-contract")]
     Current,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-#[strum(serialize_all = "kebab-case")]
-pub enum FrontmatterContract {
-    Frontmatter,
-    None,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-#[strum(serialize_all = "kebab-case")]
-pub enum SourceProjection {
-    None,
-    SourceProjection,
 }
 
 #[derive(

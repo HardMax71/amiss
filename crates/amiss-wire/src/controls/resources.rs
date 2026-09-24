@@ -1,7 +1,30 @@
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{AsRefStr, Display, EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
-use crate::report::model::AnalysisPhase;
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
+#[strum(serialize_all = "lowercase")]
+pub enum AnalysisPhase {
+    Configuration,
+    Discovery,
+    Git,
+    Internal,
+    Invocation,
+    Output,
+    Parse,
+    Policy,
+    Resolution,
+}
 
 macro_rules! resource_names {
     ($($variant:ident => $phase:ident),+ $(,)?) => {

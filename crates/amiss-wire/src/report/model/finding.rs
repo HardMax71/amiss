@@ -3,8 +3,10 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::controls::{
-    ProjectionKind, ProjectionSink, ProjectionSource, SourceConstruct, WaiverResidualDisposition,
+    ProjectionKind, ProjectionSink, ProjectionSource, WaiverResidualDisposition,
 };
+
+use crate::extraction::SourceConstruct;
 use crate::model::Digest;
 use crate::model::{ArtifactId, OwnerId, RepoPathText, TreeIdentity, UtcInstant};
 

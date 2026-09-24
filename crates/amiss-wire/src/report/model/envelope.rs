@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 use serde_with::{As, TryFromInto, apply};
 
 use crate::controls::ProjectionSource;
+use crate::envelope::MACHINE_JSON_BYTES;
 use crate::envelope::{Envelope, Payload, Sealing};
-use crate::report::{MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ReportDefect, result_verdict};
+use crate::report::{PAYLOAD_SCHEMA, ReportDefect, result_verdict};
 
 use super::{
     AnalysisError, Controls, DocumentGitMode, DocumentResult, DocumentSide, Engine, Evaluation,

@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
-use amiss_wire::controls::{GitMode, ResourceName, SourceConstruct, TargetKind};
+use amiss_wire::controls::{GitMode, ResourceName, TargetKind};
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{
     Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity,
 };

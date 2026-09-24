@@ -3,7 +3,7 @@ use sha2::Digest as _;
 use std::collections::BTreeSet;
 
 use crate::model::Digest;
-use crate::model::{Adapter, RepoPath};
+use crate::model::{Adapter, AddressKind, RepoPath};
 use strum::IntoEnumIterator;
 
 use super::model;
@@ -164,16 +164,12 @@ pub fn adapter_contract(
         frontmatter_contract: metadata.frontmatter_contract,
         source_projection: metadata.source_projection,
         structural_address: match metadata.structural_address {
-            Some(model::AddressKind::AsciidocBlockPath) => {
-                model::StructuralAddressKind::AsciidocBlockPath
-            }
-            Some(model::AddressKind::MarkdownAstNodePath) => {
+            Some(AddressKind::AsciidocBlockPath) => model::StructuralAddressKind::AsciidocBlockPath,
+            Some(AddressKind::MarkdownAstNodePath) => {
                 model::StructuralAddressKind::MarkdownAstNodePath
             }
-            Some(model::AddressKind::MdxAstNodePath) => {
-                model::StructuralAddressKind::MdxAstNodePath
-            }
-            Some(model::AddressKind::RstBlockPath) => model::StructuralAddressKind::RstBlockPath,
+            Some(AddressKind::MdxAstNodePath) => model::StructuralAddressKind::MdxAstNodePath,
+            Some(AddressKind::RstBlockPath) => model::StructuralAddressKind::RstBlockPath,
             None => model::StructuralAddressKind::None,
         },
     };

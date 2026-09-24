@@ -134,7 +134,7 @@ fn an_engine_that_contradicts_its_own_report_is_refused() {
 #[test]
 fn an_oversize_report_is_refused() {
     let (mut wire, expectations) = accepted_report();
-    let ceiling = usize::try_from(amiss_wire::report::MACHINE_JSON_BYTES).unwrap();
+    let ceiling = usize::try_from(amiss_wire::envelope::MACHINE_JSON_BYTES).unwrap();
     wire.resize(ceiling.saturating_add(1), b' ');
     assert_eq!(
         settle(&Supervised::Completed(exited(0)), &wire, &expectations),

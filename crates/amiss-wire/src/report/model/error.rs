@@ -2,34 +2,9 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{AsRefStr, Display, EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
-use crate::controls::ResourceName;
+use crate::controls::{AnalysisPhase, ResourceName};
 
 use super::{EvaluationUnavailableReason, RepoPath};
-
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Display,
-    EnumString,
-    SerializeDisplay,
-    DeserializeFromStr,
-    strum::AsRefStr,
-)]
-#[strum(serialize_all = "lowercase")]
-pub enum AnalysisPhase {
-    Configuration,
-    Discovery,
-    Git,
-    Internal,
-    Invocation,
-    Output,
-    Parse,
-    Policy,
-    Resolution,
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

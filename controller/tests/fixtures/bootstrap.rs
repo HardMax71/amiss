@@ -9,7 +9,7 @@ use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
 use amiss_bootstrap::result::{BootstrapResult, result_bytes, result_exit_code};
-use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 
 const MALFORMED_RESULT: &[u8] = b"not-an-amiss-bootstrap-result\n";
 const STARTED_MARKER: &str = "runner-started";

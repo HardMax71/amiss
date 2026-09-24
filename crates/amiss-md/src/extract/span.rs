@@ -1,4 +1,4 @@
-use amiss_wire::controls::SourceConstruct;
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::extraction::{Fault, Heading, Occurrence, Opaque};
 
 /// Sorts by `(start, end)`, discards any span contained in another, and unions

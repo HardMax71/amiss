@@ -1,6 +1,6 @@
 use amiss_md::analyze;
 use amiss_md::profile::mdx_options;
-use amiss_wire::controls::SourceConstruct;
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::Adapter;
 use markdown::{CompileOptions, Options, ParseOptions, to_html_with_options};
 use pulldown_cmark::{Options as CmarkOptions, Parser, html};

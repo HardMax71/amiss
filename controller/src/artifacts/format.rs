@@ -13,6 +13,7 @@ pub(super) enum RootSchema {
 use sha2::Digest as _;
 use std::time::Duration;
 
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::locale::{
     ASSESSMENT_DOCUMENT_BYTES as LOCALE_AUDIT_DOCUMENT_BYTES, LOCALE_DOCUMENT_BYTES,
     LocaleCoverageVerdict,
@@ -20,7 +21,6 @@ use amiss_wire::locale::{
 use amiss_wire::model::Digest;
 use amiss_wire::publication::{PUBLICATION_DOCUMENT_BYTES, PublicationVerdict};
 use amiss_wire::relation::{RELATION_DOCUMENT_BYTES, RelationVerdict};
-use amiss_wire::report::MACHINE_JSON_BYTES;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 

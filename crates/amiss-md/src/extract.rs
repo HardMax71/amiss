@@ -5,7 +5,7 @@ mod source;
 mod span;
 mod tests;
 
-use amiss_wire::controls::SourceConstruct;
+use amiss_wire::extraction::SourceConstruct;
 pub use amiss_wire::extraction::{
     Analysis, AnalyzeError, BlockKind, Extraction, Fault, GovernedDefinition, Heading,
     HeadingAttribute, HeadingSource, Occurrence, Opaque, Work,

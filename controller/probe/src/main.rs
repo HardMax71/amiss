@@ -9,11 +9,11 @@ use std::io::{Read as _, Write as _};
 use std::process::ExitCode;
 use std::time::{Duration, Instant, SystemTime};
 
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 use amiss_wire::external::{
     ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
     ExternalPlan, evidence,
 };
-use amiss_wire::report::MACHINE_JSON_BYTES;
 
 use crate::net::{Observation, probe, shown};
 use crate::select::targets;

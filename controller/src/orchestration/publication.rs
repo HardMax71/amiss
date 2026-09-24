@@ -1,6 +1,6 @@
 mod tests;
 
-use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::envelope::MACHINE_JSON_BYTES;
 
 use super::ledger::{CheckConclusion, Publication};
 use super::model::{
