@@ -7,7 +7,7 @@ use amiss_wire::{
     report::{
         PAYLOAD_SCHEMA,
         model::{
-            MissingResolution, Occurrence, Pair, ReportEnvelope, ReportResolution, Sides,
+            MissingResolution, ObservedOccurrence, Pair, ReportEnvelope, ReportResolution, Sides,
             occurrences,
         },
     },
@@ -39,7 +39,7 @@ fn refs_preserve_original_occurrences_but_reject_unknown_span_fields() {
     assert_eq!(output.status.code(), Some(0));
     assert!(output.stderr.is_empty(), "{:?}", output.stderr);
     assert_eq!(
-        serde_json::from_slice::<Vec<Occurrence>>(&output.stdout)
+        serde_json::from_slice::<Vec<ObservedOccurrence>>(&output.stdout)
             .unwrap()
             .len(),
         expected.len()
@@ -184,7 +184,7 @@ fn refs_query_each_path_source_and_raw_byte_targets() {
             .unwrap();
         assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
         assert_eq!(
-            serde_json::from_slice::<Vec<Occurrence>>(&output.stdout).unwrap(),
+            serde_json::from_slice::<Vec<ObservedOccurrence>>(&output.stdout).unwrap(),
             expected
         );
     }

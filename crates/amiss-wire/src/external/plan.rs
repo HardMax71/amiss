@@ -10,7 +10,8 @@ use crate::envelope::{Envelope, Payload, Sealing};
 use crate::model::Digest;
 use crate::model::ForgeDialect;
 use crate::report::model::{
-    Evaluation, ObservationComparison, Occurrence, ReportPayload, ReportResolution, occurrences,
+    Evaluation, ObservationComparison, ObservedOccurrence, ReportPayload, ReportResolution,
+    occurrences,
 };
 use crate::resolution::ExternalReference;
 use crate::resolution::VersionScope;
@@ -266,7 +267,7 @@ fn validate_repository(path: &str, repository: &ExternalRepository) -> Result<()
 /// One side's destinations delegated to another evidence layer.
 fn collect<'report>(
     observations: &'report [ObservationComparison],
-    side: impl Fn(&'report ObservationComparison) -> Option<&'report Occurrence>,
+    side: impl Fn(&'report ObservationComparison) -> Option<&'report ObservedOccurrence>,
 ) -> Result<BTreeMap<String, Entry>, ReportDefect> {
     let mut entries: BTreeMap<String, Entry> = BTreeMap::new();
     for row in observations {

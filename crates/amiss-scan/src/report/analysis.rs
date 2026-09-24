@@ -27,7 +27,7 @@ fn source_span(span: (usize, usize), display: SpanDisplay) -> model::SourceSpan 
 
 fn occurrence(
     observation: Observation,
-) -> Result<model::Occurrence<RepoPath, Resolution<RepoPath>>, crate::Error> {
+) -> Result<model::ObservedOccurrence<RepoPath, Resolution<RepoPath>>, crate::Error> {
     let identity = observe::ObservationIdentity {
         adapter: observation.adapter,
         contract_digest: observation.adapter_contract_digest,
@@ -44,7 +44,7 @@ fn occurrence(
         sha2::Sha256::new_with_prefix(observe::OBSERVATION_ID_DOMAIN).chain_update([0_u8]),
     );
     serde_json::to_writer(&mut writer, &input).map_err(|_defect| crate::Error::Internal)?;
-    Ok(model::Occurrence {
+    Ok(model::ObservedOccurrence {
         observation_id: Digest::from(writer.0.finalize().0),
         observation_id_input: input,
         source_span: source_span(observation.span, observation.display),

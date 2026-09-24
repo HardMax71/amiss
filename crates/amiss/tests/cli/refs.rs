@@ -9,7 +9,7 @@ use std::process::{Command, Stdio};
 use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::RepoPath;
 use amiss_wire::repo_path_text;
-use amiss_wire::report::model::{Occurrence, ReportResolution};
+use amiss_wire::report::model::{ObservedOccurrence, ReportResolution};
 use amiss_wire::resolution::{BlobTarget, Target};
 
 use crate::support::{amiss, fixture};
@@ -52,7 +52,8 @@ fn json_returns_exact_candidate_occurrences_without_revising_the_verdict() {
         "json",
     ]);
     assert_eq!((code, stderr.as_str()), (0, ""));
-    let rows: Vec<Occurrence> = serde_json::from_slice(&stdout).expect("strict JSON result");
+    let rows: Vec<ObservedOccurrence> =
+        serde_json::from_slice(&stdout).expect("strict JSON result");
     let [row] = rows.as_slice() else {
         panic!("one occurrence: {rows:?}");
     };
