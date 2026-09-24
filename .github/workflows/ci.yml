@@ -373,6 +373,26 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo test -p amiss-fuzz -p amiss-controller-fuzz --locked --release
 
+  module-cycles:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/tools
+        with:
+          tools: cargo-dylint dylint-link
+      - run: rustup toolchain uninstall stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: module-cycles
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # Warns while the cycles in #1133 remain; denies once they are gone.
+      - run: cargo dylint --all -- --workspace --all-targets --locked
+
   packaging:
     needs: changes
     if: needs.changes.outputs.code == 'true'
