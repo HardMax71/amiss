@@ -2,51 +2,43 @@
 
 set -euo pipefail
 export LC_ALL=C
+export GIT_LITERAL_PATHSPECS=1
 
-readonly MANIFEST_SCHEMA="amiss-similarity-edges-v1"
 readonly THRESHOLD="0.85"
 readonly MIN_LINES="8"
 readonly ZERO_OID="0000000000000000000000000000000000000000"
 readonly SCRIPT_PATH="${BASH_SOURCE[0]}"
 readonly REPOSITORY_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
-
-tool_version() {
-  local version want have
-  version="$(
-    cd "$REPOSITORY_ROOT"
-    cargo metadata --locked --format-version 1 --no-deps --offline |
-      jq -er '.metadata.tools.source["similarity-rs"]'
-  )"
-  want="similarity-rs $version"
-  have="$(similarity-rs --version)"
-  if [[ "$have" != "$want" ]]; then
-    echo "the similarity gate pins $want, found $have" >&2
-    return 1
-  fi
-  printf '%s\n' "$have"
-}
-
-policy_identity() {
-  local tool script_blob
-  tool="$(tool_version)"
-  script_blob="$(git -C "$REPOSITORY_ROOT" hash-object "$SCRIPT_PATH")"
-  printf '%s\0%s\0%s\0%s\0%s\n' \
-    "$MANIFEST_SCHEMA" "$tool" "$THRESHOLD" "$MIN_LINES" "$script_blob" |
-    git -C "$REPOSITORY_ROOT" hash-object --stdin
-}
-
-if [[ "${1:-}" == "--policy" ]]; then
-  policy_identity
-  exit 0
-fi
+readonly -a PROVIDER_SOURCES=(
+  transports:controller/gitea/src/live/rest/transport.rs
+  transports:controller/github/src/live/rest/transport.rs
+  transports:controller/gitlab/src/live/transport.rs
+  harnesses:controller/gitea-service/tests/lane/harness.rs
+  harnesses:controller/github-service/tests/lane/harness.rs
+  harnesses:controller/gitlab-service/tests/lane/harness.rs
+  runtimes:controller/gitea-service/src/runtime.rs
+  runtimes:controller/github-service/src/runtime.rs
+  runtimes:controller/gitlab-service/src/runtime.rs
+  verifies:controller/gitea/src/live/verify.rs
+  verifies:controller/github/src/live/verify.rs
+  verifies:controller/gitlab/src/live/verify.rs
+)
 
 if [[ $# -ne 0 ]]; then
-  echo "usage: scripts/similarity-gate.sh [--policy]" >&2
+  echo "usage: scripts/similarity-gate.sh" >&2
   exit 2
 fi
 
-readonly TOOL_VERSION="$(tool_version)"
-readonly POLICY="${AMISS_SIMILARITY_POLICY:-$(policy_identity)}"
+version="$(
+  cd "$REPOSITORY_ROOT"
+  cargo metadata --locked --format-version 1 --no-deps --offline |
+    jq -er '.metadata.tools.source["similarity-rs"]'
+)"
+if [[ "$(similarity-rs --version)" != "similarity-rs $version" ]]; then
+  echo "the similarity gate pins similarity-rs $version, found $(similarity-rs --version)" >&2
+  exit 1
+fi
+
 readonly WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -67,58 +59,6 @@ resolve_base() {
     return
   fi
   printf '%s\n' "$ZERO_OID"
-}
-
-tree_of() {
-  local revision="$1"
-  if [[ "$revision" == "$ZERO_OID" ]]; then
-    printf '%s\n' empty
-    return
-  fi
-  git -C "$REPOSITORY_ROOT" rev-parse --verify "$revision^{tree}"
-}
-
-validate_manifest() {
-  local manifest="$1" tree="$2"
-  [[ -f "$manifest" ]] || return 1
-  [[ ! -L "$manifest" ]] || return 1
-  [[ "$(wc -c < "$manifest")" -le 5242880 ]] || return 1
-  awk -F '\t' -v schema="$MANIFEST_SCHEMA" -v policy="$POLICY" \
-    -v tree="$tree" -v tool="$TOOL_VERSION" '
-      function endpoint(value, fields, count) {
-        count = split(value, fields, /\|/)
-        return count == 6 && (fields[1] == "same" || fields[1] == "provider") &&
-          fields[2] ~ /^(api|crates|controller)\// && fields[4] ~ /^(function|method)$/ &&
-          fields[5] ~ /^[A-Za-z_][A-Za-z0-9_]*$/ && fields[6] ~ /^occurrence=[1-9][0-9]*$/
-      }
-      NR == 1 { if ($0 != schema) exit 1; next }
-      NR == 2 { if (NF != 2 || $1 != "policy" || $2 != policy) exit 1; next }
-      NR == 3 { if (NF != 2 || $1 != "tree" || $2 != tree) exit 1; next }
-      NR == 4 { if (NF != 2 || $1 != "tool" || $2 != tool) exit 1; next }
-      {
-        if (NF != 3 || $1 != "edge" || !endpoint($2) || !endpoint($3) ||
-            $2 > $3) exit 1
-        row = $2 "\t" $3
-        if (seen && row <= previous) exit 1
-        previous = row
-        seen = 1
-      }
-      END { if (NR < 4) exit 1 }
-    ' "$manifest"
-}
-
-write_manifest() {
-  local tree="$1" edges="$2" destination="$3" temporary
-  mkdir -p "$(dirname "$destination")"
-  temporary="$WORK_DIR/manifest.$RANDOM"
-  {
-    printf '%s\n' "$MANIFEST_SCHEMA"
-    printf 'policy\t%s\n' "$POLICY"
-    printf 'tree\t%s\n' "$tree"
-    printf 'tool\t%s\n' "$TOOL_VERSION"
-    sed 's/^/edge\t/' "$edges"
-  } > "$temporary"
-  mv "$temporary" "$destination"
 }
 
 canonicalize() {
@@ -338,107 +278,49 @@ append_provider_source() {
   printf '%s\t%s\t%s\t%s\n' "$group" "$start" "$end" "$source" >> "$maps"
 }
 
-scan_root() {
-  local root="$1" tree="$2" destination="$3" required_sources="$4" source_aliases="$5"
-  local stage="$WORK_DIR/stage.$RANDOM" raw_same="$WORK_DIR/same.$RANDOM"
-  local raw_provider="$WORK_DIR/provider.$RANDOM" maps="$WORK_DIR/maps.$RANDOM"
-  local provider_edges="$WORK_DIR/provider-edges.$RANDOM"
-  local edges="$WORK_DIR/edges.$RANDOM" sorted="$WORK_DIR/sorted.$RANDOM"
-  local -a scan_roots=(crates controller)
-  mkdir -p "$stage"
-  : > "$maps"
-
-  if [[ -d "$root/api" ]]; then
-    scan_roots=(api crates controller)
-  fi
-  (cd "$root" && similarity-rs "${scan_roots[@]}" --threshold "$THRESHOLD" \
-    --min-lines "$MIN_LINES") > "$raw_same"
-  canonicalize same "$raw_same" "$maps" "$edges"
-
-  : > "$stage/transports.rs"
-  append_provider_source "$root" "$stage/transports.rs" "$maps" "$source_aliases" \
-    controller/gitea/src/live/rest/transport.rs "$required_sources"
-  append_provider_source "$root" "$stage/transports.rs" "$maps" "$source_aliases" \
-    controller/github/src/live/rest/transport.rs "$required_sources"
-  append_provider_source "$root" "$stage/transports.rs" "$maps" "$source_aliases" \
-    controller/gitlab/src/live/transport.rs "$required_sources"
-
-  : > "$stage/harnesses.rs"
-  append_provider_source "$root" "$stage/harnesses.rs" "$maps" "$source_aliases" \
-    controller/gitea-service/tests/lane/harness.rs "$required_sources"
-  append_provider_source "$root" "$stage/harnesses.rs" "$maps" "$source_aliases" \
-    controller/github-service/tests/lane/harness.rs "$required_sources"
-  append_provider_source "$root" "$stage/harnesses.rs" "$maps" "$source_aliases" \
-    controller/gitlab-service/tests/lane/harness.rs "$required_sources"
-
-  : > "$stage/runtimes.rs"
-  append_provider_source "$root" "$stage/runtimes.rs" "$maps" "$source_aliases" \
-    controller/gitea-service/src/runtime.rs "$required_sources"
-  append_provider_source "$root" "$stage/runtimes.rs" "$maps" "$source_aliases" \
-    controller/github-service/src/runtime.rs "$required_sources"
-  append_provider_source "$root" "$stage/runtimes.rs" "$maps" "$source_aliases" \
-    controller/gitlab-service/src/runtime.rs "$required_sources"
-
-  : > "$stage/verifies.rs"
-  append_provider_source "$root" "$stage/verifies.rs" "$maps" "$source_aliases" \
-    controller/gitea/src/live/verify.rs "$required_sources"
-  append_provider_source "$root" "$stage/verifies.rs" "$maps" "$source_aliases" \
-    controller/github/src/live/verify.rs "$required_sources"
-  append_provider_source "$root" "$stage/verifies.rs" "$maps" "$source_aliases" \
-    controller/gitlab/src/live/verify.rs "$required_sources"
-
-  (cd "$stage" && similarity-rs . --threshold "$THRESHOLD" \
-    --min-lines "$MIN_LINES") > "$raw_provider"
-  canonicalize provider "$raw_provider" "$maps" "$provider_edges"
-  cat "$provider_edges" >> "$edges"
-
-  LC_ALL=C sort "$edges" > "$sorted"
-  if [[ -n "$(uniq -d "$sorted")" ]]; then
-    echo "similarity canonicalization produced duplicate edge identities" >&2
-    uniq -d "$sorted" >&2
-    return 1
-  fi
-  write_manifest "$tree" "$sorted" "$destination"
-}
-
-build_renames() {
-  local revision="$1" destination="$2" status first second
-  : > "$destination"
-  if [[ "$revision" == "$ZERO_OID" ]]; then
+scan_files() {
+  local root="$1" output="$2" raw="$2.raw" path
+  local -a files=()
+  shift 2
+  for path in "$@"; do
+    if [[ -f "$root/$path" ]]; then
+      files+=("$path")
+    fi
+  done
+  : > "$output"
+  if (( ${#files[@]} == 0 )); then
     return
   fi
-  while IFS= read -r -d '' status; do
-    IFS= read -r -d '' first || {
-      echo "truncated git rename record" >&2
-      return 1
-    }
-    case "$status" in
-      R*|C*)
-        IFS= read -r -d '' second || {
-          echo "truncated git rename record" >&2
-          return 1
-        }
-        if [[ "$status" == R* ]]; then
-          if [[ "$first" == *$'\t'* || "$first" == *$'\n'* ||
-                "$second" == *$'\t'* || "$second" == *$'\n'* ]]; then
-            echo "a renamed Rust path contains a manifest delimiter" >&2
-            return 1
-          fi
-          printf '%s\t%s\n' "$second" "$first" >> "$destination"
-        fi
-        ;;
-    esac
-  done < <(git -C "$REPOSITORY_ROOT" diff --name-status -z -M "$revision" -- api crates controller)
-  LC_ALL=C sort -o "$destination" "$destination"
+  (cd "$root" && similarity-rs "${files[@]}" --threshold "$THRESHOLD" \
+    --min-lines "$MIN_LINES") > "$raw"
+  canonicalize same "$raw" /dev/null "$output"
 }
 
-manifest_edges() {
-  local manifest="$1" aliases="$2" output="$3" unsorted="$WORK_DIR/edges.$RANDOM"
-  awk -F '\t' -v aliases="$aliases" '
+scan_providers() {
+  local root="$1" output="$2" required="$3" aliases="$4" entry
+  local stage="$2.stage" raw="$2.raw" maps="$2.maps"
+  mkdir -p "$stage"
+  : > "$maps"
+  for entry in "${PROVIDER_SOURCES[@]}"; do
+    : > "$stage/${entry%%:*}.rs"
+  done
+  for entry in "${PROVIDER_SOURCES[@]}"; do
+    append_provider_source "$root" "$stage/${entry%%:*}.rs" "$maps" "$aliases" \
+      "${entry#*:}" "$required"
+  done
+  (cd "$stage" && similarity-rs . --threshold "$THRESHOLD" \
+    --min-lines "$MIN_LINES") > "$raw"
+  canonicalize provider "$raw" "$maps" "$output"
+}
+
+edge_set() {
+  local aliases="$1" output="$2" unsorted="$2.unsorted"
+  shift 2
+  cat "$@" | awk -F '\t' -v aliases="$aliases" '
     function endpoint(value, fields, count, result, part_index) {
       count = split(value, fields, /\|/)
       if (count != 6) {
-        print "invalid endpoint in validated similarity manifest" > "/dev/stderr"
+        print "invalid similarity endpoint: " value > "/dev/stderr"
         bad = 1
         return value
       }
@@ -461,9 +343,9 @@ manifest_edges() {
       }
       close(aliases)
     }
-    $1 == "edge" {
-      left = endpoint($2)
-      right = endpoint($3)
+    {
+      left = endpoint($1)
+      right = endpoint($2)
       if (right < left) {
         temporary = left
         left = right
@@ -472,73 +354,114 @@ manifest_edges() {
       print left "\t" right
     }
     END { if (bad) exit 1 }
-  ' "$manifest" > "$unsorted"
+  ' > "$unsorted"
   LC_ALL=C sort "$unsorted" > "$output"
   if [[ -n "$(uniq -d "$output")" ]]; then
-    echo "similarity rename normalization collapsed distinct edges" >&2
+    echo "similarity canonicalization produced duplicate edge identities" >&2
     uniq -d "$output" >&2
     return 1
   fi
 }
 
 base_revision="$(resolve_base)"
-base_tree="$(tree_of "$base_revision")"
-current_tree="${AMISS_SIMILARITY_CURRENT_TREE:-worktree}"
-base_manifest="$WORK_DIR/base.manifest"
-current_manifest="${AMISS_SIMILARITY_CURRENT_MANIFEST:-$WORK_DIR/current.manifest}"
+if [[ "$base_revision" == "$ZERO_OID" ]]; then
+  echo "near-twin edges: no base commit to compare with"
+  exit 0
+fi
+if ! git -C "$REPOSITORY_ROOT" cat-file -e "$base_revision^{commit}"; then
+  echo "similarity base commit is unavailable: $base_revision" >&2
+  exit 1
+fi
+
+# The tool compares functions within one file, so an unchanged file keeps its edges.
 renames="$WORK_DIR/renames"
 no_aliases="$WORK_DIR/no-aliases"
-build_renames "$base_revision" "$renames"
+: > "$renames"
 : > "$no_aliases"
-
-cache_root="${AMISS_SIMILARITY_LOCAL_CACHE:-$(git -C "$REPOSITORY_ROOT" rev-parse --git-common-dir)/amiss/similarity}"
-if [[ "$cache_root" != /* ]]; then
-  cache_root="$REPOSITORY_ROOT/$cache_root"
-fi
-local_manifest="$cache_root/$POLICY-$base_tree.manifest"
-external_manifest="${AMISS_SIMILARITY_BASE_MANIFEST:-}"
-
-if [[ -n "$external_manifest" ]] && validate_manifest "$external_manifest" "$base_tree"; then
-  cp "$external_manifest" "$base_manifest"
-elif [[ ! -s "$renames" ]] && validate_manifest "$local_manifest" "$base_tree"; then
-  cp "$local_manifest" "$base_manifest"
-elif [[ "$base_revision" == "$ZERO_OID" ]]; then
-  :
-else
-  if ! git -C "$REPOSITORY_ROOT" cat-file -e "$base_revision^{commit}"; then
-    echo "similarity base commit is unavailable: $base_revision" >&2
+base_files=()
+current_files=()
+while IFS= read -r -d '' status; do
+  IFS= read -r -d '' first || {
+    echo "truncated git diff record" >&2
     exit 1
+  }
+  second="$first"
+  if [[ "$status" == R* ]]; then
+    IFS= read -r -d '' second || {
+      echo "truncated git diff record" >&2
+      exit 1
+    }
+    if [[ "$first" == *$'\t'* || "$first" == *$'\n'* ||
+          "$second" == *$'\t'* || "$second" == *$'\n'* ]]; then
+      echo "a renamed Rust path contains a manifest delimiter" >&2
+      exit 1
+    fi
+    printf '%s\t%s\n' "$second" "$first" >> "$renames"
   fi
-  mkdir -p "$WORK_DIR/base"
-  archive_paths=(crates controller)
-  if git -C "$REPOSITORY_ROOT" cat-file -e "$base_revision:api" 2>/dev/null; then
-    archive_paths=(api crates controller)
+  if [[ "$status" != A && "$first" == *.rs ]]; then
+    base_files+=("$first")
   fi
-  git -C "$REPOSITORY_ROOT" archive "$base_revision" "${archive_paths[@]}" |
-    tar -x -C "$WORK_DIR/base"
-  scan_root "$WORK_DIR/base" "$base_tree" "$base_manifest" 0 "$renames"
-  if [[ ! -s "$renames" ]]; then
-    mkdir -p "$cache_root"
-    local_temporary="$(mktemp "$cache_root/manifest.XXXXXX")"
-    cp "$base_manifest" "$local_temporary"
-    mv "$local_temporary" "$local_manifest"
+  if [[ "$status" != D && "$second" == *.rs ]]; then
+    current_files+=("$second")
   fi
+done < <(git -C "$REPOSITORY_ROOT" diff --name-status -z -M "$base_revision" -- api crates controller)
+while IFS= read -r -d '' path; do
+  if [[ "$path" == *.rs ]]; then
+    current_files+=("$path")
+  fi
+done < <(git -C "$REPOSITORY_ROOT" ls-files -z --others --exclude-standard -- api crates controller)
+
+providers_changed=0
+archive_paths=("${base_files[@]}")
+for entry in "${PROVIDER_SOURCES[@]}"; do
+  for path in "${base_files[@]}" "${current_files[@]}"; do
+    if [[ "$path" == "${entry#*:}" ]]; then
+      providers_changed=1
+    fi
+  done
+done
+if (( providers_changed )); then
+  for entry in "${PROVIDER_SOURCES[@]}"; do
+    archive_paths+=("${entry#*:}")
+    aliased="$(awk -F '\t' -v path="${entry#*:}" '$1 == path { print $2; exit }' "$renames")"
+    if [[ -n "$aliased" ]]; then
+      archive_paths+=("$aliased")
+    fi
+  done
 fi
 
-scan_root "$REPOSITORY_ROOT" "$current_tree" "$current_manifest" 1 "$no_aliases"
-if [[ "$base_revision" == "$ZERO_OID" ]]; then
-  awk -F '\t' -v tree=empty '
-    NR == 3 { print "tree\t" tree; next }
-    { print }
-  ' "$current_manifest" > "$base_manifest"
+mkdir -p "$WORK_DIR/base"
+base_present=()
+if (( ${#archive_paths[@]} )); then
+  while IFS= read -r -d '' path; do
+    base_present+=("$path")
+  done < <(git -C "$REPOSITORY_ROOT" ls-tree -r -z --name-only "$base_revision" -- "${archive_paths[@]}")
+fi
+if (( ${#base_present[@]} )); then
+  git -C "$REPOSITORY_ROOT" archive "$base_revision" -- "${base_present[@]}" |
+    tar -x -C "$WORK_DIR/base"
+fi
+
+# One file scans on one core, so the base side runs beside the candidate side.
+scan_files "$WORK_DIR/base" "$WORK_DIR/base.same" "${base_files[@]}" &
+base_scan=$!
+scan_files "$REPOSITORY_ROOT" "$WORK_DIR/current.same" "${current_files[@]}"
+wait "$base_scan"
+: > "$WORK_DIR/base.provider"
+: > "$WORK_DIR/current.provider"
+if (( providers_changed )); then
+  scan_providers "$WORK_DIR/base" "$WORK_DIR/base.provider" 0 "$renames" &
+  base_scan=$!
+  scan_providers "$REPOSITORY_ROOT" "$WORK_DIR/current.provider" 1 "$no_aliases"
+  wait "$base_scan"
 fi
 
 base_edges="$WORK_DIR/base.edges"
 current_edges="$WORK_DIR/current.edges"
 new_edges="$WORK_DIR/new.edges"
 removed_edges="$WORK_DIR/removed.edges"
-manifest_edges "$base_manifest" "$no_aliases" "$base_edges"
-manifest_edges "$current_manifest" "$renames" "$current_edges"
+edge_set "$no_aliases" "$base_edges" "$WORK_DIR/base.same" "$WORK_DIR/base.provider"
+edge_set "$renames" "$current_edges" "$WORK_DIR/current.same" "$WORK_DIR/current.provider"
 comm -13 "$base_edges" "$current_edges" > "$new_edges"
 comm -23 "$base_edges" "$current_edges" > "$removed_edges"
 
@@ -554,5 +477,5 @@ if [[ "$new_count" -ne 0 ]]; then
   echo "base commit: $base_revision" >&2
   exit 1
 fi
-printf 'near-twin edges: %s base, %s candidate, %s added, %s removed\n' \
+printf 'near-twin edges in the changed files: %s base, %s candidate, %s added, %s removed\n' \
   "$base_count" "$current_count" "$new_count" "$removed_count"
