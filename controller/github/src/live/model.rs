@@ -118,7 +118,7 @@ pub(super) struct CheckRunRecord {
     pub head_sha: String,
     pub external_id: Option<String>,
     pub status: crate::states::CheckStatus,
-    pub conclusion: Option<crate::states::CheckConclusion>,
+    pub conclusion: Option<crate::states::GitHubConclusion>,
     pub output: CheckRunOutputRecord,
     pub app: Option<CheckRunApp>,
 }
@@ -146,7 +146,7 @@ pub(super) struct CreateCheckRun {
     pub head_sha: String,
     pub external_id: String,
     pub status: crate::states::CheckStatus,
-    pub conclusion: crate::states::CheckConclusion,
+    pub conclusion: crate::states::GitHubConclusion,
     pub output: CreateCheckRunOutput,
 }
 

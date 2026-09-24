@@ -289,7 +289,7 @@ impl PullRequestFacts {
         let Some((completion, run)) = configured_workflow(&payload, workflow_completion) else {
             return Ok(None);
         };
-        if run.conclusion != Some(states::CheckConclusion::Success) {
+        if run.conclusion != Some(states::GitHubConclusion::Success) {
             return Ok(None);
         }
         let (installation_id, repository_id, repository) =
@@ -671,7 +671,7 @@ struct WorkflowRun {
     id: u64,
     event: String,
     status: states::CheckStatus,
-    conclusion: Option<states::CheckConclusion>,
+    conclusion: Option<states::GitHubConclusion>,
     workflow_id: u64,
     run_attempt: u64,
     head_sha: String,

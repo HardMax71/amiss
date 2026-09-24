@@ -16,7 +16,7 @@ pub enum CheckStatus {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, strum::EnumString)]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
-pub enum CheckConclusion {
+pub enum GitHubConclusion {
     Success,
     Failure,
     Cancelled,

@@ -1,4 +1,4 @@
-use crate::states::{CheckConclusion as GitHubConclusion, CheckStatus};
+use crate::states::{CheckStatus, GitHubConclusion};
 use sha2::Digest as _;
 mod tests;
 
