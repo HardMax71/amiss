@@ -1,10 +1,7 @@
-use amiss_wire::controls::TargetKind;
-use amiss_wire::model::RepoPath;
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{InvalidReference, UnsupportedSemantics};
-use amiss_wire::uri::decode_component;
 
-use crate::route::{bundler_request, directory};
+use crate::route::bundler_request;
 
 use super::{Intent, Resolution};
 
@@ -55,84 +52,4 @@ pub(super) fn split_components(semantic: &str) -> (&str, Option<String>, Option<
         None => (before, None),
     };
     (path, query, fragment)
-}
-
-pub(super) const fn invalid_path_byte(byte: u8) -> Option<InvalidReference> {
-    match byte {
-        b'/' => Some(InvalidReference::EncodedSlash),
-        b'\\' => Some(InvalidReference::BackslashSeparator),
-        0..=0x1f | 0x7f => Some(InvalidReference::DecodedPathControl),
-        _ => None,
-    }
-}
-
-pub(super) fn normalized_native_path(
-    document_path: &RepoPath,
-    is_image: bool,
-    path_part: &str,
-) -> Result<(RepoPath, TargetKind), Resolution> {
-    normalized_path_under(directory(document_path.as_bytes()), is_image, path_part)
-}
-
-/// A destination relative to one directory: segments decode once and stay
-/// contained while `.` and internal `..` normalize away.
-pub(crate) fn normalized_path_under(
-    parent: &[u8],
-    is_image: bool,
-    path_part: &str,
-) -> Result<(RepoPath, TargetKind), Resolution> {
-    if path_part.contains('\\') {
-        return Err(Resolution::Invalid {
-            reason: InvalidReference::BackslashSeparator,
-        });
-    }
-    let trailing_slash = path_part.len() > 1 && path_part.ends_with('/');
-    let path = path_part.strip_suffix('/').unwrap_or(path_part);
-    if path.split('/').any(str::is_empty) || (trailing_slash && is_image) {
-        return Err(Resolution::Invalid {
-            reason: InvalidReference::Syntax,
-        });
-    }
-    let target_kind = if trailing_slash {
-        TargetKind::Tree
-    } else if is_image {
-        TargetKind::Blob
-    } else {
-        TargetKind::Either
-    };
-
-    let mut resolved =
-        Vec::with_capacity(parent.len().saturating_add(path.len()).saturating_add(1));
-    resolved.extend_from_slice(parent);
-    for segment in path.split('/') {
-        let prior = resolved.len();
-        if prior > 0 {
-            resolved.push(b'/');
-        }
-        let decoded = resolved.len();
-        decode_component(segment, &mut resolved, invalid_path_byte)
-            .map_err(|reason| Resolution::Invalid { reason })?;
-        match resolved.get(decoded..).unwrap_or_default() {
-            b"." => resolved.truncate(prior),
-            b".." => {
-                resolved.truncate(prior);
-                if resolved.is_empty() {
-                    return Err(Resolution::Invalid {
-                        reason: InvalidReference::PathTraversal,
-                    });
-                }
-                match resolved.iter().rposition(|byte| *byte == b'/') {
-                    Some(separator) => resolved.truncate(separator),
-                    None => resolved.clear(),
-                }
-            }
-            _ => {}
-        }
-    }
-    let Some(joined) = RepoPath::from_bytes(resolved) else {
-        return Err(Resolution::Invalid {
-            reason: InvalidReference::Syntax,
-        });
-    };
-    Ok((joined, target_kind))
 }

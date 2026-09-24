@@ -1,9 +1,6 @@
 mod identity;
 
-use amiss_wire::model::{Adapter, RepoPath};
-
-use crate::discovery::SnapshotDiscovery;
-use crate::route::{ROUTERS, Spelling, declared_root};
+use amiss_wire::model::Adapter;
 
 pub use identity::{anchor_set, identities};
 
@@ -636,16 +633,3 @@ pub const DECLARATIONS: [DeclarationRule; 24] = [
         declared_by: &[],
     },
 ];
-
-/// Whether Sphinx parses this document, which is what turns the `MyST`
-/// spellings on. A declaration above the file is one way, and the route table
-/// reads the same file to anchor a source-root docname, so the answer is taken
-/// from there rather than spelled twice. A page of the tree including the file
-/// is the other way, and that one reaches outside the declared root.
-pub(crate) fn sphinx_governed(snapshot: &SnapshotDiscovery, document: &RepoPath) -> bool {
-    ROUTERS
-        .iter()
-        .filter(|rule| rule.serves(Spelling::SourceRoot))
-        .any(|rule| declared_root(snapshot, document.as_bytes(), rule.declared_by).is_some())
-        || snapshot.sphinx_included.contains(document)
-}

@@ -619,7 +619,7 @@ fn evaluate_tree(
     let mut discovery = discover(repo, git_resources, scan_resources, includes, &tree_oid)
         .map_err(|defect| detail(&defect, None))?;
     let held = match declared {
-        Some(declared) => crate::route::read_as_declared(&mut discovery, declared),
+        Some(declared) => crate::published::read_as_declared(&mut discovery, declared),
         None => discovery.declared_routers.clone(),
     };
     let (side, failures) = side_observations(

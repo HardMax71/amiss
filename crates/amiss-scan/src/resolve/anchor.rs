@@ -9,8 +9,8 @@ use crate::Error;
 use crate::anchor::anchor_set;
 use crate::discovery::SnapshotDiscovery;
 use crate::document::{classify, native_adapter};
+use crate::published::unrouted;
 use crate::resources::{Aggregate, ScanResources};
-use crate::route::unrouted;
 
 use super::content::{Content, content_cache};
 use super::line::{line_fragment, line_resolution};
@@ -256,7 +256,7 @@ pub(super) fn linked_label(
 ) -> Result<Resolution, Error> {
     let Some(label) = label else { return Ok(row) };
     if !crate::anchor::MYST_LINK.adapters.contains(&adapter)
-        || !crate::anchor::sphinx_governed(resolver.snapshot, document)
+        || !crate::discovery::sphinx_governed(resolver.snapshot, document)
     {
         return Ok(row);
     }
