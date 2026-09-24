@@ -192,3 +192,7 @@ dylint-link = "6.1.0"
 # The module-cycles lint, run by cargo dylint in CI.
 [workspace.metadata.dylint]
 libraries = [{ git = "https://github.com/HardMax71/module-cycles", rev = "a320625310c984cf42d0bb7cea3e8bac296d444c" }]
+
+# base64url key material in test fixtures tokenizes into short words
+[workspace.metadata.typos.default]
+extend-ignore-re = ["[A-Za-z0-9_-]{40,}"]
