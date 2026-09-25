@@ -21,11 +21,10 @@
           "docs/guide.md"
         ],
         "reason": "gone",
-        "retarget": "https://example.com/current-manual",
         "verdict": "refuted"
       }
     ]
   },
-  "payload_digest": "sha256:389b109e44865357c1895a90bd4dca6279b309578f48f0754ed79cae832d99c2",
+  "payload_digest": "sha256:ab0f81bef95fd550ecd10b4a82f9cebc212ea4812409be75bd3968e8b991bc6a",
   "schema": "amiss/external-assessment-envelope"
 }
