@@ -92,7 +92,10 @@ fn occurrence(reference: &Reference, within: usize) -> Occurrence {
     Occurrence {
         construct: construct(reference.kind),
         raw_destination: reference.target.clone(),
-        semantic_destination: reference.target.clone(),
+        semantic_destination: reference.selection.as_ref().map_or_else(
+            || reference.target.clone(),
+            |selection| format!("{}#{selection}", reference.target),
+        ),
         span: reference.span,
         node_path: vec![reference.block, within],
         block_kind: BlockKind::Paragraph,

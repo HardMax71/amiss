@@ -678,3 +678,24 @@ fn a_role_or_link_wrapped_across_lines_is_read_once() -> Result<(), Refusal> {
     );
     Ok(())
 }
+
+/// A `:lines:` spec selects from its first to its last selected line, and an
+/// open end runs on to the end of the file, so only its start is checked.
+#[test]
+fn a_literalinclude_lines_spec_becomes_one_line_range() {
+    for (spec, want) in [
+        ("5-8", "L5-L8"),
+        ("3", "L3"),
+        ("1,3,5-10", "L1-L10"),
+        ("5-", "L5"),
+        ("-10", "L1-L10"),
+    ] {
+        let source = format!(".. literalinclude:: code.py\n   :lines: {spec}\n");
+        let extraction = extract(source.as_bytes()).expect("utf-8");
+        let selection = extraction
+            .references
+            .first()
+            .and_then(|reference| reference.selection.clone());
+        assert_eq!(selection.as_deref(), Some(want), "{spec}");
+    }
+}
