@@ -20,7 +20,7 @@ in the report after the format's own decoding, the address a fetcher would reque
 actually wants: the destinations this change introduced, not the whole corpus every run.
 
 ```sh
-amiss check --repo . --object-format sha1 --base "$BASE" --candidate HEAD \
+amiss check --repo . --object-format sha1 --base "$BASE" --candidate "$(git rev-parse HEAD)" \
   --profile observe --format json > report.json
 amiss external-plan --report report.json --format json |
   jq -r '.payload.introduced[].destination' | lychee -
