@@ -36,7 +36,6 @@ pub enum Keep {
     LetterNumberUnderscore,
     AlphabeticNumericUnderscore,
     AsciiAlphanumeric,
-    AsciidoctorId,
     AnythingButC0,
 }
 
@@ -47,6 +46,7 @@ pub enum Separators {
     Space,
     Whitespace,
     WhitespaceUnderscore,
+    SpaceUnderscoreDotHyphen,
     MditVuePunctuation,
     NonAlphanumeric,
 }
@@ -68,11 +68,13 @@ pub enum Empty {
     Fill(&'static str),
 }
 
-/// Whether the renderer rewrites dashes and ellipses before it reads the text.
+/// Whether the renderer rewrites dashes and ellipses before it reads the text,
+/// or, as Asciidoctor does, replaces them with references its id rule deletes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Typography {
     Plain,
     SmartPunctuation,
+    AsciidoctorReplacements,
 }
 
 /// Whether the leading run of non-letters is dropped before anything else.
@@ -390,16 +392,16 @@ pub const RULES: [AnchorRule; 12] = [
     },
     AnchorRule {
         name: "asciidoctor",
-        typography: Typography::Plain,
+        typography: Typography::AsciidoctorReplacements,
         normalize: Normalize::None,
         fold: Fold::None,
         head: Head::AsWritten,
         trim: Trim::Before,
-        case: Case::SimpleAfterFilter,
-        keep: Keep::AsciidoctorId,
-        separators: Separators::Space,
+        case: Case::FullBeforeFilter,
+        keep: Keep::LetterMarkNumberConnector,
+        separators: Separators::SpaceUnderscoreDotHyphen,
         runs: Runs::Collapse,
-        edges: Edges::TrimEnd,
+        edges: Edges::Trim,
         leading_digit_prefix: None,
         separator: '_',
         prefix: Some("_"),
