@@ -63,7 +63,7 @@ exit class 2, and the path then names a file that was never written, which the u
 | `candidate` | derived | full commit ID, overrides the event derivation |
 | `repo` | `.` | repository root inside the workspace |
 | `object-format` | `sha1` | or `sha256` |
-| `annotations` | `true` | displayed Fixes and scan errors become file annotations |
+| `annotations` | `true` | displayed Fixes and Checks, and scan errors, become file annotations |
 | `watchdog-seconds` | `120` | wall-clock window before the scan is ended |
 
 When `base` and `candidate` stay empty, the event supplies them:
@@ -280,10 +280,11 @@ is stated there.
 When a run blocks, use the grouped feedback to orient, then read the exact JSON findings for
 repair evidence. The Action and human views show at most ten Fix and Check items combined, in
 engine order, then at most ten pre-existing items in a window of their own, each window with its
-own overflow line, so a run with many new Fixes still names the backlog item that blocks it. Only
-a displayed Fix with a candidate text location becomes a file annotation, while Checks and
-pre-existing inventory stay in the summary and report, and every control byte a path carries
-reaches the annotation escaped. If the scan failed, feedback is unavailable and at most ten retained errors are
+own overflow line, so a run with many new Fixes still names the backlog item that blocks it. A
+displayed Fix or Check with a candidate text location becomes a file annotation at the citing
+line, a Fix as an error or warning by its disposition and a Check as a notice, so a changed
+target is seen in the diff without failing anything. Pre-existing inventory stays in the summary
+and report, and every control byte a path carries reaches the annotation escaped. If the scan failed, feedback is unavailable and at most ten retained errors are
 annotated instead. The blocking rows remain the report's `errors` and findings whose
 `effective_disposition` is `fail`, and the complete grouped and raw sets always remain in the
 report. The Action's `report` output names that JSON file, so a later step reads it in place
