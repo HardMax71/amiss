@@ -179,7 +179,9 @@ number of those grouped subjects. Each item retains its affected-location count 
 contributing finding kinds. A Fix may carry one candidate-side text-path annotation;
 Checks and pre-existing items never do. The report retains every item. An incomplete
 comparison instead emits exactly `{"status":"unavailable"}`, so scan failure cannot look
-like zero feedback.
+like zero feedback. The evaluation identity follows the same rule: a side that never
+resolved to a commit and its tree is `{"kind":"unavailable"}` with the reasons it did not,
+while a side that did keeps its real identity, so a commit ID never stands in for a tree ID.
 
 The envelope, down to its top-level keys:
 

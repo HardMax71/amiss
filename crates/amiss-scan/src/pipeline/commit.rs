@@ -4,7 +4,7 @@ use amiss_wire::report::model::ControlsUnavailableReason;
 use amiss_wire::report::{EngineProvenance, ErrorDetail};
 
 use crate::Error;
-use crate::report::{Built, CandidateBlock, GitSnapshotIdentity, Setup, construct_incomplete};
+use crate::report::{BaseBlock, Built, CandidateBlock, construct_incomplete};
 use crate::resolve::ForgeContext;
 use crate::resources::{ScanLimits, ScanResources};
 
@@ -13,27 +13,31 @@ use super::{
     CandidateEvaluation, CandidateOutcomes, Evaluated, ExternalVerified, PipelineFailure,
     PipelineResult, ResolvedTree, SetupShell, binding_mismatch, conclude, controls_failure, detail,
     effective_limits, effective_policy, effective_shell, evaluate_tree, floor_gate, pair_effects,
-    policy_unavailable_reason, resolve_tree,
+    policy_unavailable_reason, resolve_tree, unavailable_reason,
 };
 
-/// The fallback identity projection when a snapshot cannot be established:
-/// each supplied commit OID stands in for both identity fields.
-fn oid_fallback(
-    repo: &Repository,
+/// The report for a pair whose sides did not both resolve. A side that did
+/// keeps its identity, and a side that did not says why and adds its row,
+/// since a commit ID standing in for a tree ID would be a false identity.
+fn unresolved_pair(
     setup_shell: &SetupShell,
-    base_oid: &Oid,
-    candidate_oid: &Oid,
-) -> Setup {
-    let placeholder = |oid: &Oid| GitSnapshotIdentity {
-        commit_oid: oid.clone(),
-        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
-        object_format: repo.object_format(),
-        tree_oid: oid.clone(),
+    base: Result<ResolvedTree, Error>,
+    candidate: Result<ResolvedTree, Error>,
+) -> PipelineFailure {
+    let details: Vec<ErrorDetail> = [&base, &candidate]
+        .into_iter()
+        .filter_map(|side| side.as_ref().err())
+        .map(|defect| detail(defect, None))
+        .collect();
+    let base = match base {
+        Ok((_, identity)) => BaseBlock::Commit(identity),
+        Err(defect) => BaseBlock::Unavailable(vec![unavailable_reason(&defect)]),
     };
-    setup_shell.with(
-        placeholder(base_oid),
-        CandidateBlock::Commit(placeholder(candidate_oid)),
-    )
+    let candidate = match candidate {
+        Ok((_, identity)) => CandidateBlock::Commit(identity),
+        Err(defect) => CandidateBlock::CommitUnavailable(vec![unavailable_reason(&defect)]),
+    };
+    PipelineFailure::new(setup_shell.with(base, candidate), details)
 }
 
 /// Resolves both commit trees, then settles a pending floor binding
@@ -46,16 +50,12 @@ fn pair_trees(
     base_oid: &Oid,
     candidate_oid: &Oid,
 ) -> PipelineResult<(ResolvedTree, ResolvedTree)> {
-    let trees = resolve_tree(repo, git_resources, base_oid).and_then(|base_tree| {
-        resolve_tree(repo, git_resources, candidate_oid)
-            .map(|candidate_tree| (base_tree, candidate_tree))
-    });
-    let (base_tree, candidate_tree) = trees.map_err(|defect_detail| {
-        PipelineFailure::one(
-            oid_fallback(repo, setup_shell, base_oid, candidate_oid),
-            defect_detail,
-        )
-    })?;
+    let base = resolve_tree(repo, git_resources, base_oid);
+    let candidate = resolve_tree(repo, git_resources, candidate_oid);
+    let (base_tree, candidate_tree) = match (base, candidate) {
+        (Ok(base_tree), Ok(candidate_tree)) => (base_tree, candidate_tree),
+        (base, candidate) => return Err(unresolved_pair(setup_shell, base, candidate)),
+    };
     if let Some(row) = floor_mismatch {
         return Err(binding_mismatch(
             setup_shell,
@@ -103,7 +103,7 @@ fn commit_controls(
         )
     };
     let provisional = setup_shell.with(
-        base_tree.1.clone(),
+        BaseBlock::Commit(base_tree.1.clone()),
         CandidateBlock::Commit(candidate_tree.1.clone()),
     );
     let object_format = repo.object_format();
@@ -195,7 +195,7 @@ fn commit_pair_result(
     )?;
     let includes = crate::policy::Includes::union(&base_policy, &candidate_policy);
     let mut setup = setup_shell.with(
-        base_tree.1.clone(),
+        BaseBlock::Commit(base_tree.1.clone()),
         CandidateBlock::Commit(candidate_tree.1.clone()),
     );
 
@@ -258,7 +258,7 @@ fn pair_policies(
     let (candidate_tree, candidate_scan) = candidate;
     let fallback = |details: Vec<ErrorDetail>| {
         let mut setup = setup_shell.with(
-            base_tree.1.clone(),
+            BaseBlock::Commit(base_tree.1.clone()),
             CandidateBlock::Commit(candidate_tree.1.clone()),
         );
         setup.controls_unavailable = Some(policy_unavailable_reason(&details));

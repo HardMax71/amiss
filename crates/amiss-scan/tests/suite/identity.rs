@@ -126,7 +126,7 @@ fn setup(candidate: CandidateBlock) -> Setup {
         candidate_ref: None,
         target_ref: None,
         default_branch_ref: None,
-        base: snapshot('1', '2'),
+        base: amiss_scan::report::BaseBlock::Commit(snapshot('1', '2')),
         candidate,
         policy: amiss_scan::Effects::default(),
         controls_unavailable: None,

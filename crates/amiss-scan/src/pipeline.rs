@@ -12,7 +12,9 @@ use amiss_wire::resolution::{Missing, Resolution};
 use crate::correlate::{Observation, Side, correlate, unique_path_pairs};
 use crate::discovery::{DocumentStatus, SnapshotDiscovery, discover};
 use crate::observe::{OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_input};
-use crate::report::{Built, CandidateBlock, GitSnapshotIdentity, Setup, construct_incomplete};
+use crate::report::{
+    BaseBlock, Built, CandidateBlock, GitSnapshotIdentity, Setup, construct_incomplete,
+};
 use crate::resolve::{ForgeContext, Resolver, TargetCache};
 use crate::resources::{ScanLimits, ScanResources};
 use crate::semantic::RecordSet;
@@ -348,7 +350,7 @@ fn controls_failure(
     reason: ControlsUnavailableReason,
     row: ErrorDetail,
 ) -> PipelineFailure {
-    let mut setup = setup_shell.with(base, candidate);
+    let mut setup = setup_shell.with(BaseBlock::Commit(base), candidate);
     setup.controls_unavailable = Some(reason);
     PipelineFailure::one(setup, row)
 }
@@ -578,16 +580,36 @@ fn inventory_lookup(
     }
 }
 
+/// Why a snapshot side is unavailable, read off the defect that stopped it.
+pub(super) const fn unavailable_reason(
+    defect: &Error,
+) -> amiss_wire::report::model::SnapshotUnavailableReason {
+    use amiss_wire::report::model::SnapshotUnavailableReason;
+    match defect {
+        Error::Git(crate::GitDefect::ObjectMissing) => SnapshotUnavailableReason::MissingObject,
+        Error::Git(crate::GitDefect::ObjectWrongKind) => SnapshotUnavailableReason::WrongObjectKind,
+        Error::Git(crate::GitDefect::ObjectUnreadable) => {
+            SnapshotUnavailableReason::UnreadableObject
+        }
+        Error::Git(crate::GitDefect::IndexInvalid | crate::GitDefect::IndexFormatUnsupported) => {
+            SnapshotUnavailableReason::IndexInvalid
+        }
+        Error::Git(crate::GitDefect::IndexUnmerged) => SnapshotUnavailableReason::IndexUnmerged,
+        Error::Git(crate::GitDefect::IntentToAdd) => SnapshotUnavailableReason::IntentToAdd,
+        Error::Git(crate::GitDefect::SnapshotChanged) => SnapshotUnavailableReason::SnapshotChanged,
+        Error::UnrepresentablePath => SnapshotUnavailableReason::UnrepresentablePath,
+        Error::ResourceLimit { .. } => SnapshotUnavailableReason::ResourceLimit,
+        Error::Parse(_) | Error::Internal => SnapshotUnavailableReason::NotEvaluated,
+    }
+}
+
 fn resolve_tree(
     repo: &Repository,
     git_resources: &mut GitResources,
     commit_oid: &Oid,
-) -> Result<(Oid, GitSnapshotIdentity), ErrorDetail> {
-    let commit_object = repo
-        .read_expected(git_resources, commit_oid, ObjectKind::Commit)
-        .map_err(|defect| detail(&Error::from(defect), None))?;
-    let commit = parse_commit(repo.object_format(), &commit_object.body)
-        .map_err(|defect| detail(&Error::from(defect), None))?;
+) -> Result<(Oid, GitSnapshotIdentity), Error> {
+    let commit_object = repo.read_expected(git_resources, commit_oid, ObjectKind::Commit)?;
+    let commit = parse_commit(repo.object_format(), &commit_object.body)?;
     Ok((
         commit.tree.clone(),
         GitSnapshotIdentity {
@@ -676,7 +698,7 @@ pub struct SetupShell {
 }
 
 impl SetupShell {
-    fn with(&self, base: GitSnapshotIdentity, candidate: CandidateBlock) -> Setup {
+    fn with(&self, base: BaseBlock, candidate: CandidateBlock) -> Setup {
         Setup {
             engine: self.engine.clone(),
             profile: self.profile,

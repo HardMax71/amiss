@@ -201,7 +201,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         candidate_ref: Some(branch_ref!("refs/heads/main")),
         target_ref: Some(branch_ref!("refs/heads/main")),
         default_branch_ref: None,
-        base: base_block,
+        base: amiss_scan::report::BaseBlock::Commit(base_block),
         candidate: CandidateBlock::Commit(candidate_block),
         policy: amiss_scan::policy::Effects::default(),
         controls_unavailable: None,

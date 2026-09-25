@@ -7,7 +7,8 @@ use crate::Error;
 use crate::correlate::Side;
 use crate::discovery::SnapshotDiscovery;
 use crate::report::{
-    Built, CandidateBlock, GitSnapshotIdentity, Setup, construct_incomplete, synthetic_candidate,
+    BaseBlock, Built, CandidateBlock, GitSnapshotIdentity, Setup, construct_incomplete,
+    synthetic_candidate,
 };
 use crate::resolve::ForgeContext;
 use crate::resources::{ScanLimits, ScanResources};
@@ -17,7 +18,7 @@ use super::{
     CandidateEvaluation, CandidateOutcomes, Evaluated, ExternalVerified, PipelineFailure,
     PipelineResult, ResolvedTree, SetupShell, binding_mismatch, conclude, controls_failure, detail,
     effective_limits, effective_policy, effective_shell, evaluate_tree, floor_gate, pair_effects,
-    policy_unavailable_reason, resolve_tree, side_observations,
+    policy_unavailable_reason, resolve_tree, side_observations, unavailable_reason,
 };
 
 /// The staged candidate's discovery and observations plus the failure rows
@@ -43,7 +44,13 @@ fn staged_candidate(
 ) -> PipelineResult<(SnapshotDiscovery, Option<Side>, Vec<ErrorDetail>)> {
     let discovery =
         crate::discovery::discover_index(repo, git_resources, candidate_scan, includes, index)
-            .map_err(|defect| candidate_unavailable(setup_shell, base_identity.clone(), &defect))?;
+            .map_err(|defect| {
+                candidate_unavailable(
+                    setup_shell,
+                    BaseBlock::Commit(base_identity.clone()),
+                    &defect,
+                )
+            })?;
     let mut failures = Vec::new();
     match side_observations(
         repo,
@@ -70,7 +77,7 @@ fn staged_candidate(
 
 fn candidate_unavailable(
     setup_shell: &SetupShell,
-    base: GitSnapshotIdentity,
+    base: BaseBlock,
     defect: &Error,
 ) -> PipelineFailure {
     let setup = setup_shell.with(
@@ -101,12 +108,12 @@ fn pinned_index(
 
 fn not_evaluated(
     setup_shell: &SetupShell,
-    base: &GitSnapshotIdentity,
+    base: BaseBlock,
     detail: ErrorDetail,
 ) -> PipelineFailure {
     PipelineFailure::one(
         setup_shell.with(
-            base.clone(),
+            base,
             CandidateBlock::Unavailable(vec![SnapshotUnavailableReason::NotEvaluated]),
         ),
         detail,
@@ -123,7 +130,7 @@ fn staged_policy(
     base_scan: &mut ScanResources,
     candidate_scan: &mut ScanResources,
     setup_shell: &SetupShell,
-    base_placeholder: &GitSnapshotIdentity,
+    base_identity: &GitSnapshotIdentity,
     base_tree: &Oid,
     index: &amiss_git::LogicalIndex,
 ) -> PipelineResult<(
@@ -133,7 +140,7 @@ fn staged_policy(
 )> {
     let bail = |details: Vec<ErrorDetail>| {
         let mut setup = setup_shell.with(
-            base_placeholder.clone(),
+            BaseBlock::Commit(base_identity.clone()),
             CandidateBlock::Unavailable(vec![SnapshotUnavailableReason::NotEvaluated]),
         );
         setup.controls_unavailable = Some(policy_unavailable_reason(&details));
@@ -242,12 +249,12 @@ fn staged_gate(
     let candidate_block = index_candidate_block(repo, base_oid, index, skip_worktree_paths)
         .map_err(|(rows, reason)| {
             let setup = setup_shell.with(
-                base_tree.1.clone(),
+                BaseBlock::Commit(base_tree.1.clone()),
                 CandidateBlock::Unavailable(vec![reason]),
             );
             PipelineFailure::new(setup, rows)
         })?;
-    let provisional = setup_shell.with(base_tree.1.clone(), candidate_block);
+    let provisional = setup_shell.with(BaseBlock::Commit(base_tree.1.clone()), candidate_block);
     external_gate(setup_shell, verified_floor, scan_limits, &provisional, None).map_err(
         |(reason, row)| {
             controls_failure(
@@ -274,31 +281,12 @@ fn recheck_index(
     if let Err(defect) = repo.verify_index_unchanged(git_resources, initial) {
         let defect = Error::from(defect);
         let changed_setup = setup_shell.with(
-            base_identity,
+            BaseBlock::Commit(base_identity),
             CandidateBlock::Unavailable(vec![unavailable_reason(&defect)]),
         );
         return construct_incomplete(&changed_setup, &[detail(&defect, None)]);
     }
     Ok(built)
-}
-
-const fn unavailable_reason(defect: &Error) -> SnapshotUnavailableReason {
-    match defect {
-        Error::Git(crate::GitDefect::ObjectMissing) => SnapshotUnavailableReason::MissingObject,
-        Error::Git(crate::GitDefect::ObjectWrongKind) => SnapshotUnavailableReason::WrongObjectKind,
-        Error::Git(crate::GitDefect::ObjectUnreadable) => {
-            SnapshotUnavailableReason::UnreadableObject
-        }
-        Error::Git(crate::GitDefect::IndexInvalid | crate::GitDefect::IndexFormatUnsupported) => {
-            SnapshotUnavailableReason::IndexInvalid
-        }
-        Error::Git(crate::GitDefect::IndexUnmerged) => SnapshotUnavailableReason::IndexUnmerged,
-        Error::Git(crate::GitDefect::IntentToAdd) => SnapshotUnavailableReason::IntentToAdd,
-        Error::Git(crate::GitDefect::SnapshotChanged) => SnapshotUnavailableReason::SnapshotChanged,
-        Error::UnrepresentablePath => SnapshotUnavailableReason::UnrepresentablePath,
-        Error::ResourceLimit { .. } => SnapshotUnavailableReason::ResourceLimit,
-        Error::Parse(_) | Error::Internal => SnapshotUnavailableReason::NotEvaluated,
-    }
 }
 
 /// The staged run's opened inputs: the pinned raw index with its logical
@@ -310,13 +298,12 @@ struct StagedOpen {
     initial: Vec<u8>,
     index: amiss_git::LogicalIndex,
     skip_worktree_paths: u64,
-    base_placeholder: GitSnapshotIdentity,
     base_tree: ResolvedTree,
 }
 
-/// The staged run's opening: the base placeholder identity, the pinned
-/// index, the resolved base tree, and a pending floor mismatch settled
-/// against them.
+/// The staged run's opening: the pinned index, the resolved base tree, and a
+/// pending floor mismatch settled against them. A base that does not resolve
+/// says why rather than lending its commit ID to the tree.
 fn staged_open(
     repo: &Repository,
     setup_shell: &SetupShell,
@@ -326,16 +313,16 @@ fn staged_open(
 ) -> PipelineResult<StagedOpen> {
     let (scan_limits, git_limits) = effective_limits(verified_floor);
     let mut git_resources = GitResources::new(git_limits);
-    let base_placeholder = GitSnapshotIdentity {
-        commit_oid: base_oid.clone(),
-        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
-        object_format: repo.object_format(),
-        tree_oid: base_oid.clone(),
-    };
+    let unevaluated = || BaseBlock::Unavailable(vec![SnapshotUnavailableReason::NotEvaluated]);
     let (initial, index, skip_worktree_paths) = pinned_index(repo, &mut git_resources)
-        .map_err(|defect| candidate_unavailable(setup_shell, base_placeholder.clone(), &defect))?;
-    let base_tree = resolve_tree(repo, &mut git_resources, base_oid)
-        .map_err(|detail| not_evaluated(setup_shell, &base_placeholder, detail))?;
+        .map_err(|defect| candidate_unavailable(setup_shell, unevaluated(), &defect))?;
+    let base_tree = resolve_tree(repo, &mut git_resources, base_oid).map_err(|defect| {
+        not_evaluated(
+            setup_shell,
+            BaseBlock::Unavailable(vec![unavailable_reason(&defect)]),
+            detail(&defect, None),
+        )
+    })?;
     if let Some(row) = floor_mismatch {
         return Err(binding_mismatch(
             setup_shell,
@@ -359,7 +346,6 @@ fn staged_open(
         initial,
         index,
         skip_worktree_paths,
-        base_placeholder,
         base_tree,
     })
 }
@@ -400,7 +386,6 @@ fn staged_index_result(
         initial,
         index,
         skip_worktree_paths: skip_count,
-        base_placeholder,
         base_tree,
     } = staged_open(repo, setup_shell, base_oid, floor_mismatch, verified_floor)?;
     let external = staged_gate(
@@ -421,7 +406,7 @@ fn staged_index_result(
         &mut base_scan,
         &mut candidate_scan,
         setup_shell,
-        &base_placeholder,
+        &base_tree.1,
         &base_tree.0,
         &index,
     )?;
@@ -447,6 +432,7 @@ fn staged_index_result(
         },
     )?;
     base_scan.scans = std::mem::take(&mut candidate_scan.scans);
+    let base_identity = base_tree.1.clone();
     let (base_evaluated, mut failures) = evaluate_tree(
         repo,
         &mut git_resources,
@@ -462,7 +448,7 @@ fn staged_index_result(
         base_tree,
         None,
     )
-    .map_err(|detail| not_evaluated(setup_shell, &base_placeholder, detail))?;
+    .map_err(|detail| not_evaluated(setup_shell, BaseBlock::Commit(base_identity), detail))?;
     failures.extend(candidate_failures);
     let (effects, site) = pair_effects(
         repo,
@@ -477,7 +463,7 @@ fn staged_index_result(
         &mut failures,
     );
     let block = resolved_candidate_block(repo, base_oid, &index, skip_count, &mut failures);
-    let mut setup = setup_shell.with(base_evaluated.identity.clone(), block);
+    let mut setup = setup_shell.with(BaseBlock::Commit(base_evaluated.identity.clone()), block);
     setup.policy = effective_policy(effects, setup_shell, scan_limits);
     staged_finish(
         repo,

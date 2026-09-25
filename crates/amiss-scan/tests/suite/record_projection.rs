@@ -135,7 +135,7 @@ fn run(
         candidate_ref: None,
         target_ref: None,
         default_branch_ref: None,
-        base: snapshot(&pair.base, &pair.base_tree),
+        base: amiss_scan::report::BaseBlock::Commit(snapshot(&pair.base, &pair.base_tree)),
         candidate: CandidateBlock::Commit(snapshot(&pair.candidate, &pair.candidate_tree)),
         policy: Effects::default(),
         controls_unavailable: None,
