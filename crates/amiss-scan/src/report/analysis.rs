@@ -3,7 +3,7 @@ use amiss_wire::model::Digest;
 use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::FindingScope;
 use amiss_wire::report::model;
-use amiss_wire::resolution::Resolution;
+use amiss_wire::resolution::{Missing, Resolution};
 use sha2::Digest as _;
 
 use crate::correlate::{Comparison, Observation};
@@ -44,6 +44,26 @@ fn occurrence(
         sha2::Sha256::new_with_prefix(observe::OBSERVATION_ID_DOMAIN).chain_update([0_u8]),
     );
     serde_json::to_writer(&mut writer, &input).map_err(|_defect| crate::Error::Internal)?;
+    let fragment = match &observation.resolution {
+        Resolution::Missing(Missing::HeadingAnchorNotFound { .. } | Missing::LabelNotDeclared) => {
+            observation
+                .intent
+                .fragment
+                .clone()
+                .filter(|fragment| !fragment.is_empty())
+        }
+        Resolution::Missing(
+            Missing::PathNotFound { .. } | Missing::LineFragmentOutOfRange { .. },
+        )
+        | Resolution::Resolved { .. }
+        | Resolution::DeclaredUntracked(_)
+        | Resolution::TypeMismatch { .. }
+        | Resolution::UnsupportedTarget(_)
+        | Resolution::UnsupportedSemantics(_)
+        | Resolution::UnsupportedVersion { .. }
+        | Resolution::Invalid { .. }
+        | Resolution::External { .. } => None,
+    };
     Ok(model::ObservedOccurrence {
         observation_id: Digest::from(writer.0.finalize().0),
         observation_id_input: input,
@@ -51,6 +71,7 @@ fn occurrence(
         block_kind: observation.block_kind,
         resolution: observation.resolution,
         external_destination: observation.external_destination,
+        fragment,
     })
 }
 

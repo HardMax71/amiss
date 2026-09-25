@@ -110,6 +110,15 @@ fn sphinx_labels_resolve_through_the_label_table() {
         1,
         "one dead: {labels:?}"
     );
+    let named: Vec<_> = labels
+        .iter()
+        .filter_map(|side| side.fragment.as_deref())
+        .collect();
+    assert_eq!(
+        named,
+        ["gone"],
+        "only the dead label names what it missed: {labels:?}"
+    );
     assert_eq!(
         count(|resolution| matches!(
             resolution,

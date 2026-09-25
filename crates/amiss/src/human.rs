@@ -309,6 +309,16 @@ where
                 .or_else(|| {
                     let (tag, detail) = resolution(&candidate?.0.resolution);
                     (tag != ResolutionTag::Resolved).then(|| spelled((tag, detail)))
+                })
+                .map(|reason| {
+                    let written = candidate.and_then(|(occurrence, _check)| {
+                        occurrence.fragment.as_ref().map(|fragment| atom(fragment))
+                    });
+                    match (written, reason.split_once(' ')) {
+                        (Some(written), Some((tag, rest))) => format!("{tag} {written} {rest}"),
+                        (Some(written), None) => format!("{reason} {written}"),
+                        (None, _) => reason,
+                    }
                 });
             Some(Place {
                 action: action?,
@@ -359,7 +369,12 @@ where
             resolution: resolved,
             ..
         } => Some(spelled(resolution(resolved))),
-        FindingFactEvidence::Claim { observed, .. } => Some(observed.to_string()),
+        FindingFactEvidence::Claim {
+            observed,
+            target_path,
+            line,
+            ..
+        } => Some(format!("{observed} {}:{line}", atom(target_path.as_str()))),
         FindingFactEvidence::Projection { observed, .. } => Some(observed.as_ref().to_owned()),
         FindingFactEvidence::BrokenRedirect { reason, .. } => Some(reason.to_string()),
         FindingFactEvidence::Control { .. }
