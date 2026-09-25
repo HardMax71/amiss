@@ -3,6 +3,7 @@ use std::io::{BufWriter, Stdout};
 use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
+use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::MissingResolution;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::human::atom;
@@ -59,20 +60,35 @@ pub(crate) fn wire_resolution<P, F: Fn(&P) -> String>(
 ) -> (ResolutionTag, Option<String>) {
     match resolution {
         ReportResolution::Missing(missing) => {
-            let (tag, near) = match missing {
-                MissingResolution::PathNotFound { near, .. } => {
-                    (MissingTag::PathNotFound, near.as_ref().map(path))
-                }
+            let (tag, near, moved) = match missing {
+                MissingResolution::PathNotFound {
+                    near,
+                    same_object_at,
+                    ..
+                } => (
+                    MissingTag::PathNotFound,
+                    near.as_ref().map(&path),
+                    match same_object_at {
+                        Some(Nullable::Value(moved)) => Some(path(moved)),
+                        Some(Nullable::Null) | None => None,
+                    },
+                ),
                 MissingResolution::HeadingAnchorNotFound { near, .. } => (
                     MissingTag::HeadingAnchorNotFound,
                     near.as_ref().map(|near| atom(near)),
+                    None,
                 ),
                 MissingResolution::LineFragmentOutOfRange { .. } => {
-                    (MissingTag::LineFragmentOutOfRange, None)
+                    (MissingTag::LineFragmentOutOfRange, None, None)
                 }
-                MissingResolution::LabelNotDeclared {} => (MissingTag::LabelNotDeclared, None),
+                MissingResolution::LabelNotDeclared {} => {
+                    (MissingTag::LabelNotDeclared, None, None)
+                }
             };
-            (ResolutionTag::Missing, Some(missing_detail(tag, near)))
+            (
+                ResolutionTag::Missing,
+                Some(missing_detail(tag, near, moved)),
+            )
         }
         ReportResolution::Invalid { reason } => {
             (ResolutionTag::Invalid, Some(reason.as_ref().to_owned()))

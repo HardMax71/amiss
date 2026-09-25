@@ -7,8 +7,8 @@ use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::resolution::{Resolution, TaggedBlobTarget, UnsupportedSemantics};
 
-pub(crate) use components::unique_path_pairs;
 use components::{ObservationPool, correlation_components};
+pub(crate) use components::{directory_pairs, unique_path_pairs};
 pub use model::{
     Comparison, Impact, Observation, Outcome, Reason, Side, SourceChange, TargetChange,
 };

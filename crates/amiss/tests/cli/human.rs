@@ -702,6 +702,60 @@ fn places_in_one_document_read_by_line() {
     );
 }
 
+/// A target whose bytes now sit at one added path says where, in the row
+/// and in a render of the report, as the JSON evidence does.
+#[test]
+fn a_moved_target_names_where_its_bytes_went() {
+    let fx = amiss_fixtures::commit_pair(
+        &[
+            ("docs/guide.md", "# Guide\n"),
+            ("README.md", "# R\n\n[g](docs/guide.md)\n"),
+        ],
+        &[],
+    )
+    .unwrap();
+    let root = std::path::Path::new(&fx.repo);
+    git(root, &["mv", "docs/guide.md", "docs/moved.md"]);
+    git(root, &["commit", "-qm", "move the guide"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let check = |format: &str| {
+        amiss(&[
+            "check",
+            "--repo",
+            &fx.repo,
+            "--object-format",
+            "sha1",
+            "--base",
+            &fx.base,
+            "--candidate",
+            &candidate,
+            "--profile",
+            "observe",
+            "--format",
+            format,
+        ])
+    };
+    let (code, human, _stderr) = check("human");
+    assert_eq!(code, 0);
+    let text = String::from_utf8_lossy(&human);
+    assert!(
+        text.contains(
+            "explicit-target-missing path-not-found same bytes at \"docs/moved.md\"\n  \"README.md\":3:1\n"
+        ),
+        "{text}"
+    );
+    let report = root.join("report.json");
+    fs::write(&report, check("json").1).unwrap();
+    let (_code, rendered, _stderr) = amiss(&[
+        "render",
+        "--report",
+        report.to_str().unwrap(),
+        "--format",
+        "human",
+    ]);
+    assert_eq!(String::from_utf8_lossy(&rendered), text);
+}
+
 /// A path that exists under another case is missing, and the place says
 /// which spelling it nearly matched.
 #[test]

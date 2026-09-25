@@ -1,4 +1,5 @@
 use sha2::Digest as _;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -200,6 +201,67 @@ fn resolved_commit_identities_survive_discovery_failures() {
             assert_eq!(&actual.commit_oid, commit);
             assert_eq!(&actual.tree_oid, tree);
         }
+    }
+}
+
+/// An index names files only, so a staged directory move pairs by the files
+/// beneath it, the same answer the commit pair reads from the tree id.
+#[test]
+fn a_removed_directory_pairs_by_the_files_it_held() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(
+        root.join("README.md"),
+        "[guides](guides)\n\n[twin](twin-a)\n\n[drafts](drafts)\n",
+    )
+    .unwrap();
+    for directory in ["guides/deep", "twin-a", "twin-b", "drafts"] {
+        fs::create_dir_all(root.join(directory)).unwrap();
+    }
+    for (path, body) in [
+        ("guides/a.txt", "guide-a"),
+        ("guides/deep/b.txt", "guide-b"),
+        ("twin-a/x.txt", "twin"),
+        ("twin-b/x.txt", "twin"),
+        ("drafts/y.txt", "draft"),
+    ] {
+        fs::write(root.join(path), body).unwrap();
+    }
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = oid(git(root, &["rev-parse", "HEAD"]).trim());
+
+    fs::rename(root.join("guides"), root.join("handbook")).unwrap();
+    fs::rename(root.join("twin-a"), root.join("twin-new")).unwrap();
+    fs::remove_dir_all(root.join("twin-b")).unwrap();
+    fs::rename(root.join("drafts"), root.join("published")).unwrap();
+    fs::write(root.join("published/y.txt"), "edited draft").unwrap();
+    git(root, &["add", "-A"]);
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let staged = payload(&staged_index(&repo, &engine(), None, &shell(), &base).unwrap());
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = oid(git(root, &["rev-parse", "HEAD"]).trim());
+    let committed =
+        payload(&commit_pair(&repo, &engine(), None, &shell(), &base, &candidate).unwrap());
+
+    for report in [&staged, &committed] {
+        let moved: BTreeMap<&str, &serde_json::Value> = report["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|finding| {
+                (
+                    finding["key_input"]["scope"]["normalized_target_intent"]["path"]
+                        .as_str()
+                        .unwrap(),
+                    &finding["candidate_fact"]["evidence"]["resolution"]["same_object_at"],
+                )
+            })
+            .collect();
+        assert_eq!(moved["guides"], "handbook", "{moved:?}");
+        assert!(moved["twin-a"].is_null(), "{moved:?}");
+        assert!(moved["drafts"].is_null(), "{moved:?}");
     }
 }
 
