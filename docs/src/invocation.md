@@ -260,9 +260,10 @@ repaired state judged.
 repo-relative path and a one-based line; it reads that line from the working tree and
 prints one ready definition to stdout, nothing else, so the output pastes or pipes
 straight into a document. It proves before printing: the candidate definition is run back
-through the markdown extractor and the claim grammar, double-quoted first and
-single-quoted when that round trip fails. A line neither spelling can carry, an HTML
-entity among the causes, is refused rather than printed broken. Exit 0 prints the
+through the markdown extractor and the claim grammar, double-quoted first, single-quoted when
+that round trip fails, and double-quoted with its backslashes, double quotes and ampersands
+escaped when a line holds both quotes or an HTML entity a title would decode. A line no spelling
+carries is refused rather than printed broken. Exit 0 prints the
 definition. Exit 1 refuses the file or the line: unreadable, past the end, not UTF-8, or
 numbered beyond the platform. Exit 2 is an invalid invocation, which is also where a
 `--name` outside its grammar or a `--path` carrying reserved bytes lands.
