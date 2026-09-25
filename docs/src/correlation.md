@@ -72,7 +72,10 @@ whole file left the tree.
 Formatting noise stays out by construction. Amiss does not normalize referenced content:
 for a whole-file reference, any change to the target bytes or file mode is a change; for a
 numeric line fragment, any change to the file mode or to bytes inside the inclusive selection
-is a change and bytes outside it are not.
+is a change and bytes outside it are not. A reference whose fragment or query the run could
+not answer, a symbol in a code file, a `?plain=1`, an anchor on a page whose identities are
+partial, still located its file, so it is compared as a whole-file reference rather than left
+out of the comparison.
 Every normalizer is a parser for someone else's language and each one shipped would be a
 place for a real change to hide. For the block itself, the compared projection is its
 source bytes with line endings made LF, so a re-wrapped paragraph reads as a changed subject.

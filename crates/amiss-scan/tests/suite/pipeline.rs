@@ -675,6 +675,54 @@ fn a_claim_fix_follows_the_line_its_words_moved_to() {
     }
 }
 
+/// A fragment or query the run cannot answer still located its file, so the
+/// file changing under unchanged prose is the same check a plain link gets.
+#[test]
+fn a_file_behind_an_unanswered_fragment_is_still_tracked() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("code.py"), "def run():\n    pass\n").unwrap();
+    fs::write(root.join("guide.md"), "# Guide\n").unwrap();
+    fs::write(
+        root.join("README.md"),
+        "# R\n\n[a](code.py#run)\n\n[b](guide.md?plain=1)\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(root.join("code.py"), "def run():\n    return 1\n").unwrap();
+    fs::write(root.join("guide.md"), "# Guide\n\nMore.\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "targets"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    )
+    .unwrap();
+    let payload = payload(&built);
+    let impacts: Vec<&str> = payload["observations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["impact"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        impacts,
+        [
+            "dependency-changed-subject-unchanged",
+            "dependency-changed-subject-unchanged"
+        ]
+    );
+}
+
 /// A well-formed value claim whose target agrees is attested: no finding,
 /// no boundary, and the summary counts it.
 #[test]
