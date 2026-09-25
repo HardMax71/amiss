@@ -32,7 +32,7 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
         return ExitCode::FAILURE;
     }
     let payload = &built.envelope.payload;
-    let Ok((items, ineligible, factless)) = items(payload, adoption) else {
+    let Ok((items, skipped)) = items(payload, adoption) else {
         println!("amiss adopt: the minted snapshot failed its own reader; nothing recorded");
         return ExitCode::from(2);
     };
@@ -62,23 +62,35 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
         return ExitCode::FAILURE;
     }
     println!(
-        "amiss adopt: {recorded} blocking findings recorded at {}; {ineligible} blocking \
-         findings are not debt-eligible; {factless} eligible rows skipped for missing facts",
-        adoption.output.display()
+        "amiss adopt: {recorded} blocking findings recorded at {}; {} blocking findings are not \
+         debt-eligible; {} eligible rows skipped for missing facts; {} skipped because their \
+         facts name a path outside the text path grammar",
+        adoption.output.display(),
+        skipped.ineligible,
+        skipped.factless,
+        skipped.unrecordable,
     );
     ExitCode::SUCCESS
 }
 
+/// The blocking rows an adoption leaves out: kinds debt cannot hold, rows
+/// without a fact, and rows whose fact names a path the debt file cannot spell.
+#[derive(Default)]
+struct Skipped {
+    ineligible: usize,
+    factless: usize,
+    unrecordable: usize,
+}
+
 /// Every blocking, debt-eligible finding becomes one item carrying the fact
-/// the adoption accepts; blocking rows outside the eligible kinds are
-/// counted and left to be fixed instead.
+/// the adoption accepts; the rest are counted and left to be fixed instead,
+/// so one row the debt file cannot hold never costs the others.
 fn items<P: serde::Serialize, R, M, E: serde::Serialize>(
     payload: &ReportPayload<P, R, M, E>,
     adoption: &Adoption,
-) -> Result<(Vec<DebtItem>, usize, usize), ()> {
+) -> Result<(Vec<DebtItem>, Skipped), ()> {
     let mut rows = Vec::new();
-    let mut ineligible = 0_usize;
-    let mut factless = 0_usize;
+    let mut skipped = Skipped::default();
     for row in &payload.findings {
         if row.effective_disposition != Disposition::Fail {
             continue;
@@ -87,12 +99,19 @@ fn items<P: serde::Serialize, R, M, E: serde::Serialize>(
             row.kind,
             FindingKind::ExplicitTargetMissing | FindingKind::ExplicitTargetTypeMismatch
         ) {
-            ineligible = ineligible.saturating_add(1);
+            skipped.ineligible = skipped.ineligible.saturating_add(1);
             continue;
         }
         let Some((fact, fact_digest)) = row.candidate_fact.as_ref().zip(row.candidate_fact_digest)
         else {
-            factless = factless.saturating_add(1);
+            skipped.factless = skipped.factless.saturating_add(1);
+            continue;
+        };
+        let Some(accepted_fact) = serde_json::to_vec(fact)
+            .ok()
+            .and_then(|bytes| Fact::parse(&bytes).ok())
+        else {
+            skipped.unrecordable = skipped.unrecordable.saturating_add(1);
             continue;
         };
         let key = row.finding_key.to_string();
@@ -100,8 +119,7 @@ fn items<P: serde::Serialize, R, M, E: serde::Serialize>(
         rows.push(DebtItem {
             debt_id: ArtifactId::try_from(format!("debt/{full}")).map_err(|_defect| ())?,
             finding_key: row.finding_key,
-            accepted_fact: Fact::parse(&serde_json::to_vec(fact).map_err(|_defect| ())?)
-                .map_err(|_defect| ())?,
+            accepted_fact,
             accepted_fact_digest: fact_digest,
             owner: adoption.owner.clone(),
             reason: adoption.reason.clone(),
@@ -109,7 +127,7 @@ fn items<P: serde::Serialize, R, M, E: serde::Serialize>(
             expires_at: adoption.expires_at.clone(),
         });
     }
-    Ok((rows, ineligible, factless))
+    Ok((rows, skipped))
 }
 
 fn snapshot<P, R, M, E>(

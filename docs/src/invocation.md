@@ -305,7 +305,8 @@ never read one. On a repository without a lane the minted file waits, and the wo
 ramp for a standing backlog is [`enforce-introduced`](profiles.md). The minted file is
 written only after the engine's own reader accepts its
 bytes, by exclusive creation. The summary line counts what was recorded, what blocked but
-is not debt-eligible, and what was eligible but missing facts. Exit 0 recorded the
+is not debt-eligible, what was eligible but missing facts, and what was eligible but names a
+path outside the text path grammar, which the debt file cannot hold. Exit 0 recorded the
 snapshot. Exit 1 means the output path already exists or the write failed, any partial
 file removed. Exit 2 means nothing trustworthy could be recorded: the evaluation failed,
 the report carried no candidate tree, or the minted bytes failed the engine's own reader.
