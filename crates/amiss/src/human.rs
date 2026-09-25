@@ -151,7 +151,7 @@ pub(crate) fn report<P, R, M, S, D, F>(
     }
     notes(&mut out, payload);
     unscanned(&mut out, payload, options.full, path_atom);
-    totals(&mut out, payload);
+    totals(&mut out, payload, &resolution);
 }
 
 /// An engine path, spelled through the atom law whichever form it took.
@@ -465,6 +465,10 @@ fn windowed<'report, P: 'report + PartialEq>(
     }
 }
 
+/// The path openings a forge spells a file or a directory under, across the
+/// dialects: GitHub's, GitLab's, and the one Gitea and Bitbucket Cloud share.
+const FILE_FORMS: [&str; 5] = ["blob/", "tree/", "-/blob/", "-/tree/", "src/"];
+
 /// Every candidate document the run did not scan, named with the reason it
 /// carries, so the unsupported total below is a list a reader can act on
 /// rather than a number.
@@ -506,7 +510,10 @@ fn notes<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
     }
 }
 
-fn totals<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
+fn totals<P, R, M, E, F>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>, resolution: &F)
+where
+    F: Fn(&R) -> (ResolutionTag, Option<String>),
+{
     let summary = &payload.summary;
     let documents = &summary.documents;
     say!(
@@ -529,8 +536,55 @@ fn totals<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
         references.unsupported,
         references.missing,
     );
-    let declared = matches!(&payload.evaluation, Evaluation::Resolved(evaluation) if evaluation.repository.is_some());
-    if !declared && references.external_out_of_scope > 0 {
+    let identity = match &payload.evaluation {
+        Evaluation::Resolved(evaluation) => evaluation
+            .repository
+            .as_ref()
+            .map(|repository| (evaluation, repository)),
+        Evaluation::Unavailable(_) => None,
+    };
+    if let Some((evaluation, repository)) = identity {
+        let named = [repository.host(), repository.owner(), repository.name()].join("/");
+        let own = format!("https://{named}/");
+        let other_forge = payload
+            .observations
+            .iter()
+            .filter_map(|comparison| occurrences(comparison).candidate)
+            .filter(|occurrence| resolution(&occurrence.resolution).0 == ResolutionTag::External)
+            .filter_map(|occurrence| occurrence.external_destination.as_deref())
+            .filter_map(|url| {
+                url.get(..own.len())
+                    .filter(|head| head.eq_ignore_ascii_case(&own))
+                    .and_then(|_| url.get(own.len()..))
+            })
+            .filter(|form| FILE_FORMS.iter().any(|file| form.starts_with(file)))
+            .count();
+        let other_branch = declines(payload, resolution)
+            .get(&format!(
+                "{} {}",
+                ResolutionTag::UnsupportedVersion.as_ref(),
+                VersionScopeTag::KnownPath.as_ref()
+            ))
+            .copied()
+            .unwrap_or(0);
+        if other_forge > 0 {
+            say!(
+                out,
+                "references: {other_forge} URLs on {named} spell a file in a form --forge {} does not read, so they count as external",
+                evaluation.forge.as_ref().map_or("", |forge| forge.as_ref()),
+            );
+        }
+        if other_branch > 0
+            && evaluation.candidate_ref != evaluation.default_branch_ref
+            && let Some(candidate) = &evaluation.candidate_ref
+        {
+            say!(
+                out,
+                "references: {other_branch} same-repository URLs name a branch other than --ref {}, so their targets go unchecked; a pull request's check passes the branch it merges into",
+                candidate.as_str(),
+            );
+        }
+    } else if references.external_out_of_scope > 0 {
         say!(
             out,
             "references: without --repository <host>/<owner>/<name> --ref refs/heads/<branch> --default-branch-ref refs/heads/<default> (and --forge <dialect> on a self-hosted host) a same-repository URL counts as external"
