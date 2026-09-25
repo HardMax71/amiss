@@ -25,6 +25,11 @@ pub(crate) fn run(invocation: &RefsInvocation) -> ExitCode {
             return failure;
         }
     };
+    if occurrences.is_empty() && invocation.target.as_bytes().contains(&b'#') {
+        eprintln!(
+            "amiss refs: no reference names this path; --target is a repository path, and a #fragment is part of a reference, not of the file it names"
+        );
+    }
     match invocation.format {
         OutputFormat::Human => crate::human::references(&invocation.target, &occurrences),
         OutputFormat::Json => {

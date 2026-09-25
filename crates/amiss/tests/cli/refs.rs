@@ -104,6 +104,32 @@ fn unresolved_intents_and_human_locations_are_queryable() {
     assert!(stdout.contains("\"markdown-inline-link\" \"missing\" \"sha256:"));
 }
 
+/// A fragment belongs to a reference, not to the file it names, so a target
+/// spelled with one matches nothing, and the query says why instead of
+/// answering zero in silence.
+#[test]
+fn a_fragment_target_says_why_it_matches_nothing() {
+    let (_fx, path, _code) = report("observe");
+    let (code, stdout, stderr) =
+        amiss(&["refs", "--report", &path, "--target", "docs/guide.md#setup"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(
+        String::from_utf8_lossy(&stdout).contains("candidate occurrences 0"),
+        "{}",
+        String::from_utf8_lossy(&stdout)
+    );
+    assert!(
+        stderr.contains("a #fragment is part of a reference"),
+        "{stderr}"
+    );
+    let (_code, _stdout, stderr) =
+        amiss(&["refs", "--report", &path, "--target", "docs/missing.md"]);
+    assert!(
+        stderr.is_empty(),
+        "a plain target that matches says nothing: {stderr}"
+    );
+}
+
 #[test]
 fn untrusted_and_incomplete_reports_are_refused() {
     let (pair, path, _report_code) = report("observe");
