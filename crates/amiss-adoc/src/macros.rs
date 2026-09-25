@@ -362,6 +362,7 @@ pub fn title(line: &str, at: usize) -> Option<Title> {
         level,
         text,
         span: (at, at.saturating_add(line.len())),
+        unresolved: false,
     })
 }
 

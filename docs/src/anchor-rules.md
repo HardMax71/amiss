@@ -354,7 +354,11 @@ inline passthrough declare nothing. A section title that carries one publishes i
 identity the `asciidoctor` rule generates for the title text with the anchor taken out, which
 is how `== [[custom-sec]]Install Guide` publishes both `custom-sec` and `_install_guide`. The
 title can also open with `#` characters instead of `=`, which Asciidoctor accepts from
-Markdown. `asciidoc-reference-text` is the reference text a natural cross reference such as
+Markdown. A title reads the attributes the document's own entries have defined by then,
+`:product: Acme` before `== Using {product}` publishing `_using_acme`, and `{empty}` or `{sp}`
+as themselves. A title naming an attribute the document does not define keeps the reference
+as written, the way Asciidoctor does, but the page then proves no identity absent, since
+Antora or the command line may define it. `asciidoc-reference-text` is the reference text a natural cross reference such as
 `<<API entrypoints>>` looks its target up under: a section's own title, the text after an
 anchor's comma, or a `reftext` attribute, each published where it carries a space or a
 capital.

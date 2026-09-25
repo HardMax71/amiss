@@ -31,6 +31,16 @@ pub fn analyze(source: &[u8]) -> Result<Analysis, AnalyzeError> {
                     kind,
                 })
         })
+        .chain(
+            read.titles
+                .iter()
+                .filter(|title| title.unresolved)
+                .map(|title| amiss_wire::extraction::Transclusion {
+                    target: title.text.clone(),
+                    span: title.span,
+                    kind: Err(amiss_wire::extraction::TransclusionRefusal::DynamicTarget),
+                }),
+        )
         .collect();
     let mut within = (usize::MAX, 0_usize);
     for reference in &read.references {
