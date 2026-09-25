@@ -300,6 +300,35 @@ fn different_immutable_commits_are_different_correlation_targets() {
     );
 }
 
+/// A reference into its own page, a same-page fragment or an empty
+/// destination carrying an attribute list, has the page as its dependency, so
+/// an edit anywhere on the page would call it stale. The page cannot be stale
+/// against itself: the target change is kept and the story is the block's.
+#[test]
+fn a_reference_into_its_own_page_is_never_a_stale_dependency() {
+    let base = basic("d.md", "d.md", "see [x](#setup)");
+    let mut edited = base.clone();
+    edited.resolution = resolved("d.md", b"the page changed elsewhere");
+    let got = run(
+        &side(vec![observation(&base)]),
+        &side(vec![observation(&edited)]),
+    );
+    assert_eq!(
+        got.first().map(|row| (row.target_change, row.impact)),
+        Some((TargetChange::Changed, Impact::None))
+    );
+    let mut reworded = edited;
+    reworded.block = "now see [x](#setup)".to_owned();
+    let got = run(
+        &side(vec![observation(&base)]),
+        &side(vec![observation(&reworded)]),
+    );
+    assert_eq!(
+        got.first().map(|row| (row.target_change, row.impact)),
+        Some((TargetChange::Changed, Impact::SubjectChanged))
+    );
+}
+
 #[test]
 fn the_derivation_table_is_total() {
     let source_changed = |from: &Spec| {
