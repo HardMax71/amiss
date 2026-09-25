@@ -281,7 +281,7 @@ impl Sweep<'_> {
                 owners.paragraph = Some(span);
                 self.declared.extend(heading::paragraph_attribute(node));
                 self.declared.extend(heading::glossary_terms(node));
-                directive_declarations(self, span);
+                directive_declarations(self, span, path, *owners);
                 self.headings.extend(heading::definition_terms(node));
             }
             Kind::Link { url } => {
@@ -343,7 +343,7 @@ impl Sweep<'_> {
                 }
             }
             Kind::CodeBlock(_) => {
-                directive_declarations(self, span);
+                directive_declarations(self, span, path, *owners);
                 self.preprocessed(span, path, *owners, false, false);
             }
             Kind::Root | Kind::Other => {}
@@ -671,10 +671,47 @@ fn snippet(line: &str, span: (usize, usize)) -> Option<Transclusion> {
 /// opens a paragraph and a backtick fence opens a code block, and the same
 /// directive is spelled in both. A fence Docusaurus unwraps also carries the
 /// identities of the markup between its lines.
-fn directive_declarations(sweep: &mut Sweep<'_>, span: (usize, usize)) {
+fn directive_declarations(
+    sweep: &mut Sweep<'_>,
+    span: (usize, usize),
+    path: &[usize],
+    owners: Owners,
+) {
     let block = sweep.suffix.get(span.0..span.1);
     sweep.declared.extend(fenced_identities(sweep.suffix, span));
     sweep.snippets.extend(include_directive(block, span));
+    if let Some((construct, target)) = file_directive(block) {
+        let opener = block
+            .and_then(|text| text.lines().next())
+            .unwrap_or_default();
+        let mut directive_path = path.to_vec();
+        directive_path.push(0);
+        sweep.push(
+            construct,
+            target.clone(),
+            target,
+            (span.0, span.0.saturating_add(opener.len())),
+            &directive_path,
+            owners,
+        );
+    }
+}
+
+/// The file a `MyST` directive names as its argument, read the way the
+/// reStructuredText directive of the same name is: a picture for `image` and
+/// `figure`, and a file for `include` and `literalinclude`.
+fn file_directive(block: Option<&str>) -> Option<(SourceConstruct, String)> {
+    let (tag, argument) = block?.lines().next().and_then(heading::directive_opener)?;
+    let target = argument.trim();
+    if target.is_empty() || target.contains(char::is_whitespace) {
+        return None;
+    }
+    let construct = match tag {
+        "image" | "figure" => SourceConstruct::RstImageDirective,
+        "include" | "literalinclude" => SourceConstruct::RstIncludeDirective,
+        _ => return None,
+    };
+    Some((construct, target.to_owned()))
 }
 
 /// The document a `MyST` include renders in place of itself. Sphinx parses the
@@ -824,6 +861,7 @@ fn role(
     }
     let (construct, semantic) = match name {
         "doc" => (SourceConstruct::RstDocRole, target.to_owned()),
+        "download" => (SourceConstruct::RstDownloadRole, target.to_owned()),
         "ref" => (SourceConstruct::RstRefRole, target.to_owned()),
         _ => (SourceConstruct::RstRefRole, format!("{name}:{target}")),
     };

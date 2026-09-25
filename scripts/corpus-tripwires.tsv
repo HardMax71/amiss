@@ -7,7 +7,7 @@ awesome-python	pass	15	0	85	0	1
 babel	pass	186	0	143	42	349
 bat	pass	17	0	92	0	21
 biome	pass	115	3	240	102	100
-click	pass	53	0	46	956	0
+click	pass	53	0	49	956	0
 cncf-glossary	pass	963	0	2239	419	4
 comprehensive-rust	pass	584	0	943	0	10
 containerd.io	pass	9	0	8	3	1
@@ -32,7 +32,7 @@ mdbook	pass	50	0	117	0	0
 minimal-mistakes	pass	125	0	97	125	11
 mkdocs	pass	21	0	332	0	1
 mkdocs-material	pass	103	0	1039	5	4
-myst-parser	pass	32	0	199	26	3
+myst-parser	pass	32	0	218	24	3
 nextra	pass	243	2	20	224	5
 numpy	pass	627	0	1188	36	22
 ohmyzsh	pass	387	7	155	0	7

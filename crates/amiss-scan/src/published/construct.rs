@@ -31,7 +31,15 @@ pub(super) fn anchors(
             snapshot, adapter, pages, construct, is_image, path_part,
         ));
     }
-    if construct == Some(SourceConstruct::RstDocRole) {
+    if matches!(
+        construct,
+        Some(
+            SourceConstruct::RstDocRole
+                | SourceConstruct::RstDownloadRole
+                | SourceConstruct::RstImageDirective
+                | SourceConstruct::RstIncludeDirective
+        )
+    ) {
         return Some(super::sphinx::anchors(
             snapshot, adapter, document, construct, path_part,
         ));

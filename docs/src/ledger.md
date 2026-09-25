@@ -417,6 +417,11 @@ The [MyST include contract](https://mystmd.org/guide/directives) makes the inclu
 relative to its source, while roles and extension points still require the parsed document
 context. A suffix alias cannot reproduce that distinction.
 
+Part of that yield now arrives under the Markdown profile where a Sphinx declaration governs the
+page: the `{doc}`, `{ref}`, `{term}` and `{download}` roles, and the `{image}`, `{figure}`,
+`{include}` and `{literalinclude}` directives, each answered the way its reStructuredText form
+is. The admission decision below still stands for the dialect as a whole.
+
 ### Quarto
 
 | Repository | Head | Documents | Markdown references | Markdown path-like | Includes | Cross-references | Executable cells |

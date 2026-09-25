@@ -562,6 +562,49 @@ fn an_included_fragment_reads_from_its_page() {
     ));
 }
 
+/// Under a Sphinx declaration a `MyST` directive that names a file is a
+/// reference the way the reStructuredText directive is, and so is the
+/// `{download}` role; outside one the fence is the code block it looks like.
+#[test]
+fn a_myst_file_directive_is_a_reference_under_sphinx() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("docs/conf.py", "extensions = ['myst_parser']\n"),
+            ("docs/img/pic.png", "png\n"),
+            ("docs/img/fig.png", "png\n"),
+            ("docs/part.md", "Part.\n"),
+            ("docs/data.csv", "a\n"),
+            ("src/code.py", "print()\n"),
+            (
+                "docs/index.md",
+                "# Index\n\n```{image} img/pic.png\n```\n\n:::{figure} /img/fig.png\nCaption\n:::\n\n```{literalinclude} ../src/code.py\n```\n\n```{include} part.md\n```\n\n{download}`data.csv`\n\n```{image} img/gone.png\n```\n",
+            ),
+            ("plain/page.md", "# Page\n\n```{image} gone.png\n```\n"),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    for (line, target) in [
+        (3, "docs/img/pic.png"),
+        (6, "docs/img/fig.png"),
+        (10, "src/code.py"),
+        (13, "docs/part.md"),
+        (16, "docs/data.csv"),
+    ] {
+        assert_eq!(
+            blob(answer(&rows, "docs/index.md", line)),
+            Some(target),
+            "line {line}"
+        );
+    }
+    assert!(matches!(
+        answer(&rows, "docs/index.md", 18),
+        Resolution::Missing(Missing::PathNotFound { .. })
+    ));
+    assert!(!rows.keys().any(|(document, _)| document == "plain/page.md"));
+}
+
 /// Antora reads a partial's cross references and images from the module of
 /// each page that includes it and its includes from the partial itself, so a
 /// partial another module includes misses what only its own module holds.
