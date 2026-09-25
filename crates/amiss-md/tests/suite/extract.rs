@@ -507,6 +507,68 @@ fn bare_cr_lines_fence_the_same_as_lf() {
     }
 }
 
+/// An admonition, details or tab body is Markdown under Python-Markdown even
+/// after a blank line, nested or inside a list, while the same syntax shown in
+/// a fence stays an example; every span is still the source's own bytes.
+#[test]
+fn admonition_bodies_are_read_as_markdown() {
+    let source = [
+        "!!! note \"Title [t](t.md)\"",
+        "",
+        "    First [a](a.md)",
+        "",
+        "    !!! tip",
+        "",
+        "        ## Inner heading",
+        "",
+        "        Inner [b](b.md)",
+        "",
+        "???+ info",
+        "",
+        "    Details [c](c.md)",
+        "",
+        "=== \"Tab\"",
+        "",
+        "    Tab body [d](d.md)",
+        "",
+        "- item",
+        "",
+        "    !!! note",
+        "",
+        "        In a list [e](e.md)",
+        "",
+        "```markdown",
+        "!!! note",
+        "",
+        "    Shown [f](f.md)",
+        "```",
+        "",
+        "    [g](g.md) stays code",
+        "",
+    ]
+    .join("\n");
+    let got = extraction(Adapter::Markdown, &source);
+    let destinations: Vec<&str> = got
+        .occurrences
+        .iter()
+        .map(|entry| entry.raw_destination.as_str())
+        .collect();
+    assert_eq!(
+        destinations,
+        ["t.md", "a.md", "b.md", "c.md", "d.md", "e.md"]
+    );
+    for entry in &got.occurrences {
+        let written = source.get(entry.span.0..entry.span.1).unwrap_or_default();
+        assert!(written.ends_with(&format!("({})", entry.raw_destination)));
+    }
+    let headings: Vec<&str> = got
+        .headings
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert_eq!(headings, ["Inner heading"]);
+}
+
 /// Every golden in the corpus obeys the closed span contract: bounded,
 /// ordered, non-splitting, with a disjoint opaque partition and the right
 /// empty side per profile.
