@@ -256,6 +256,8 @@ fn record_declaration(
         }
     } else if let Some(router) = crate::route::declared_router(body) {
         declared.routers.insert(path, router);
+    } else {
+        declared.refused_routers.insert(path);
     }
 }
 
@@ -324,6 +326,7 @@ struct Declared {
     antora_components: BTreeMap<RepoPath, (String, bool)>,
     source_suffixes: BTreeMap<Vec<u8>, BTreeSet<String>>,
     routers: BTreeMap<RepoPath, (String, Option<String>)>,
+    refused_routers: BTreeSet<RepoPath>,
     published_roots: BTreeMap<Vec<u8>, Vec<(Vec<u8>, String)>>,
     bound_configs: BTreeMap<RepoPath, &'static [&'static str]>,
     book_sources: BTreeMap<Vec<u8>, Vec<u8>>,
@@ -401,6 +404,9 @@ pub struct SnapshotDiscovery {
     /// Each router declaration the tree holds, by its own path, against the
     /// router it names for the directory it sits in.
     pub declared_routers: BTreeMap<RepoPath, (String, Option<String>)>,
+    /// Each router declaration file that declares nothing, which the
+    /// candidate side refuses rather than reading as no declaration.
+    pub refused_routers: BTreeSet<RepoPath>,
     /// Each content root a generator's own configuration names, and the path
     /// its site is served under.
     pub published_roots: BTreeMap<Vec<u8>, Vec<(Vec<u8>, String)>>,
@@ -511,6 +517,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         antora_components: BTreeMap::new(),
         source_suffixes: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
+        refused_routers: BTreeSet::new(),
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),
@@ -831,6 +838,7 @@ pub(crate) fn discover_walk(
         discovery.antora_components = declared.antora_components;
         discovery.source_suffixes = declared.source_suffixes;
         discovery.declared_routers = declared.routers;
+        discovery.refused_routers = declared.refused_routers;
         discovery.published_roots = declared.published_roots;
         discovery.bound_configs = declared.bound_configs;
         discovery.book_sources = declared.book_sources;
@@ -900,6 +908,7 @@ pub fn discover_index(
     discovery.antora_components = declared.antora_components;
     discovery.source_suffixes = declared.source_suffixes;
     discovery.declared_routers = declared.routers;
+    discovery.refused_routers = declared.refused_routers;
     discovery.published_roots = declared.published_roots;
     discovery.bound_configs = declared.bound_configs;
     discovery.book_sources = declared.book_sources;

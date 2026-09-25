@@ -106,7 +106,9 @@ under `docs/sources` its run reports 153 missing targets instead of 546, and eve
 both sides of a comparison are read under the routers the candidate declares, so the commit that
 writes one introduces nothing. Deleting one is reported at the file that held it.
 [What a documentation router serves](route-spellings.md) lists every name you can write and
-what each one turns on.
+what each one turns on. A file that says anything else, such as a misspelled name or a `base`
+without its leading slash, stops the run with `CONFIGURATION_INVALID` at that file rather than
+declaring nothing in silence.
 
 In CI the same engine ships as a GitHub Action that derives both commits from the event:
 

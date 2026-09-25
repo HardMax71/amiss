@@ -547,6 +547,7 @@ fn bound_adapter_answers_only_policy_included_rows() {
         antora_components: BTreeMap::new(),
         source_suffixes: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
+        refused_routers: BTreeSet::new(),
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),

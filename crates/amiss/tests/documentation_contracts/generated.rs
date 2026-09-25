@@ -301,14 +301,19 @@ fn documented_declared_routers_are_generated_from_the_route_table() {
     );
     let declarable: Vec<String> = ROUTERS
         .iter()
-        .filter(|rule| declarable(rule))
         .map(|rule| {
             let turned_on: Vec<String> = rule
                 .serves
                 .iter()
+                .filter(|_| declarable(rule))
                 .map(|spelling| format!("`{}`", spelling.as_ref()))
                 .collect();
-            format!("| `{}` | {} |", rule.name, turned_on.join(", "))
+            let turned_on = if turned_on.is_empty() {
+                "nothing".to_owned()
+            } else {
+                turned_on.join(", ")
+            };
+            format!("| `{}` | {turned_on} |", rule.name)
         })
         .collect();
     assert_eq!(

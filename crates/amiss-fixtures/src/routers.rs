@@ -644,42 +644,11 @@ const PAGE_REDIRECTS: [(&str, Staged<'static>); 8] = [
     ),
 ];
 
-/// Two trees writing the same destination under two declarations: the name
-/// the page-URL reading is served under, and the generator name that served it
-/// before and now names no rule at all.
-const DECLARED_PAGE_ROUTER: [(&str, Staged<'static>); 6] = [
-    (
-        "named/.amiss/router.yml",
-        Staged::File(b"router: directory-pages\n"),
-    ),
-    (
-        "named/setup/live.md",
-        Staged::File(b"# Live\n\n[guide](../guide/)\n"),
-    ),
-    ("named/setup/guide/index.md", Staged::File(b"# Guide\n")),
-    (
-        "retired/.amiss/router.yml",
-        Staged::File(b"router: hugo-pages\n"),
-    ),
-    (
-        "retired/setup/live.md",
-        Staged::File(b"# Live\n\n[guide](../guide/)\n"),
-    ),
-    ("retired/setup/guide/index.md", Staged::File(b"# Guide\n")),
-];
-
 /// # Errors
 ///
 /// Any filesystem failure.
 pub fn antora_component() -> std::io::Result<CommitChain> {
     staged_repository(&ANTORA_COMPONENT)
-}
-
-/// # Errors
-///
-/// Any filesystem failure.
-pub fn declared_page_router() -> std::io::Result<CommitChain> {
-    staged_repository(&DECLARED_PAGE_ROUTER)
 }
 
 /// # Errors

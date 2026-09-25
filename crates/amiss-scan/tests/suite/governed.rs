@@ -187,6 +187,7 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
         antora_components: BTreeMap::new(),
         source_suffixes: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
+        refused_routers: BTreeSet::new(),
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),
