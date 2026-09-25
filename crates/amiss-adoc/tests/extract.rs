@@ -634,3 +634,30 @@ fn a_long_line_is_read_in_one_forward_pass() {
         assert!(extraction.references.is_empty(), "{pattern}");
     }
 }
+
+/// A URL written directly is a link, and each of these is what Asciidoctor 2
+/// linked in this sentence: trailing punctuation off, the attribute-list,
+/// angle-bracket and monospace forms in, `mailto:` only with an attribute
+/// list, and an escaped one left as text.
+#[test]
+fn a_url_written_directly_is_a_link() {
+    let source = "See https://example.com/a. and (https://example.com/b) and https://example.com/c[text] and <https://example.com/d> and \\https://example.com/e and https://example.com/f, g and `https://example.com/h` and mailto:x@y.z[mail] and https://example.com/i;\n";
+    let urls: Vec<String> = kinds(source)
+        .into_iter()
+        .filter(|(kind, _)| *kind == ReferenceKind::Url)
+        .map(|(_, target)| target)
+        .collect();
+    assert_eq!(
+        urls,
+        [
+            "https://example.com/a",
+            "https://example.com/b",
+            "https://example.com/c",
+            "https://example.com/d",
+            "https://example.com/f",
+            "https://example.com/h",
+            "mailto:x@y.z",
+            "https://example.com/i",
+        ]
+    );
+}
