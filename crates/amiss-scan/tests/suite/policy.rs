@@ -151,6 +151,7 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
         finding_dispositions: Vec::new(),
         default_branch_aliases: None,
         anchor_renderers: None,
+        translations: None,
     })
 }
 
@@ -175,6 +176,7 @@ fn a_projection_selector_change_keeps_identity_and_removal_weakens() {
             finding_dispositions: Vec::new(),
             default_branch_aliases: None,
             anchor_renderers: None,
+            translations: None,
         })
     };
     let base = side(1);
@@ -229,6 +231,7 @@ fn the_union_carries_both_suffixes_but_the_candidate_binding() {
             finding_dispositions: Vec::new(),
             default_branch_aliases: None,
             anchor_renderers: None,
+            translations: None,
         })
     };
     let base = side(".txt", amiss_wire::model::Adapter::Rst);
@@ -261,6 +264,7 @@ fn disposition_side(rows: &[(PromotableFindingKind, PolicyDisposition)]) -> Poli
         finding_dispositions,
         default_branch_aliases: None,
         anchor_renderers: None,
+        translations: None,
     })
 }
 
@@ -598,6 +602,7 @@ fn a_binding_drop_or_change_weakens_and_an_addition_does_not() {
             finding_dispositions: Vec::new(),
             default_branch_aliases: None,
             anchor_renderers: None,
+            translations: None,
         })
     };
     let removed = |got: &amiss_scan::policy::Effects| {
@@ -643,6 +648,7 @@ fn suffix_selector_changes_keep_their_stable_root_identity() {
             finding_dispositions: Vec::new(),
             default_branch_aliases: None,
             anchor_renderers: None,
+            translations: None,
         })
     };
     let absent = PolicySide::default();
@@ -715,6 +721,7 @@ fn a_dropped_default_branch_alias_weakens_and_an_addition_does_not() {
             finding_dispositions: Vec::new(),
             default_branch_aliases: Some(aliases.to_vec()),
             anchor_renderers: None,
+            translations: None,
         })
     };
     let removed = |got: &amiss_scan::policy::Effects| -> Vec<(String, Option<String>)> {
@@ -773,6 +780,7 @@ fn a_dropped_or_widened_renderer_pin_weakens_and_a_narrower_one_does_not() {
             default_branch_aliases: None,
             anchor_renderers: names
                 .map(|names| names.iter().map(|name| (*name).to_owned()).collect()),
+            translations: None,
         })
     };
     let widened = |base: Option<&[&str]>, candidate: Option<&[&str]>| {

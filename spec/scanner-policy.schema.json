@@ -89,6 +89,19 @@
    "items": {
     "$ref": "#/$defs/RendererName"
    }
+  },
+  "translations": {
+   "type": "array",
+   "maxItems": 64,
+   "description": "Translated trees beside their sources; a page under source is translated at the same path under target. Sort by source, then target, UTF-8 bytes.",
+   "x-amiss-order": [
+    "source",
+    "target"
+   ],
+   "uniqueItems": true,
+   "items": {
+    "$ref": "#/$defs/TranslationPair"
+   }
   }
  },
  "$defs": {
@@ -501,6 +514,22 @@
       "warn",
       "fail"
      ]
+    }
+   }
+  },
+  "TranslationPair": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "source",
+    "target"
+   ],
+   "properties": {
+    "source": {
+     "$ref": "#/$defs/RepoPath"
+    },
+    "target": {
+     "$ref": "#/$defs/RepoPath"
     }
    }
   }

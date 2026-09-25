@@ -63,7 +63,8 @@ with policies written before projections existed and the file valid only whole:
     { "finding_kind": "explicit-target-missing", "disposition": "fail" }
   ],
   "default_branch_aliases": ["refs/heads/master"],
-  "anchor_renderers": ["github"]
+  "anchor_renderers": ["github"],
+  "translations": [{ "source": "docs", "target": "docs/de" }]
 }
 ```
 
@@ -72,8 +73,9 @@ The first tree include readmits a subtree the built-in skip list would drop, whi
 `docs` and reads them as reStructuredText. The document include reads one extensionless file
 under the markdown grammar. The protected path makes its removal a finding, the disposition
 row promotes one kind to `fail`, the alias says the default branch used to be called
-`master`, and the renderer pin reads Markdown headings the way github.com slugs them, as
-[What twelve renderers call a heading](anchor-rules.md) explains. The
+`master`, the renderer pin reads Markdown headings the way github.com slugs them, as
+[What thirteen renderers call a heading](anchor-rules.md) explains, and the translation pair
+says `docs/de` translates `docs`. The
 [scanner-policy schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-policy.schema.json)
 closes the grammar, and each array keeps the sort order the schema states. The strictness
 also sets the upgrade order: an engine that predates a policy field refuses the whole file
@@ -87,6 +89,16 @@ default branch is under test, and stays unread as another version while a featur
 Kubernetes community repository is the case, where 1,102 of 1,192 self-links still say `master`.
 Both sides are read under the names the candidate declares, the way router declarations are, and
 dropping one is `policy-weakened` under `policy/default-branch-alias-removed/<name>`.
+
+`translations` is optional and names translated trees beside their sources, at most 64 pairs
+sorted by source and then target. A page at a path under `source` is translated at the same path
+under `target`, and a page inside any declared target is never read as a source of its own, so a
+locale can live under its source's root. A change then warns with `translation-drift` at the
+translation when the source page's blob changed and the translation's did not, or when the
+translation left while its source stayed. The finding is `warn` in every profile and never blocks.
+It says a translator has something to look at, not that the translation is wrong. A source page
+that is new, or a pair removed together, is not drift, and neither is a translation edited alone.
+Dropping a pair loosens nothing that blocks, so it is not `policy-weakened`.
 
 A projection assertion is owned by the policy, under the stable identity `(document, name)`.
 The `code-text-v1` sources select an inclusive one-based line interval from a tracked regular or

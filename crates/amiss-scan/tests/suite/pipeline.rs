@@ -3289,3 +3289,105 @@ fn a_file_or_one_key_projects_and_contains_asks_the_block_to_hold_it()
     }
     Ok(())
 }
+
+/// A declared translation that falls behind its source warns and never
+/// blocks, even under enforce: a source page changed while its translation's
+/// bytes stayed, or a translation left while its source stayed. A translation
+/// updated with its source, one edited alone, a pair removed together, and a
+/// new source page with nothing to translate yet all stay quiet, and a page
+/// inside the translated tree is never read as a source of its own.
+#[test]
+fn a_translation_left_behind_by_its_source_warns() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = TempDir::new()?;
+    let root = dir.path();
+    let git = |args: &[&str]| amiss_fixtures::git(root, args);
+    git(&["init", "-q"])?;
+    fs::create_dir_all(root.join(".amiss"))?;
+    fs::create_dir_all(root.join("docs/de"))?;
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        r#"{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":[],"finding_dispositions":[],"translations":[{"source":"docs","target":"docs/de"}]}"#,
+    )?;
+    for page in ["guide", "other", "kept", "gone", "both"] {
+        fs::write(root.join(format!("docs/{page}.md")), format!("# {page}\n"))?;
+        fs::write(
+            root.join(format!("docs/de/{page}.md")),
+            format!("# {page} (de)\n"),
+        )?;
+    }
+    git(&["add", "."])?;
+    git(&["commit", "-qm", "base"])?;
+    let base = git(&["rev-parse", "HEAD"])?.trim().to_owned();
+    fs::write(root.join("docs/guide.md"), "# guide\n\nA new step.\n")?;
+    fs::write(root.join("docs/other.md"), "# other\n\nA new step.\n")?;
+    fs::write(
+        root.join("docs/de/other.md"),
+        "# other (de)\n\nEin neuer Schritt.\n",
+    )?;
+    fs::write(root.join("docs/de/both.md"), "# both (de)\n\nNur hier.\n")?;
+    fs::write(root.join("docs/new.md"), "# new\n")?;
+    fs::remove_file(root.join("docs/de/kept.md"))?;
+    fs::remove_file(root.join("docs/gone.md"))?;
+    fs::remove_file(root.join("docs/de/gone.md"))?;
+    git(&["add", "-A"])?;
+    git(&["commit", "-qm", "candidate"])?;
+    let candidate = git(&["rev-parse", "HEAD"])?.trim().to_owned();
+
+    let repo =
+        Repository::open(root, ObjectFormat::Sha1).map_err(|defect| format!("{defect:?}"))?;
+    let enforce = SetupShell {
+        profile: Profile::Enforce,
+        ..shell()
+    };
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &enforce,
+        &oid(&base),
+        &oid(&candidate),
+    )
+    .map_err(|defect| format!("{defect:?}"))?;
+    let payload = payload(&built);
+    let drift: Vec<(String, String, String)> = payload["findings"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|row| row["kind"] == "translation-drift")
+        .map(|row| {
+            let text = |value: &serde_json::Value| value.as_str().unwrap_or_default().to_owned();
+            (
+                text(&row["location"]["path"]),
+                text(&row["location"]["side"]),
+                text(&row["effective_disposition"]),
+            )
+        })
+        .collect();
+    let row = |path: &str, side: &str| (path.to_owned(), side.to_owned(), "warn".to_owned());
+    assert_eq!(
+        drift,
+        [
+            row("docs/de/guide.md", "candidate"),
+            row("docs/de/kept.md", "base")
+        ],
+        "{payload}"
+    );
+    assert_eq!(built.exit_code, 0, "{payload}");
+    let checks: Vec<(String, String)> = payload["feedback"]["items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|item| item["finding_kinds"][0] == "translation-drift")
+        .map(|item| {
+            let text = |value: &serde_json::Value| value.as_str().unwrap_or_default().to_owned();
+            (text(&item["action"]), text(&item["target"]))
+        })
+        .collect();
+    let check = |target: &str| ("check".to_owned(), target.to_owned());
+    assert_eq!(
+        checks,
+        [check("docs/de/guide.md"), check("docs/de/kept.md")],
+        "{payload}"
+    );
+    Ok(())
+}

@@ -37,8 +37,8 @@ pub use policy::{
     KeyValueSelection, NAMED_REGION_SOURCE, NamedRegionSelection, PREVIOUS_CODE_SINK,
     ProjectionAssertion, ProjectionKind, ProjectionSink, ProjectionSource, RECORD_SET_SOURCE,
     RECORD_VALUE_SOURCE, RecordSetSelection, RecordValueSelection, SOURCE_MARKER_BYTES,
-    ScannerPolicy, ScannerPolicySchema, TREE_PATHS_SOURCE, TreePathSelection,
-    check_projection_source,
+    ScannerPolicy, ScannerPolicySchema, TRANSLATION_PAIRS, TREE_PATHS_SOURCE, TranslationPair,
+    TreePathSelection, check_projection_source,
 };
 pub use resources::{AnalysisPhase, ResourceName, ResourceNameIter};
 pub use taxonomy::{

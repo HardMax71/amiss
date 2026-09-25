@@ -11,7 +11,7 @@ use crate::discovery::{DocumentStatus, SnapshotDiscovery};
 use crate::evaluate::{DocumentInput, Finding};
 
 use super::analysis::{self, document_input};
-use super::documents::{PairedDocument, document_result, paired_documents};
+use super::documents::{PairedDocument, document_result, paired_documents, translation_drift};
 use super::identity::{controls, evaluation};
 use super::summary::summary_counts;
 use super::{Built, Setup};
@@ -225,6 +225,7 @@ fn evaluate_paired(
 ) -> Result<(Vec<Finding>, Vec<ErrorDetail>), crate::Error> {
     let inputs: Vec<DocumentInput> = paired.iter().map(document_input).collect();
     let groups = crate::evaluate::claim_groups(claims);
+    let translations = translation_drift(paired, &setup.policy.translations);
     crate::evaluate::evaluate_with_site(
         &inputs,
         comparisons,
@@ -235,6 +236,7 @@ fn evaluate_paired(
             governed,
             claims: &groups,
             projections,
+            translations: &translations,
         },
     )
 }
