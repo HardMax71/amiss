@@ -123,6 +123,50 @@ fn a_text_directive_is_declined_rather_than_missing() {
     }
 }
 
+/// A chapter an `AsciiDoc` book includes, and an Antora partial, render inside
+/// another page, so a fragment they do not hold themselves may name an
+/// identity of that page and is declined. A page of its own still answers.
+#[test]
+fn an_included_asciidoc_chapter_declines_what_it_does_not_hold() {
+    let files: &[(&str, &str)] = &[
+        (
+            "book.adoc",
+            "= Book\n\ninclude::ch1.adoc[]\n\ninclude::ch2.adoc[]\n",
+        ),
+        ("ch1.adoc", "== Chapter One\n"),
+        ("ch2.adoc", "[[ch2-sec]]\n== Chapter Two\n"),
+        ("alone.adoc", "= Alone\n"),
+        ("docs/antora.yml", "name: comp\nversion: ~\n"),
+        ("docs/modules/ROOT/pages/index.adoc", "= Page\n"),
+        ("docs/modules/ROOT/partials/bit.adoc", "Text.\n"),
+    ];
+    let chain = commit_chain(&[("book", files)]).unwrap_or_else(|_defect| panic!("commit"));
+    let mut bed = bed_at(chain, 0, ScanLimits::CONTRACT, GitLimits::CONTRACT);
+    for (document, declined) in [
+        ("ch1.adoc", true),
+        ("docs/modules/ROOT/partials/bit.adoc", true),
+        ("alone.adoc", false),
+        ("docs/modules/ROOT/pages/index.adoc", false),
+    ] {
+        let row = bed
+            .run_as(Adapter::AsciiDoc, None, document, false, "#ch2-sec")
+            .unwrap_or_else(|_defect| panic!("resolve in {document}"))
+            .1;
+        let unsupported = matches!(
+            row,
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(_))
+        );
+        let missing = matches!(
+            row,
+            Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+        );
+        assert!(
+            if declined { unsupported } else { missing },
+            "{document}: {row:?}"
+        );
+    }
+}
+
 /// A target the evaluation cannot read, parse, or afford keeps the unsupported
 /// answer. Reporting it missing would be reporting on a parse that never ran.
 #[test]
