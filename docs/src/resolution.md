@@ -409,7 +409,7 @@ pin these distinctions.
 Each resolved target is read from the object store and hashed, so the comparison knows the
 exact selected bytes and file mode on both sides. Numeric positions do not prove that those
 bytes still mean what the prose claims; they only make movement and byte drift observable.
-A symlink or submodule target is
+A symlink or submodule target, or a path beneath one, is
 `unsupported-target-kind`, because following one leaves the world of exact bytes where the
 guarantees live. A [Git LFS](https://git-lfs.com) pointer file is recognized and its committed
 pointer bytes are hashed. Those bytes include the declared OID, so an OID-text change is

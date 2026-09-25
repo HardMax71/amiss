@@ -540,3 +540,34 @@ fn an_authority_is_judged_by_its_exact_grammar() {
         );
     }
 }
+
+/// A path beneath a symlink or a submodule lives behind the link or in another
+/// repository, so it is the same unsupported target the link itself is rather
+/// than a missing one.
+#[test]
+fn a_path_behind_a_link_is_unsupported_not_missing() {
+    let mut bed = bed();
+    for (destination, expected) in [
+        (
+            "../alias/deeper.md",
+            UnsupportedTarget::Symlink {
+                path: amiss_wire::model::RepoPath::from(&amiss_wire::repo_path_text!("alias")),
+            },
+        ),
+        (
+            "../module/docs/x.md",
+            UnsupportedTarget::Gitlink {
+                path: amiss_wire::model::RepoPath::from(&amiss_wire::repo_path_text!("module")),
+            },
+        ),
+    ] {
+        let resolution = bed
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
+            .map(|(_intent, resolution)| resolution);
+        assert_eq!(
+            resolution,
+            Ok(Resolution::UnsupportedTarget(expected)),
+            "{destination}"
+        );
+    }
+}

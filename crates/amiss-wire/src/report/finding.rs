@@ -223,7 +223,7 @@ declare_taxonomy! {
             metadata: &UNSUPPORTED_DOCUMENT,
         },
         UnsupportedTargetKind => {
-            meaning: "the reference resolves to a symlink or submodule, which Amiss does not follow; the boundary is declared instead of crossed",
+            meaning: "the reference resolves to a symlink or submodule, or to a path beneath one, which Amiss does not follow; the boundary is declared instead of crossed",
             metadata: &UNSUPPORTED_DOCUMENT,
         },
         UnsupportedVersionScope => {

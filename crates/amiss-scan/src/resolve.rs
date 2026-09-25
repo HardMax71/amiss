@@ -640,6 +640,30 @@ fn blob_target(
     }))
 }
 
+/// The symlink or submodule a missing path sits beneath. Its bytes live behind
+/// the link or in another repository, so the tree cannot answer for it, and it
+/// is unsupported rather than missing.
+fn behind_link(
+    snapshot: &SnapshotDiscovery,
+    path: &RepoPath,
+) -> Option<UnsupportedTarget<RepoPath>> {
+    let mut ancestor = path.as_bytes();
+    while let Some(slash) = ancestor.iter().rposition(|byte| *byte == b'/') {
+        ancestor = ancestor.get(..slash)?;
+        let link = || RepoPath::from_bytes(ancestor.to_vec());
+        match snapshot.entries.get(ancestor) {
+            Some((GitMode::Symlink, _oid)) => {
+                return link().map(|path| UnsupportedTarget::Symlink { path });
+            }
+            Some((GitMode::Gitlink, _oid)) => {
+                return link().map(|path| UnsupportedTarget::Gitlink { path });
+            }
+            Some((GitMode::RegularFile | GitMode::ExecutableFile | GitMode::Tree, _)) | None => {}
+        }
+    }
+    None
+}
+
 /// Steps four through ten: exact lookup, special entries, kind compatibility,
 /// content availability, query semantics, fragment semantics, and only then
 /// a resolved target. The typed target survives query and fragment boundary
@@ -654,7 +678,10 @@ pub(super) fn lookup(
 ) -> Result<Resolution<RepoPath>, Error> {
     let (mode, entry) = match resolver.snapshot.locate(path) {
         None => {
-            return declared_untracked(resolver, path);
+            return match behind_link(resolver.snapshot, path) {
+                Some(unsupported) => Ok(Resolution::UnsupportedTarget(unsupported)),
+                None => declared_untracked(resolver, path),
+            };
         }
         Some(Located::Entry(GitMode::Symlink, _)) => {
             return Ok(Resolution::UnsupportedTarget(UnsupportedTarget::Symlink {
