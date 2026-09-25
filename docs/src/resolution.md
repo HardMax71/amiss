@@ -15,8 +15,13 @@ the MDX grammar's own. A tag standing alone on its line opens a block, so what s
 between it and its closing tag is Markdown of the page, already parsed into blocks: that
 body is read like any other, and only the tags on either side are opaque. A tag in the run
 of a line is one paragraph's phrasing instead, and it stays opaque whole, attributes and
-body together. Either way the attributes and any expression among them are unreadable, so
-an identity a component computes is still a blind spot. An HTML region still yields what a
+body together. Either way the attributes and any expression among them stay unread, so
+an identity a component computes is still a blind spot. That holds for a lowercase `<a href>`
+or `<img src>` too. An MDX build hands those values to the browser as written, and
+Docusaurus turns a path into a bundled file only when Markdown syntax writes it, so a JSX
+path answers to the page URL rather than the tree. The one exception is a literal `id` or
+`name` on a lowercase element, read as the identity it declares, since reading one too
+many identities can only leave a broken anchor unreported. An HTML region still yields what a
 renderer would follow: `<a href>` and `<img src>` values resolve like any markdown
 destination, character references decoded into the semantic spelling, alongside the
 headings and `id` attributes the anchor tables already harvest. A tag spelled inside a
