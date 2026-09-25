@@ -12,7 +12,8 @@ use amiss_wire::resolution::{
     BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, InvalidReference, Missing,
     Resolution, Target, UnsupportedSemantics, UnsupportedTarget, VersionScope,
 };
-use amiss_wire::uri::{absolute_valid, decode_fragment, scheme};
+use amiss_wire::uri::{absolute_valid, decode_fragment, iri_to_uri, scheme};
+use unicode_general_category::{GeneralCategory, get_general_category};
 
 use crate::Error;
 use crate::declared::Declarations;
@@ -245,7 +246,28 @@ fn absolute(
             },
         )
     };
-    if !absolute_valid(path_part, scheme, query.as_deref()) {
+    if [Some(path_part), query.as_deref()]
+        .into_iter()
+        .flatten()
+        .any(|part| {
+            template_expression(part) || placeholder(part, '{', '}') || placeholder(part, '<', '>')
+        })
+    {
+        return Ok((
+            unsupported_intent(query, fragment),
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
+        ));
+    }
+    // An invisible format character, a soft hyphen or zero-width space, is never meant in a URL.
+    let invisible = [Some(path_part), query.as_deref()]
+        .into_iter()
+        .flatten()
+        .any(|part| {
+            part.chars()
+                .any(|ch| get_general_category(ch) == GeneralCategory::Format)
+        });
+    let query_uri = query.as_deref().map(iri_to_uri);
+    if invisible || !absolute_valid(&iri_to_uri(path_part), scheme, query_uri.as_deref()) {
         return Ok(invalid(query, fragment));
     }
     if let Some(identity) = context
@@ -295,7 +317,7 @@ fn resolve_destination(
     );
     if template_expression(semantic)
         || (adapter == Adapter::AsciiDoc
-            && ((is_image && anchors.is_empty()) || awaits_attribute(semantic)))
+            && ((is_image && anchors.is_empty()) || placeholder(semantic, '{', '}')))
     {
         return Ok((
             unsupported_intent(query, fragment),
@@ -494,11 +516,14 @@ fn names_a_page_identity(path_part: &str) -> bool {
 
 /// An attribute value, and the `imagesdir` an image macro needs, arrive at
 /// build time.
-fn awaits_attribute(semantic: &str) -> bool {
+/// Whether the destination names a placeholder the build fills in: a name of
+/// letters, digits, hyphens and underscores between the two delimiters, as an
+/// `AsciiDoc` `{attribute}` or a documentation `<VERSION>` is written.
+fn placeholder(semantic: &str, opener: char, closer: char) -> bool {
     let mut rest = semantic;
-    while let Some(open) = rest.find('{') {
+    while let Some(open) = rest.find(opener) {
         let after = rest.get(open.saturating_add(1)..).unwrap_or_default();
-        if let Some(close) = after.find('}')
+        if let Some(close) = after.find(closer)
             && close > 0
             && after.get(..close).is_some_and(|name| {
                 name.chars().all(|character| {

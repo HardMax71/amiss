@@ -54,8 +54,8 @@ fn schemes_classify_external_and_uris_validate() {
     for destination in [
         "https:no-authority",
         "https://",
-        "https://e.com/a b",
-        "https://ex\u{e4}mple.com/x",
+        "https://e.com/a\u{1}b",
+        "https://www.freebsd.org/doc/handbook/ports\u{ad}using.html",
         "https://e.com/a%zz",
     ] {
         let row = bed
@@ -510,6 +510,11 @@ fn an_authority_is_judged_by_its_exact_grammar() {
         "https://example.com/x",
         "https://[::1]/x",
         "https://[::1]:8080/x",
+        "https://ex\u{e4}mple.com/x",
+        "https://e.com/a b",
+        "https://ja.wikipedia.org/wiki/\u{65e5}\u{672c}",
+        "https://github.com/search?q=a&utf8=\u{2713}",
+        "https://e.com/a|b^d`e",
     ] {
         let row = bed
             .run_as(Adapter::Markdown, None, "docs/index.md", false, accepted)
@@ -520,11 +525,7 @@ fn an_authority_is_judged_by_its_exact_grammar() {
             "{accepted}: {row:?}"
         );
     }
-    for refused in [
-        "https://ex\u{e4}mple.com/x",
-        "https://[]:8080/x",
-        "https://a[b/x",
-    ] {
+    for refused in ["https://[]:8080/x", "https://a[b/x"] {
         let row = bed
             .run_as(Adapter::Markdown, None, "docs/index.md", false, refused)
             .unwrap_or_else(|_defect| panic!("resolve {refused}"))
@@ -567,6 +568,31 @@ fn a_path_behind_a_link_is_unsupported_not_missing() {
         assert_eq!(
             resolution,
             Ok(Resolution::UnsupportedTarget(expected)),
+            "{destination}"
+        );
+    }
+}
+
+/// A URL holding a placeholder is the address the build writes, not one it can
+/// be checked as: it is declared rather than called invalid or handed to the
+/// external rail to probe.
+#[test]
+fn a_placeholder_url_awaits_the_build() {
+    let mut bed = bed();
+    for destination in [
+        "https://grafana.com/docs/grafana/<GRAFANA_VERSION>/alerting/",
+        "https://api.example.com/users/{id}",
+        "https://example.com/{{ site.version }}/guide",
+        "https://example.com/search?q=<TERM>",
+    ] {
+        let resolution = bed
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
+            .map(|(_intent, resolution)| resolution);
+        assert_eq!(
+            resolution,
+            Ok(Resolution::UnsupportedSemantics(
+                UnsupportedSemantics::AttributeDependent
+            )),
             "{destination}"
         );
     }

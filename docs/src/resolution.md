@@ -100,6 +100,7 @@ One document, every destination shape:
 [gh](https://github.com/o/r/blob/main/src/lib.rs)   a path only for o/r, github, and --ref refs/heads/main
 [lines](../src/lib.rs#L45-L48)         exact inclusive line selection under github or gitea
 [web](https://example.com/manual)     external: recorded with its destination, never fetched
+[wiki](https://ja.wikipedia.org/wiki/日本)   external too: judged as the URL a browser requests for it
 [anchor](guide.md#setup)              resolves when a known renderer publishes that heading identity
 ```
 

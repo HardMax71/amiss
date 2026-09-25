@@ -58,6 +58,28 @@ pub fn decode_fragment(fragment: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
+/// The ASCII characters a URI cannot hold as written but a browser escapes
+/// rather than refuses. Controls stay out: those are refused either way.
+const IRI_ESCAPED: &percent_encoding::AsciiSet = &percent_encoding::AsciiSet::EMPTY
+    .add(b' ')
+    .add(b'"')
+    .add(b'<')
+    .add(b'>')
+    .add(b'\\')
+    .add(b'^')
+    .add(b'`')
+    .add(b'{')
+    .add(b'|')
+    .add(b'}');
+
+/// The URI a browser requests for an IRI (RFC 3987 section 3.1): every byte
+/// outside ASCII and every character in [`IRI_ESCAPED`] becomes a percent
+/// escape, and a URI comes back unchanged.
+#[must_use]
+pub fn iri_to_uri(text: &str) -> std::borrow::Cow<'_, str> {
+    percent_encoding::utf8_percent_encode(text, IRI_ESCAPED).into()
+}
+
 /// Applies the shared absolute-URI grammar after the caller has split components.
 #[must_use]
 pub fn absolute_valid(path: &str, scheme: &str, query: Option<&str>) -> bool {
