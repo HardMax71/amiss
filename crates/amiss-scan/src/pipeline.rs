@@ -206,12 +206,15 @@ fn observation_id(observation: &Observation) -> Result<amiss_wire::model::Digest
         .map_err(|_defect| Error::Internal)
 }
 
-/// A site route the base served from a page the candidate no longer holds.
-/// The candidate cannot anchor the route to a page it lacks, so the route
+/// A page the base resolved a link to that the candidate no longer holds.
+/// The candidate cannot anchor a site route to a page it lacks, so the route
 /// reads as undecided there and the pair splits, a deleted page passing as a
-/// removed reference. Read under the base's anchoring it is the missing page
-/// it now is. A route the candidate serves from any page of its own stays
-/// its own, and a page it still holds is never called missing.
+/// removed reference; and under a generator whose build might supply a path,
+/// such as an Antora component an extension assembles, the lost page reads
+/// as the build's to answer. A page the base held in the tree was no build's,
+/// so either way the link is the missing page it now names. A route the
+/// candidate serves from any page of its own stays its own, and a page it
+/// still holds is never called missing.
 fn vanished_routes(
     base: &Side,
     candidate: &mut Side,
@@ -232,11 +235,21 @@ fn vanished_routes(
         })
         .collect();
     for observation in &mut candidate.observations {
-        let undecided = observation.intent.kind == IntentKind::SiteRoute
-            && matches!(
-                observation.resolution,
-                Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute)
-            );
+        let undecided = match &observation.resolution {
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute) => {
+                observation.intent.kind == IntentKind::SiteRoute
+            }
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::UnmodelledRoute) => true,
+            Resolution::UnsupportedSemantics(_)
+            | Resolution::Resolved { .. }
+            | Resolution::Missing(_)
+            | Resolution::DeclaredUntracked(_)
+            | Resolution::TypeMismatch { .. }
+            | Resolution::UnsupportedTarget(_)
+            | Resolution::UnsupportedVersion { .. }
+            | Resolution::Invalid { .. }
+            | Resolution::External { .. } => false,
+        };
         let Some(prior) = served
             .get(&(&observation.document, observation.raw_destination_digest))
             .filter(|_| undecided)
