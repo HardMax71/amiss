@@ -222,6 +222,9 @@ pub struct Effects {
     /// The machine-json-bytes ceiling the report wire may not cross: the
     /// contract's fixed 268,435,456, which no floor or option changes.
     pub machine_json_bytes: u64,
+    /// The translated trees the candidate policy declares, each beside the
+    /// source tree it translates.
+    pub translations: Vec<(RepoPath, RepoPath)>,
 }
 
 impl Default for Effects {
@@ -241,6 +244,7 @@ impl Default for Effects {
             errors_retained: 64,
             complete_findings: crate::resources::ScanLimits::CONTRACT.complete_findings,
             machine_json_bytes: amiss_wire::envelope::MACHINE_JSON_BYTES,
+            translations: Vec::new(),
         }
     }
 }
@@ -340,19 +344,16 @@ pub fn effects(
 
     Effects {
         raised: candidate_raised,
-        floor_raised: Vec::new(),
         controls,
         base_digest: base.digest,
         candidate_digest: candidate.digest,
-        floor: None,
-        debt: None,
-        waiver: None,
-        time: None,
-        constraint: None,
-        semantic_evidence: Vec::new(),
-        errors_retained: 64,
-        complete_findings: crate::resources::ScanLimits::CONTRACT.complete_findings,
-        machine_json_bytes: amiss_wire::envelope::MACHINE_JSON_BYTES,
+        translations: candidate_policy
+            .and_then(|policy| policy.translations.as_deref())
+            .unwrap_or_default()
+            .iter()
+            .map(|pair| (RepoPath::from(&pair.source), RepoPath::from(&pair.target)))
+            .collect(),
+        ..Effects::default()
     }
 }
 

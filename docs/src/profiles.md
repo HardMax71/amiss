@@ -46,6 +46,7 @@ control-binding mismatch.
 | `dependency-changed-subject-unchanged` | `warn` | `warn` |
 | `dependency-and-subject-cochanged` | `record` | `record` |
 | `subject-changed` | `record` | `record` |
+| `translation-drift` | `warn` | `warn` |
 | `explicit-reference-removed` | `record` | `record` |
 | `document-removed` | `record` | `record` |
 | `opaque-mdx-region` | `record` | `record` |
@@ -84,6 +85,7 @@ finding row, so this page is a reference, not a second source of truth.
 - `dependency-changed-subject-unchanged`: the referenced content changed and the block citing it did not; a reason for a person to reread the prose, never a machine verdict that it is wrong
 - `dependency-and-subject-cochanged`: the referenced content and the block citing it changed together, the shape of a maintained page; recorded with nothing to act on
 - `subject-changed`: the block holding the reference changed while its target did not; recorded so prose moving over an unchanged dependency stays visible
+- `translation-drift`: a declared translation fell behind its source: the source page changed while the translation stayed byte for byte, or the translation left while its source stayed; a reason for a translator to look, never a verdict that the translation is wrong
 - `explicit-reference-removed`: a reference that existed in the base is gone from the candidate; the removal is recorded as a fact, never treated as evidence that the edit was wrong
 - `document-removed`: a scanned document left the tree; recorded so the disappearance is a stated fact rather than a silent one
 - `opaque-mdx-region`: an MDX expression region the parser cannot see into; a reference inside it is a stated blind spot, reported with size and place
@@ -122,6 +124,7 @@ API described in [Controls and policy](controls.md).
 | `dependency-changed-subject-unchanged` | `docs/guide.md`: `See [parser](../src/parser.rs).`<br>`src/parser.rs`: `tokenize()` | Leave `docs/guide.md` unchanged.<br>Change `src/parser.rs` to `lex()`. |
 | `dependency-and-subject-cochanged` | `docs/guide.md`: `See [parser](../src/parser.rs).`<br>`src/parser.rs`: `tokenize()` | `docs/guide.md`: `See [revised parser](../src/parser.rs).`<br>`src/parser.rs`: `lex()` |
 | `subject-changed` | `docs/guide.md`: `See [parser](../src/parser.rs).`<br>`src/parser.rs`: `tokenize()` | Change the paragraph to `See [revised parser](../src/parser.rs).`<br>Leave `src/parser.rs` unchanged. |
+| `translation-drift` | Repository policy pairs `docs` with `docs/de`; `docs/guide.md` and `docs/de/guide.md` both exist. | Add a paragraph to `docs/guide.md` and leave `docs/de/guide.md` unchanged. |
 | `explicit-reference-removed` | `docs/guide.md` has separate `[parser](../src/parser.rs)` and `[lexer](../src/lexer.rs)` paragraphs. | Remove only the parser paragraph; both targets and the lexer paragraph remain. |
 | `document-removed` | `docs/obsolete.md` contains `# Obsolete`. | Delete `docs/obsolete.md`. |
 | `opaque-mdx-region` | `page.mdx`: `[Parser](src/parser.rs)`. | Append `<Note>{"hidden"}</Note>`. |

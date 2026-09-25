@@ -202,6 +202,7 @@ fn include_row(
         finding_dispositions: Vec::new(),
         default_branch_aliases: None,
         anchor_renderers: None,
+        translations: None,
     };
     if let Err(error) = policy.validate() {
         refusals.insert(invalid(format!(
