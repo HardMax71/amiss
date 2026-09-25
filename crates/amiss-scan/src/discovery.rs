@@ -523,6 +523,8 @@ fn role_occurrence(entry: &ScannedOccurrence) -> bool {
         entry.occurrence.construct,
         SourceConstruct::RstDocRole
             | SourceConstruct::RstDownloadRole
+            | SourceConstruct::RstImageDirective
+            | SourceConstruct::RstIncludeDirective
             | SourceConstruct::RstRefRole
             | SourceConstruct::RstNumrefRole
             | SourceConstruct::RstTermRole

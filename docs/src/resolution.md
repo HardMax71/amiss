@@ -361,7 +361,10 @@ are answered the same way. `` {doc}`quickstart` `` is the docname `:doc:` names,
 rather than `.rst`, and `` {ref}`install-step` `` is the label `:ref:` names, looked up in the
 same table, which a MyST document fills through `(name)=`, its attribute blocks, the
 `:name:` a directive carries, the terms of a `{.glossary}` list and the object a
-`domain:type` directive describes. `` {term}`environment` `` is answered the way `:term:` is. The `myst-link` rule in
+`domain:type` directive describes. `` {term}`environment` `` is answered the way `:term:` is.
+The directives that name a file, `{image}`, `{figure}`, `{include}` and `{literalinclude}`, are
+references the way their reStructuredText forms are, read from the opener of a backtick or colon
+fence, and so is `` {download}`data.csv` ``. The `myst-link` rule in
 [What thirteen renderers call a heading](anchor-rules.md) points a plain link
 at that same table: `[text](name)` where the tree holds no such file, and `[text](#name)` where
 the document itself publishes no such identity, are looked up as labels before either is
