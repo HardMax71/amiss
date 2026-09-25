@@ -2942,6 +2942,8 @@
         "rst-ref-role",
         "rst-toctree-entry",
         "markdown-link-reference-definition",
+        "markdown-mdbook-include",
+        "markdown-mkdocs-snippet",
         "html-anchor",
         "html-image"
       ]
@@ -2972,6 +2974,8 @@
         "rst-ref-role",
         "rst-toctree-entry",
         "markdown-link-reference-definition",
+        "markdown-mdbook-include",
+        "markdown-mkdocs-snippet",
         "html-anchor",
         "html-image"
       ]

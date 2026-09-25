@@ -336,13 +336,17 @@ impl Sweep<'_> {
                 let after_node = path.last().is_some_and(|index| *index > 0);
                 self.declared
                     .extend(heading::inline_attribute(value, after_node));
+                self.preprocessed(span, path, *owners, owners.paragraph.is_some());
             }
             Kind::InlineCode(_) => {
                 if let Some((construct, raw, semantic, role_span)) = role(self.suffix, span) {
                     self.push(construct, raw, semantic, role_span, path, *owners);
                 }
             }
-            Kind::CodeBlock(_) => directive_declarations(self, span),
+            Kind::CodeBlock(_) => {
+                directive_declarations(self, span);
+                self.preprocessed(span, path, *owners, false);
+            }
             Kind::Footnote { label, source } => self.headings.push(Heading {
                 text: label.clone(),
                 attribute: None,
@@ -352,6 +356,32 @@ impl Sweep<'_> {
             Kind::Root | Kind::Other => {}
         }
         Ok(true)
+    }
+
+    /// Every include line mdBook or the mkdocs snippet extension expands in
+    /// one node before Markdown reads the file, which is why one inside a
+    /// fence counts as well. Each is a reference to the file it names, and an
+    /// mdBook include of a Markdown file in prose also brings that file's
+    /// identities into the page.
+    fn preprocessed(&mut self, span: (usize, usize), path: &[usize], owners: Owners, prose: bool) {
+        for (within, include) in preprocessor_includes(self.suffix, span)
+            .into_iter()
+            .enumerate()
+        {
+            let mut include_path = path.to_vec();
+            include_path.push(within);
+            if prose && include.construct == SourceConstruct::MdbookInclude {
+                self.snippets.extend(markdown_include(&include));
+            }
+            self.push(
+                include.construct,
+                include.raw,
+                include.target,
+                include.span,
+                &include_path,
+                owners,
+            );
+        }
     }
 
     /// A raw HTML region: opaque to the grammar, read for the shortcode it
@@ -514,6 +544,109 @@ fn default_import(line: &str) -> Option<(String, String)> {
 /// quoted path, alone on its line. A path carrying a section coordinate names
 /// part of a file rather than the file, which this engine cannot reproduce, so
 /// the edge is refused instead of claiming the whole of it.
+/// One line a preprocessor replaces with a file: the construct, the target as
+/// written with any selector, the path it names, and its byte span.
+struct PreprocessorInclude {
+    construct: SourceConstruct,
+    raw: String,
+    target: String,
+    span: (usize, usize),
+}
+
+/// The mdBook commands that splice a file into the page.
+const MDBOOK_INCLUDES: [&str; 3] = ["include", "rustdoc_include", "playground"];
+
+/// Every preprocessor include in one span of the document: an mdBook
+/// `{{#include file.rs:2:10}}` anywhere in a line unless a backslash escapes
+/// it, its path quoted where it holds a space, and an mkdocs snippet line,
+/// `--8<-- "file.md"`, alone on its line. A selector after the path, a line
+/// range or an anchor name, stays in the target as written and off the path.
+fn preprocessor_includes(suffix: &str, span: (usize, usize)) -> Vec<PreprocessorInclude> {
+    let (at, raw) = (span.0, suffix.get(span.0..span.1).unwrap_or_default());
+    let mut found = Vec::new();
+    for (open, _) in raw.match_indices("{{#") {
+        let escaped = suffix
+            .get(..at.saturating_add(open))
+            .is_some_and(|before| before.ends_with('\\'));
+        let body = raw.get(open.saturating_add(3)..).unwrap_or_default();
+        let Some(close) = body.find("}}").filter(|_| !escaped) else {
+            continue;
+        };
+        let command = body.get(..close).unwrap_or_default();
+        let Some((name, rest)) = command.split_once(char::is_whitespace) else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let written = match rest.strip_prefix('"') {
+            Some(quoted) => quoted.split('"').next(),
+            None => rest.split_whitespace().next(),
+        };
+        let Some(written) = written.filter(|_| MDBOOK_INCLUDES.contains(&name)) else {
+            continue;
+        };
+        let end = open
+            .saturating_add(3)
+            .saturating_add(close)
+            .saturating_add(2);
+        found.push(PreprocessorInclude {
+            construct: SourceConstruct::MdbookInclude,
+            raw: written.to_owned(),
+            target: written.split(':').next().unwrap_or(written).to_owned(),
+            span: (at.saturating_add(open), at.saturating_add(end)),
+        });
+    }
+    let mut offset = 0_usize;
+    for line in raw.split_inclusive('\n') {
+        let start = offset;
+        offset = offset.saturating_add(line.len());
+        let Some(written) = line
+            .trim()
+            .strip_prefix("--8<--")
+            .and_then(|rest| rest.strip_prefix([' ', '\t']))
+            .and_then(|rest| quoted(rest.trim()))
+            .filter(|written| !written.is_empty())
+        else {
+            continue;
+        };
+        let target = if written.contains("://") {
+            written
+        } else {
+            written.split(':').next().unwrap_or(written)
+        };
+        found.push(PreprocessorInclude {
+            construct: SourceConstruct::MkdocsSnippet,
+            raw: written.to_owned(),
+            target: target.to_owned(),
+            span: (
+                at.saturating_add(start),
+                at.saturating_add(start)
+                    .saturating_add(line.trim_end().len()),
+            ),
+        });
+    }
+    found.sort_by_key(|include| include.span);
+    found
+}
+
+/// The page an mdBook include of a Markdown file brings in, whose headings
+/// the page publishes as its own. A selector takes a part of the file rather
+/// than the whole of it, which the expansion refuses.
+fn markdown_include(include: &PreprocessorInclude) -> Option<Transclusion> {
+    let markdown = include
+        .target
+        .rsplit_once('.')
+        .is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("md"));
+    markdown.then(|| Transclusion {
+        target: include.target.clone(),
+        span: include.span,
+        kind: if include.raw.contains(':') {
+            Err(TransclusionRefusal::Options)
+        } else {
+            Ok(TransclusionKind::Parsed)
+        },
+    })
+}
+
 fn snippet(line: &str, span: (usize, usize)) -> Option<Transclusion> {
     let rest = line.trim().strip_prefix("--8<--")?;
     let target = quoted(rest.strip_prefix([' ', '\t'])?.trim())?;
