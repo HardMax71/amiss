@@ -22,6 +22,7 @@ pub enum Spelling {
     SourceRoot,
     DirectoryUrl,
     PageUrl,
+    PageDirectory,
     BookRoute,
     BuiltPage,
     BuiltRoute,
@@ -107,6 +108,24 @@ const ASTRO: RouteRule = RouteRule {
     serves: &[Spelling::BuiltRoute],
 };
 
+/// The Next.js app router, which serves a directory's `page.mdx` or `page.md`
+/// at that directory's route, with no trailing slash unless the site asks for
+/// one.
+pub(crate) const NEXTJS_APP: RouteRule = RouteRule {
+    name: "nextjs-app",
+    declared_by: &[
+        "next.config.js",
+        "next.config.mjs",
+        "next.config.ts",
+        "next.config.cjs",
+        "next.config.mts",
+    ],
+    serves: &[Spelling::PageDirectory],
+};
+
+/// The names the Next.js app router serves a route's page from.
+pub(crate) const APP_PAGES: [&str; 2] = ["page.mdx", "page.md"];
+
 pub(crate) const ELEVENTY: RouteRule = RouteRule {
     name: "eleventy",
     declared_by: &[
@@ -163,7 +182,7 @@ pub(crate) const DIRECTORY_PAGES: RouteRule = RouteRule {
 /// Every router rule the resolver knows. A spelling reaches a source file only
 /// when that file is in the tree, so a rule can widen what resolves and can
 /// never invent a target.
-pub const ROUTERS: [RouteRule; 14] = [
+pub const ROUTERS: [RouteRule; 15] = [
     RouteRule {
         name: "mdbook",
         declared_by: &[],
@@ -190,6 +209,7 @@ pub const ROUTERS: [RouteRule; 14] = [
     MDBOOK_PAGES,
     ZOLA,
     ASTRO,
+    NEXTJS_APP,
     ELEVENTY,
     HUGO,
     DIRECTORY_PAGES,
@@ -216,13 +236,14 @@ const PAGE_REDIRECTS: &[u8] = b"aliases:";
 /// `built-page` withhold an answer rather than serve a file, so a repository
 /// cannot clear a finding by declaring anything, and the three a router serves
 /// in every tree need no declaring.
-pub const DECLARABLE: [Spelling; 6] = [
+pub const DECLARABLE: [Spelling; 7] = [
     Spelling::SiteAlias,
     Spelling::ContentRoot,
     Spelling::DocumentId,
     Spelling::SourceRoot,
     Spelling::DirectoryUrl,
     Spelling::PageUrl,
+    Spelling::PageDirectory,
 ];
 
 /// The three keys an Antora component descriptor opens a line with that this
@@ -367,6 +388,11 @@ pub fn spellings(rule: &RouteRule, destination: &RepoPath) -> Vec<(Spelling, Rep
     if rule.serves(Spelling::Extensionless) {
         for suffix in PAGE_SUFFIXES {
             push(Spelling::Extensionless, extensionless(raw, suffix));
+        }
+    }
+    if rule.serves(Spelling::PageDirectory) {
+        for page in APP_PAGES {
+            push(Spelling::PageDirectory, Some(join(raw, page.as_bytes())));
         }
     }
     if rule.serves(Spelling::ReadmeIndex) {

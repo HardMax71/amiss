@@ -7,12 +7,14 @@ use crate::discovery::regular_file;
 use crate::discovery::site_root;
 use crate::route::ANTORA;
 use crate::route::ANTORA_FAMILIES;
+use crate::route::APP_PAGES;
 use crate::route::BUNDLE_INDEX;
 use crate::route::DEFAULT_SOURCE_SUFFIX;
 use crate::route::DIRECTORY_PAGES;
 use crate::route::DOCUSAURUS;
 use crate::route::MDBOOK_PAGES;
 use crate::route::MKDOCS;
+use crate::route::NEXTJS_APP;
 use crate::route::PAGE_SUFFIXES;
 use crate::route::ROUTERS;
 use crate::route::SITE_ALIAS;
@@ -740,6 +742,13 @@ fn published_anchors(
         return Vec::new();
     };
     let raw = document.as_bytes();
+    let page = raw.rsplit(|byte| *byte == b'/').next().unwrap_or_default();
+    if APP_PAGES.iter().any(|name| name.as_bytes() == page)
+        && !construct.is_some_and(SourceConstruct::is_image)
+        && site_root(snapshot, raw, &NEXTJS_APP).is_some()
+    {
+        return app_route(directory(&beside).to_vec(), relative);
+    }
     let mut out: Vec<(Vec<u8>, String)> = Vec::new();
     if site_root(snapshot, raw, &DIRECTORY_PAGES).is_some() {
         let published = page_route(raw, true);
@@ -760,6 +769,23 @@ fn published_anchors(
         }
     }
     out
+}
+
+/// What a link in a Next.js app page names, read from the page's URL, which
+/// is the directory holding the page with no trailing slash: a route names the
+/// page file its directory serves, and a last segment carrying an extension
+/// names that file. An image is a module import and never reaches here.
+fn app_route(base: Vec<u8>, relative: String) -> Vec<(Vec<u8>, String)> {
+    if relative
+        .rsplit('/')
+        .next()
+        .is_some_and(|last| last.contains('.'))
+    {
+        return vec![(base, relative)];
+    }
+    APP_PAGES
+        .map(|page| (base.clone(), format!("{relative}/{page}")))
+        .to_vec()
 }
 
 /// Where a `:doc:` target is anchored: a leading slash at the directory
