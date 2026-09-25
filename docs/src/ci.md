@@ -8,6 +8,7 @@ file feedback on the pull request. It is not the provider-authenticated controll
 name: docs
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
 permissions:
@@ -32,15 +33,20 @@ jobs:
 ```
 
 The published first run uses `observe`: introduced problems appear as Fixes without blocking,
-changed targets appear as summary-only Checks, and pre-existing problems stay as pre-existing
-inventory. An incomplete or untrusted run still fails. Triage the initial report, adopt any
-repository policy it needs, then switch the input to `profile: enforce`. When the site is
+changed targets appear as Checks, and pre-existing problems stay as pre-existing inventory. An
+incomplete or untrusted run still fails. Triage the initial report, adopt any repository policy
+it needs, then drop the input to take the default, `enforce-introduced`, which blocks what a
+pull request introduces while the backlog stays warnings. On an unchanged head 52 of the 61
+repositories in the corpus fail `enforce`, which blocks every failing finding, so that profile
+suits a repository whose backlog is already clear. When the site is
 built somewhere else the tree carries no generator configuration, so every destination is read
 against the source files until `.amiss/router.yml` names the router;
-[What a documentation router serves](route-spellings.md) has the names. A repository whose
-backlog outlives its first triage can gate the middle of that road with
-`enforce-introduced`, which blocks what a pull request introduces while the carried
-findings stay warnings in the same reports.
+[What a documentation router serves](route-spellings.md) has the names.
+
+To make the check a merge gate, require the job's status in the branch's protection rule or
+ruleset; the job above reports as `amiss`. A repository that merges through a merge queue
+keeps the `merge_group` trigger, since a required check that never runs on the queue's group
+leaves every entry waiting, and the Action derives the group's base and head on its own.
 
 ## What the Action does
 
@@ -48,8 +54,8 @@ Before running anything it verifies the selected binary against the release mani
 in the same tree. A wall-clock watchdog backstops the engine's resource ceilings, and a scan
 that outlives the window is ended so the job fails with no result, never a verdict. The window
 defaults to 120 seconds, far above a real scan: this repository takes 0.26 seconds and a
-1,620-document Docusaurus site 4.2 seconds. Under the default `enforce` profile the job fails
-on exit classes 1 and 2. The outputs `exit-class` and `report` expose the verdict class and
+1,620-document Docusaurus site 4.2 seconds. The job fails on exit classes 1 and 2, and under
+the default `enforce-introduced` profile only a finding the change introduced makes class 1. The outputs `exit-class` and `report` expose the verdict class and
 the JSON report path for anything downstream; the file sits in the runner's temp directory,
 which is why the workflow above uploads it as the `amiss-report` artifact. A run that ends
 before the engine could scan, on an unsupported runner or a checkout missing a commit, reports
@@ -58,7 +64,7 @@ exit class 2, and the path then names a file that was never written, which the u
 
 | Input | Default | Role |
 | --- | --- | --- |
-| `profile` | `enforce` | `observe` reports without blocking, `enforce-introduced` blocks what the change introduces and warns on the backlog, `enforce` blocks every failing finding |
+| `profile` | `enforce-introduced` | `observe` reports without blocking, `enforce-introduced` blocks what the change introduces and warns on the backlog, `enforce` blocks every failing finding |
 | `base` | derived | full commit ID, overrides the event derivation |
 | `candidate` | derived | full commit ID, overrides the event derivation |
 | `repo` | `.` | repository root inside the workspace |

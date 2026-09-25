@@ -114,6 +114,7 @@ In CI the same engine ships as a GitHub Action that derives both commits from th
 name: docs
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
 permissions:
@@ -137,8 +138,9 @@ jobs:
           if-no-files-found: ignore
 ```
 
-The `profile` input defaults to `enforce`; the snippet starts at `observe` so the first
-report can be triaged without blocking anyone. `fetch-depth` gives the checkout both commits
+The `profile` input defaults to `enforce-introduced`, which blocks what a change introduces
+and leaves the backlog as warnings; the snippet starts at `observe` so the first report can be
+triaged without blocking anyone. `fetch-depth` gives the checkout both commits
 the action compares: a pull request compares the merge commit with its first parent, a push
 compares the event's before and after. The upload keeps the JSON report where a failed run
 can be read. [Running it in CI](ci.md) has the direct form, GitLab, and the pre-commit hook.

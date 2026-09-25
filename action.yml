@@ -9,7 +9,7 @@ branding:
 inputs:
   profile:
     description: observe (findings do not block), enforce-introduced (introduced findings block, carried ones warn), or enforce (blocking findings fail the run)
-    default: enforce
+    default: enforce-introduced
   base:
     description: >-
       full base commit id; when empty, pull requests derive the candidate's

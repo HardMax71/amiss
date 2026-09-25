@@ -80,7 +80,7 @@ In CI the same engine ships as an action that derives both commits from the even
 
 ```yaml
 name: docs
-on: [pull_request]
+on: [pull_request, merge_group]
 permissions:
   contents: read
 jobs:
@@ -95,8 +95,8 @@ jobs:
           profile: observe
 ```
 
-The action defaults to `enforce`, so the snippet starts at `observe` and you switch once the
-first report is triaged.
+The action defaults to `enforce-introduced`, which blocks only what a change introduces, so
+the snippet starts at `observe` and you drop the input once the first report is triaged.
 
 [The documentation](https://hardmax71.github.io/amiss/) has the rest: the
 [quickstart](https://hardmax71.github.io/amiss/quickstart.html),
