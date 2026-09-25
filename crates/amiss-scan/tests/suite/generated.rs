@@ -426,3 +426,31 @@ fn the_myst_rows_name_the_file_the_route_table_reads() {
     assert_eq!(routed, declared, "the Sphinx declaration is one file");
     assert!(!routed.is_empty(), "the route table declares Sphinx");
 }
+
+/// A reference whose label no definition declares is a missing label, while
+/// under a `mkdocs.yml`, where mkdocs-autorefs answers labels from the site's
+/// own inventory, it is declined rather than guessed absent.
+#[test]
+fn an_undefined_reference_label_is_missing() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            (
+                "plain/guide.md",
+                "# Guide\n\nSee [Raft][raft].\n\n[raft-paper]: raft.md\n",
+            ),
+            ("site/mkdocs.yml", "site_name: probe\n"),
+            ("site/docs/api.md", "# API\n\nSee [Model][pkg.Model].\n"),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    assert!(matches!(
+        answer(&rows, "plain/guide.md", 3),
+        Resolution::Missing(Missing::LabelNotDeclared)
+    ));
+    assert!(matches!(
+        answer(&rows, "site/docs/api.md", 3),
+        Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
+    ));
+}

@@ -7,6 +7,14 @@ Each occurrence keeps two spellings of its destination. The raw one is the exact
 the source. The semantic one is what those bytes mean after the format's own decoding. So `[a](&amp;b)` records both `&amp;b` and `&b`, and a change to
 either the spelling or the meaning is visible later.
 
+A full or collapsed reference whose label no definition in the document declares, `[text][gone]`
+or `[gone][]` and their image forms, is read as well, since Markdown leaves it as the bracketed
+text it spells: it is a link that broke, and it resolves as `label-not-declared`. A pair glued to
+what surrounds it, `a[i][j]` or `[A-Z][a-z]*`, is an index or a pattern rather than a link. A
+page holding a template marker, `{{` or `{%`, proves no label absent, because a generator's
+template can write the definition Markdown then reads, and under a `mkdocs.yml` such a label is
+declined rather than missing, because mkdocs-autorefs answers it from the site's own inventory.
+
 What the parser cannot see into is declared instead of skipped. Raw HTML blocks and [MDX](https://mdxjs.com)
 expressions become opaque regions, reported with their size and place as
 `opaque-html-region` and `opaque-mdx-region` findings, so a link hidden inside JSX is a

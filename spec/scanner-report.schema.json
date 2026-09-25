@@ -2983,6 +2983,8 @@
         "rst-doc-role",
         "rst-ref-role",
         "markdown-link-reference-definition",
+        "markdown-undefined-reference",
+        "markdown-undefined-image-reference",
         "html-anchor",
         "html-image"
       ]
@@ -3012,6 +3014,8 @@
         "rst-doc-role",
         "rst-ref-role",
         "markdown-link-reference-definition",
+        "markdown-undefined-reference",
+        "markdown-undefined-image-reference",
         "html-anchor",
         "html-image"
       ]

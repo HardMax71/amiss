@@ -142,6 +142,7 @@ impl SourceConstruct {
                 | Self::AsciidocInlineImage
                 | Self::RstImageDirective
                 | Self::HtmlImage
+                | Self::MarkdownUndefinedImageReference
         )
     }
 }

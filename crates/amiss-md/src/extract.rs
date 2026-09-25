@@ -315,8 +315,12 @@ impl Sweep<'_> {
                     *owners,
                 );
             }
-            Kind::LinkReference(reference) => {
-                let construct = reference_link(reference.form);
+            Kind::LinkReference(reference) | Kind::ImageReference(reference) => {
+                let construct = if matches!(node.kind, Kind::ImageReference(_)) {
+                    reference_image(reference.form)
+                } else {
+                    reference_link(reference.form)
+                };
                 let winning = self.definitions.get(&reference.key);
                 let winning = winning.ok_or(Fault::ParserError)?;
                 if !winning.reserved {
@@ -324,14 +328,8 @@ impl Sweep<'_> {
                     self.push(construct, raw, url, span, path, *owners);
                 }
             }
-            Kind::ImageReference(reference) => {
-                let construct = reference_image(reference.form);
-                let winning = self.definitions.get(&reference.key);
-                let winning = winning.ok_or(Fault::ParserError)?;
-                if !winning.reserved {
-                    let (raw, url) = (winning.raw.clone(), winning.url.clone());
-                    self.push(construct, raw, url, span, path, *owners);
-                }
+            Kind::UndefinedReference { label, image } => {
+                self.undefined(label, *image, span, path, *owners);
             }
             // A definition nobody references still maintains a destination.
             Kind::Definition(_) => self.orphan(node, path, *owners),
@@ -358,6 +356,31 @@ impl Sweep<'_> {
             Kind::Root | Kind::Other => {}
         }
         Ok(true)
+    }
+
+    /// A reference whose label nothing defines, kept under its label so the
+    /// resolver can say which one.
+    fn undefined(
+        &mut self,
+        label: &str,
+        image: bool,
+        span: (usize, usize),
+        path: &[usize],
+        owners: Owners,
+    ) {
+        let construct = if image {
+            SourceConstruct::MarkdownUndefinedImageReference
+        } else {
+            SourceConstruct::MarkdownUndefinedReference
+        };
+        self.push(
+            construct,
+            label.to_owned(),
+            label.to_owned(),
+            span,
+            path,
+            owners,
+        );
     }
 
     fn orphan(&mut self, node: &Node, path: &[usize], owners: Owners) {
@@ -454,6 +477,7 @@ fn mdx_declaration(sweep: &mut Sweep<'_>, node: &Node) -> bool {
         | Kind::Image { .. }
         | Kind::LinkReference(_)
         | Kind::ImageReference(_)
+        | Kind::UndefinedReference { .. }
         | Kind::Definition(_)
         | Kind::Other => {}
     }
