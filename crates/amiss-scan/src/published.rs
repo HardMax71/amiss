@@ -376,6 +376,19 @@ fn assembled(snapshot: &SnapshotDiscovery, path: &RepoPath) -> bool {
         .any(|(_, extended)| *extended)
 }
 
+/// Whether an Antora component keeps this document among the resources only an
+/// include renders, its partials and examples, rather than among its pages.
+pub(crate) fn antora_fragment(snapshot: &SnapshotDiscovery, document: &[u8]) -> bool {
+    let Some((root, module)) = antora_module(snapshot, document) else {
+        return false;
+    };
+    let module_directory = join(&join(root, b"modules"), module);
+    document
+        .strip_prefix(module_directory.as_slice())
+        .and_then(|rest| rest.strip_prefix(b"/"))
+        .is_some_and(|rest| rest.starts_with(b"partials/") || rest.starts_with(b"examples/"))
+}
+
 /// The component root and module a document belongs to: the nearest
 /// `modules/<name>/` on its path whose parent directory holds `antora.yml`.
 fn antora_module<'a>(

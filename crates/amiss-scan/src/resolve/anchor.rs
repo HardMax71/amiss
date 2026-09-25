@@ -9,7 +9,7 @@ use crate::Error;
 use crate::anchor::anchor_set;
 use crate::discovery::SnapshotDiscovery;
 use crate::document::{classify, native_adapter};
-use crate::published::unrouted;
+use crate::published::{antora_fragment, unrouted};
 use crate::resources::{Aggregate, ScanResources};
 
 use super::content::{Content, content_cache};
@@ -197,7 +197,12 @@ fn expanded_anchors(
         expanded.html_anchors.as_ref(),
         expanded.declared_anchors.as_ref(),
     ));
+    // An AsciiDoc chapter renders inside the book that includes it.
+    let chapter = adapter == Adapter::AsciiDoc
+        && (snapshot.asciidoc_included.contains(path)
+            || antora_fragment(snapshot, path.as_bytes()));
     if expanded.complete
+        && !chapter
         && !unrouted(snapshot, adapter, path)
         && !templated(snapshot, adapter, path, source.transclusions)
     {
