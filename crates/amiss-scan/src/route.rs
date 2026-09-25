@@ -1030,11 +1030,14 @@ pub(crate) fn docname_beside(
 
 /// The directory a destination is read beside and the name with any trailing
 /// slash normalized away, where the destination is a relative path rather
-/// than a root, a scheme, or nothing at all.
+/// than a root, a scheme, Zola's `@/` content path, or nothing at all.
 pub(crate) fn beside_document(document: &RepoPath, path_part: &str) -> Option<(Vec<u8>, String)> {
     let name = path_part.strip_suffix('/').unwrap_or(path_part);
-    (!name.is_empty() && !name.starts_with('/') && scheme(name).is_none())
-        .then(|| (directory(document.as_bytes()).to_vec(), name.to_owned()))
+    (!name.is_empty()
+        && !name.starts_with('/')
+        && !name.starts_with("@/")
+        && scheme(name).is_none())
+    .then(|| (directory(document.as_bytes()).to_vec(), name.to_owned()))
 }
 
 /// A docname names a source file without its suffix, so the name takes the

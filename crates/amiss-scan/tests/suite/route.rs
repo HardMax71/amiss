@@ -1033,6 +1033,49 @@ fn a_zola_site_anchors_the_content_root_prefix_at_its_content_directory() {
     assert_eq!(outcomes(&chain), want);
 }
 
+/// Zola's `@/` is its own spelling for a path from the content directory, so
+/// it answers before a declared router's page URLs, which would read it as a
+/// relative directory named `@`.
+#[test]
+fn a_router_declaration_leaves_zola_content_links_to_zola() {
+    let chain = staged_repository(&[
+        (
+            "config.toml",
+            Staged::File(b"base_url = 'https://example.org'\n"),
+        ),
+        (
+            ".amiss/router.yml",
+            Staged::File(b"router: directory-pages\n"),
+        ),
+        ("content/docs/b.md", Staged::File(b"# B\n")),
+        (
+            "content/docs/a.md",
+            Staged::File(b"# A\n\n[b](@/docs/b.md)\n\n[gone](@/docs/gone.md)\n"),
+        ),
+    ])
+    .expect("the fixture stages");
+    let page = "content/docs/a.md";
+    let want = expected(vec![
+        row(
+            page,
+            Some("content/docs/b.md"),
+            ResolutionTag::Resolved,
+            Some("content/docs/b.md"),
+        ),
+        row(
+            page,
+            Some("content/docs/gone.md"),
+            ResolutionTag::Missing,
+            Some("content/docs/gone.md"),
+        ),
+    ]);
+    let got: Vec<Outcome> = outcomes(&chain)
+        .into_iter()
+        .filter(|outcome| outcome.0 == page)
+        .collect();
+    assert_eq!(got, want);
+}
+
 /// The two spellings that answer with a boundary instead of a file are out of
 /// a declaration's reach, so the routers that serve nothing else are rules no
 /// file a repository writes can turn on.
