@@ -157,6 +157,10 @@ declare_taxonomy! {
             meaning: "the staged index file does not parse under the index grammar; remove .git/index and run git reset to rebuild it, or compare two commits instead of the index",
             metadata: Some(&GIT),
         },
+        GitIndexFormatUnsupported => {
+            meaning: "the index uses Git's split or sparse format, which this reader does not expand; compare two commits instead, or turn the format off with git update-index --no-split-index, or git config index.sparse false and git sparse-checkout reapply",
+            metadata: Some(&GIT),
+        },
         GitIndexUnmerged => {
             meaning: "the index holds unmerged conflict entries, so no single staged state exists; finish or abort the merge before checking the index",
             metadata: Some(&GIT),
