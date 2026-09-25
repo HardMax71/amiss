@@ -1,3 +1,5 @@
+mod construct;
+
 use crate::discovery::Located;
 use crate::discovery::SnapshotDiscovery;
 use crate::discovery::declared_at;
@@ -90,10 +92,8 @@ pub(crate) fn anchors(
     if let Some(declared) = declared_site_anchor(snapshot, adapter, document, is_image, path_part) {
         return vec![declared];
     }
-    if construct == Some(SourceConstruct::MkdocsSnippet) {
-        return crate::discovery::snippet_root(snapshot, adapter, document)
-            .map(|root| vec![(root, path_part.to_owned())])
-            .unwrap_or_default();
+    if let Some(anchored) = construct::anchors(snapshot, adapter, document, construct, path_part) {
+        return anchored;
     }
     match adapter {
         Adapter::AsciiDoc => antora_anchor(snapshot, document, construct, path_part),

@@ -3,6 +3,7 @@ mod heading;
 mod html;
 mod source;
 mod span;
+mod template;
 mod tests;
 
 use amiss_wire::extraction::SourceConstruct;
@@ -101,6 +102,7 @@ fn extract_tree(
         snippets: Vec::new(),
         mdx: Vec::new(),
         html: Vec::new(),
+        liquid_raw: template::raw_blocks(suffix),
     };
     sweep_tree(tree, &mut sweep)?;
     let transclusions = declared_includes(&sweep);
@@ -251,6 +253,7 @@ struct Sweep<'a> {
     snippets: Vec<Transclusion>,
     mdx: Vec<(usize, usize)>,
     html: Vec<(usize, usize)>,
+    liquid_raw: Vec<(usize, usize)>,
 }
 
 impl Sweep<'_> {
@@ -332,7 +335,7 @@ impl Sweep<'_> {
                 let after_node = path.last().is_some_and(|index| *index > 0);
                 self.declared
                     .extend(heading::inline_attribute(value, after_node));
-                self.preprocessed(span, path, *owners, owners.paragraph.is_some());
+                self.preprocessed(span, path, *owners, owners.paragraph.is_some(), true);
             }
             Kind::InlineCode(_) => {
                 if let Some((construct, raw, semantic, role_span)) = role(self.suffix, span) {
@@ -341,7 +344,7 @@ impl Sweep<'_> {
             }
             Kind::CodeBlock(_) => {
                 directive_declarations(self, span);
-                self.preprocessed(span, path, *owners, false);
+                self.preprocessed(span, path, *owners, false, false);
             }
             Kind::Root | Kind::Other => {}
         }
@@ -352,12 +355,22 @@ impl Sweep<'_> {
     /// one node before Markdown reads the file, which is why one inside a
     /// fence counts as well. Each is a reference to the file it names, and an
     /// mdBook include of a Markdown file in prose also brings that file's
-    /// identities into the page.
-    fn preprocessed(&mut self, span: (usize, usize), path: &[usize], owners: Owners, prose: bool) {
-        for (within, include) in preprocessor_includes(self.suffix, span)
-            .into_iter()
-            .enumerate()
-        {
+    /// identities into the page. A text run also carries the destinations a
+    /// site generator's template writes there.
+    fn preprocessed(
+        &mut self,
+        span: (usize, usize),
+        path: &[usize],
+        owners: Owners,
+        prose: bool,
+        text: bool,
+    ) {
+        let mut found = preprocessor_includes(self.suffix, span);
+        if text {
+            found.extend(template::destinations(self.suffix, span, &self.liquid_raw));
+            found.sort_by_key(|include| include.span);
+        }
+        for (within, include) in found.into_iter().enumerate() {
             let mut include_path = path.to_vec();
             include_path.push(within);
             if prose && include.construct == SourceConstruct::MdbookInclude {

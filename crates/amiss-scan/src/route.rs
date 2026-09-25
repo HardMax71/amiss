@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::uri::scheme;
 
@@ -142,7 +143,7 @@ pub(crate) const HUGO: RouteRule = RouteRule {
 /// only where what the file binds says whose it is.
 pub(crate) const SHARED_CONFIGS: [&str; 3] = ["config.toml", "config.yaml", "config.json"];
 
-const JEKYLL: RouteRule = RouteRule {
+pub(crate) const JEKYLL: RouteRule = RouteRule {
     name: "jekyll",
     declared_by: &["_config.yml"],
     serves: &[Spelling::BuiltRoute],
@@ -282,11 +283,16 @@ pub const UNROUTED_OPENING: &str = "_";
 /// `site-alias` spelling written out.
 pub(crate) const SITE_ALIAS: &str = "@site/";
 
-/// Whether a generator rule owns this destination's opening. Only the opening
-/// is read, so an ordinary directory named with an at sign is still a path.
+/// Whether a generator rule owns this destination: its opening, or a
+/// template only that generator expands. Only the opening is read, so an
+/// ordinary directory named with an at sign is still a path.
 #[must_use]
-pub fn generator_alias(path_part: &str) -> bool {
+pub fn generator_alias(path_part: &str, construct: Option<SourceConstruct>) -> bool {
     path_part.starts_with(SITE_ALIAS)
+        || matches!(
+            construct,
+            Some(SourceConstruct::MarkdownLiquidLink | SourceConstruct::MarkdownHugoRef)
+        )
 }
 
 /// The openings a bundler's own inline request syntax reserves, which no tree
