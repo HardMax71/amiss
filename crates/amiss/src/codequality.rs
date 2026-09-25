@@ -9,7 +9,7 @@ use std::borrow::Cow;
 #[derive(Serialize)]
 pub(crate) struct Issue<'report> {
     check_name: FindingKind,
-    description: &'report str,
+    description: Cow<'report, str>,
     fingerprint: Digest,
     location: Location<'report>,
     severity: Severity,
@@ -39,10 +39,12 @@ enum Severity {
 /// as the fingerprint GitLab diffs between target and head. The format has no
 /// shape for analysis errors or refusals, so those stay on the exit class and
 /// the other lanes, and like every projection it cannot change facts,
-/// ordering, totals, or exit.
+/// ordering, totals, or exit. An issue leads with its row's own words where
+/// it has some, since the widget lists issues by their text.
 pub(crate) fn issues<'report, P, R, M, E>(
     payload: &'report ReportPayload<P, R, M, E>,
     path_label: impl Fn(&'report P) -> Cow<'report, str>,
+    words: &std::collections::BTreeMap<Digest, String>,
 ) -> Vec<Issue<'report>> {
     payload
         .findings
@@ -51,7 +53,11 @@ pub(crate) fn issues<'report, P, R, M, E>(
             let location = &row.location;
             Issue {
                 check_name: row.kind,
-                description: &row.description,
+                description: words
+                    .get(&row.finding_key)
+                    .map_or(Cow::Borrowed(row.description.as_str()), |words| {
+                        Cow::Owned(format!("{words}: {}", row.description))
+                    }),
                 fingerprint: row.finding_key,
                 location: Location {
                     lines: Lines {

@@ -66,7 +66,11 @@ fn projection_payload() -> amiss_wire::report::model::ReportPayload {
 fn typed_sarif_preserves_optional_fields_and_canonical_order() {
     let payload = projection_payload();
     let fingerprint = payload.findings[0].finding_key.to_string();
-    let log = super::log(&payload, RepoPath::as_str);
+    let log = super::log(
+        &payload,
+        |path| Some(std::borrow::Cow::Borrowed(path.as_bytes())),
+        &std::collections::BTreeMap::new(),
+    );
     let bytes = serde_json::to_vec(&log).unwrap();
     assert_eq!(bytes, serde_json_canonicalizer::to_vec(&log).unwrap());
     let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
@@ -103,9 +107,11 @@ fn typed_sarif_preserves_optional_fields_and_canonical_order() {
     let byte_path = &run["results"][1];
     assert_eq!(byte_path["level"], "warning");
     assert_eq!(byte_path["ruleIndex"], 0);
-    for omitted in ["locations", "fixes"] {
-        assert!(byte_path.get(omitted).is_none(), "{omitted}");
-    }
+    assert!(byte_path.get("fixes").is_none());
+    assert_eq!(
+        byte_path["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "%FF.md",
+        "a name that is not UTF-8 is its own bytes, percent-encoded"
+    );
     let without_span = &run["results"][2];
     assert_eq!(without_span["level"], "note");
     assert_eq!(
@@ -131,7 +137,11 @@ fn sarif_paths_escape_uri_delimiters_and_utf8_in_locations_and_fixes() {
         let finding = &mut payload.findings[0];
         finding.location.path = Some(RepoPath::from(&path.clone()));
         finding.fix.as_mut().unwrap().path = path;
-        let log = super::log(&payload, RepoPath::as_str);
+        let log = super::log(
+            &payload,
+            |path| Some(std::borrow::Cow::Borrowed(path.as_bytes())),
+            &std::collections::BTreeMap::new(),
+        );
         let value = serde_json::to_value(log).unwrap();
         let finding = &value["runs"][0]["results"][0];
         assert_eq!(

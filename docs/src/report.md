@@ -258,21 +258,24 @@ the findings count has its own separate ceiling in [Limits and refusals](limits.
 
 `--format sarif` writes exactly one line to stdout: a SARIF 2.1.0 log projected from the
 same payload. Every finding row becomes a result under its kind's rule, `fail` as `error`,
-`warn` as `warning`, and `record` as `note`, with the row's own `description` as the message,
-and a row carrying a `fix` projects it as a SARIF fix with the byte region and replacement,
+`warn` as `warning`, and `record` as `note`. The message leads with the row's own words, the
+kind, reason and target a human place line prints, and then its `description`, so two broken
+links under one rule read apart; a recorded row, which shows no place, carries the sentence
+alone. Each rule carries that sentence as its help, linked to [Profiles and findings](profiles.md).
+A row carrying a `fix` projects it as a SARIF fix with the byte region and replacement,
 which GitHub renders as a suggested edit
 and the finding key riding as the stable `partialFingerprints` entry, so an ingesting
-scanner deduplicates across runs by the same identity the report uses. A location renders
-when the wire path is printable text, percent-encoded into the artifact URI so a hostile
-path cannot break it. Retained analysis errors become tool execution notifications, an
+scanner deduplicates across runs by the same identity the report uses. A location's URI is
+the path's own bytes percent-encoded, so a hostile path cannot break it and a name that is not
+UTF-8 still names its file. Retained analysis errors become tool execution notifications, an
 incomplete run reports `executionSuccessful` false, and a rejected machine invocation
 still answers in SARIF with exit class 2. Like the human form, the projection cannot
 change facts, ordering, totals, or the exit class; the canonical report stays the only
 wire, and consumers that need the full evidence read it there.
 
 `--format codequality` projects the same payload as GitLab's Code Quality artifact: a
-JSON array with one issue per finding row in report order, the row's `description` as
-the issue text, its kind as `check_name`, and `fail` as `major`, `warn` as `minor`, and
+JSON array with one issue per finding row in report order, the row's own words and then its
+`description` as the issue text, as in SARIF, its kind as `check_name`, and `fail` as `major`, `warn` as `minor`, and
 `record` as `info`. The finding key rides as the fingerprint, so GitLab's diff of target
 against head recognizes the same finding across runs by the identity the report uses.
 GitLab requires a path and a first line on every issue, so a byte-named document answers
@@ -283,7 +286,8 @@ artifact, the exit class still carries the truth, and error detail stays on the 
 human lanes. The same projection bounds apply.
 
 A render-only `--format junit` projects one suite for generic CI test dashboards. Findings
-become cases under their stable finding keys: `fail` becomes a failure, while `warn` and `record`
+become cases under their stable finding keys: `fail` becomes a failure whose message leads with the
+row's own words as in SARIF, while `warn` and `record`
 remain passing cases with their exact disposition in `system-out`. Retained analysis errors become
 error cases. A row-free passing report emits one passing report case so the artifact remains
 visible. File attributes carry only text that round-trips exactly through XML 1.0, and time is

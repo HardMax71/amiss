@@ -539,10 +539,10 @@ fn a_bytes_located_code_quality_issue_carries_the_wire_hex_spelling() {
 }
 
 /// A finding located in a byte-named document keeps its fingerprint in the
-/// SARIF projection and simply carries no artifact location, because raw
-/// bytes name no URI.
+/// SARIF projection and its location too, the name's own bytes
+/// percent-encoded into the URI, so a scanner can still place it.
 #[test]
-fn a_bytes_located_sarif_result_keeps_its_fingerprint_without_a_location() {
+fn a_bytes_located_sarif_result_keeps_its_fingerprint_and_location() {
     let (dir, base) = byte_named_index(b"# H\n\n[g](gone.md)\n");
     let repo = amiss_fixtures::path_arg(dir.path());
     let (code, stdout) = amiss(&[
@@ -566,7 +566,10 @@ fn a_bytes_located_sarif_result_keeps_its_fingerprint_without_a_location() {
         .iter()
         .find(|result| result["ruleId"] == "explicit-target-missing")
         .unwrap();
-    assert!(row.get("locations").is_none(), "{row}");
+    assert_eq!(
+        row["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "bad-%FF-doc.md",
+        "{row}"
+    );
     assert!(
         row.pointer("/partialFingerprints/amissFindingKey~1v1")
             .and_then(|key| key.as_str())
