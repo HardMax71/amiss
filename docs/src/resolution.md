@@ -170,11 +170,17 @@ file is in the tree anchors a destination somewhere other than beside the docume
 resource ID at its family directory, a Docusaurus bare path or `@site/` alias at the content
 root or the site directory, a Sphinx `:doc:` target with a leading slash at the directory
 holding `conf.py`, a raw HTML destination under a `mkdocs.yml` at the directory the page is
-published at, a Zola `@/` destination at the `content` directory beside `config.toml`, and an
-mdBook destination climbing past its book's root under the `src` of the book that holds the
-page it names. The file's presence selects the rule, and three of them are read further for
-what they bind: an Antora descriptor for its name, a `conf.py` for the suffixes it reads, and
-a Hugo configuration for the content root and base a site route is answered under. The
+published at, a Zola `@/` destination at the `content` directory beside `config.toml`, a
+Jekyll `{% link %}` or `{% post_url %}` tag at the site's source, a Hugo `ref` or `relref` beside
+the page and then under the language's `content` directory, and an mdBook destination climbing
+past its book's root under the `src` of the book that holds the page it names. Markdown never
+reads those templates as links, since each holds spaces, so they are read out of prose where
+they open, and a quoted URL through `relative_url` is the site route it names. Both generators
+fail the build on a template naming nothing, so such a target is missing rather than undecided,
+while one with no site of its generator above the page is `unsupported-reference-semantics`.
+The file's presence selects the rule, and three of them are read further for what they bind:
+an Antora descriptor for its name, a `conf.py` for the suffixes it reads, and a Hugo
+configuration for the content root and base a site route is answered under. The
 nearest such file above the document selects it, and where none is above it and the tree
 holds exactly one, that one does, since a site in `website/` reads pages that sit outside it.
 An alias in a tree holding several sites and none above the document is

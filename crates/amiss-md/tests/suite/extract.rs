@@ -569,6 +569,50 @@ fn admonition_bodies_are_read_as_markdown() {
     assert_eq!(headings, ["Inner heading"]);
 }
 
+/// A Jekyll or Hugo template that writes a destination is read where it
+/// stands in prose, with the template as the raw destination and the path it
+/// names as the semantic one; a Liquid `raw` block, a code span and a code
+/// block show one rather than evaluate it.
+#[test]
+fn site_generator_templates_are_destinations() {
+    let source = [
+        "See [data]({% link _docs/datafiles.md %}) and [post]({% post_url 2010-07-21-name %}).",
+        "",
+        "[guide]({{ \"/docs/guide/\" | relative_url }}), [ref]({{< ref \"releases.md#cadence\" >}}), [rel]({{<relref community >}}).",
+        "",
+        "{% raw %}[shown]({% link _docs/shown.md %}){% endraw %} and `{% link in/span.md %}`",
+        "",
+        "    {% link in/code.md %}",
+        "",
+    ]
+    .join("\n");
+    let got = extraction(Adapter::Markdown, &source);
+    let read: Vec<(SourceConstruct, &str)> = got
+        .occurrences
+        .iter()
+        .map(|entry| (entry.construct, entry.semantic_destination.as_str()))
+        .collect();
+    assert_eq!(
+        read,
+        [
+            (SourceConstruct::MarkdownLiquidLink, "_docs/datafiles.md"),
+            (
+                SourceConstruct::MarkdownLiquidLink,
+                "_posts/2010-07-21-name"
+            ),
+            (SourceConstruct::MarkdownLiquidUrl, "/docs/guide/"),
+            (SourceConstruct::MarkdownHugoRef, "releases.md#cadence"),
+            (SourceConstruct::MarkdownHugoRef, "community"),
+        ]
+    );
+    for entry in &got.occurrences {
+        assert_eq!(
+            source.get(entry.span.0..entry.span.1),
+            Some(entry.raw_destination.as_str())
+        );
+    }
+}
+
 /// Every golden in the corpus obeys the closed span contract: bounded,
 /// ordered, non-splitting, with a disjoint opaque partition and the right
 /// empty side per profile.
