@@ -391,6 +391,53 @@ fn an_antora_coordinate_answers_from_the_component_version_it_names() {
     assert_eq!(outcomes(&chain), want);
 }
 
+/// Under a Next.js configuration, a page is `page.mdx` in the directory of
+/// its route, served with no trailing slash, so a link in one reads from the
+/// directory above the page's own and names the target route's `page.mdx`,
+/// which a route directory without one does not serve. An image is a module
+/// import and stays beside the file.
+#[test]
+fn a_nextjs_app_page_reads_links_from_its_route() {
+    let chain = staged_repository(&[
+        ("README.md", Staged::File(b"# R\n")),
+        ("site/next.config.mjs", Staged::File(b"export default {}\n")),
+        ("site/app/docs/b/page.mdx", Staged::File(b"# B\n")),
+        ("site/app/docs/empty/data.json", Staged::File(b"{}\n")),
+        ("site/app/docs/a/img.png", Staged::File(b"png")),
+        (
+            "site/app/docs/a/page.mdx",
+            Staged::File(b"# A\n\n[b](./b)\n\n[empty](./empty)\n\n![i](./img.png)\n"),
+        ),
+    ])
+    .expect("the fixture stages");
+    let page = "site/app/docs/a/page.mdx";
+    let want = expected(vec![
+        row(
+            page,
+            Some("site/app/docs/b/page.mdx"),
+            ResolutionTag::Resolved,
+            Some("site/app/docs/b/page.mdx"),
+        ),
+        row(
+            page,
+            Some("site/app/docs/empty/page.mdx"),
+            ResolutionTag::Missing,
+            Some("site/app/docs/empty/page.mdx"),
+        ),
+        row(
+            page,
+            Some("site/app/docs/a/img.png"),
+            ResolutionTag::Resolved,
+            Some("site/app/docs/a/img.png"),
+        ),
+    ]);
+    let got: Vec<Outcome> = outcomes(&chain)
+        .into_iter()
+        .filter(|outcome| outcome.0 == page)
+        .collect();
+    assert_eq!(got, want);
+}
+
 /// A component is assembled from every source root whose `antora.yml` spells
 /// its name, so a module coordinate is answered by whichever of them holds
 /// the resource while the finding still names the root the author wrote
