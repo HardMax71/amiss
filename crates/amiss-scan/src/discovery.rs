@@ -332,10 +332,10 @@ fn binds_book(path: &RepoPath) -> bool {
     crate::route::declares(&MDBOOK_PAGES, path) && !excluded_by_built_in(path.as_bytes())
 }
 
-/// What one descriptor's own bytes say, under the reading its name selects.
 /// The package an Astro configuration imports Starlight from.
 const STARLIGHT: &[u8] = b"@astrojs/starlight";
 
+/// What one descriptor's own bytes say, under the reading its name selects.
 fn record_declaration(
     discovery: &SnapshotDiscovery,
     declared: &mut Declared,
