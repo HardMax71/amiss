@@ -25,17 +25,20 @@ takes the same block there, or bridges the two the way this repository does, wit
 
 This repository gates documentation drift with Amiss
 (https://hardmax71.github.io/amiss/). After changing documentation, or code that
-documentation points at, check the staged state before committing:
+documentation points at, stage the change and check the staged state before committing:
 
+    git add -A
     amiss check --repo . --object-format sha1 \
-      --base "$(git rev-parse HEAD)" --index --profile enforce --format json
+      --base "$(git rev-parse HEAD)" --index --profile enforce-introduced --format json
 
 Exit 0 passes. Exit 1 blocks: the blocking rows are `errors[]` and the findings whose
 `effective_disposition` is `fail`; each row's `description` says what it means and how
-to fix it, and `key_input.scope.normalized_target_intent.path` names the target. Exit 2
-means the run itself could not be trusted, and the error rows say why. Fix what the row
-points at; never weaken `.amiss/scanner-policy.json` to silence a finding, and leave
-`.amiss/router.yml` to a maintainer, since it states which router publishes the tree.
+to fix it, and `location` names the exact source position. A finding with a `fix`
+carries a proven edit, and `amiss fix` with the same arguments minus `--format` applies
+every one; stage the result and check again. Exit 2 means the run itself could not be
+trusted, and the error rows say why. Fix what the row points at; never weaken
+`.amiss/scanner-policy.json` to silence a finding, and leave `.amiss/router.yml` to a
+maintainer, since it states which router publishes the tree.
 ```
 
 The block assumes the binary is installed, by `cargo install --locked amiss` or a release
