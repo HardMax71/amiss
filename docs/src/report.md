@@ -259,8 +259,9 @@ and the shipped example are checked against that source in CI. The human format 
 the result plus at most ten grouped feedback items, replaces every character outside printable
 ASCII with a `\uXXXX` escape, and every such byte of a path that is not UTF-8 with `\xhh`, so a
 hostile filename cannot inject terminal control codes or a forged CI command into a log and a raw
-byte never reads as the character sharing its value, and states any overflow explicitly. It keeps raw totals and prints
-descriptions only for errors; finding kinds and their descriptions stay in JSON. The places
+byte never reads as the character sharing its value, and states any overflow explicitly. It keeps
+raw totals and prints each sentence once as a `note` line, for every error code and every finding
+kind the run reports, while the rows themselves stay in JSON. The places
 under a row read by document, then line, then column, so a reader can scan down to one, and
 two places at a single position settle on the finding key, which the report holds distinct.
 The findings array itself keeps its finding-key order, since that is the identity a consumer
