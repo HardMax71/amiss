@@ -50,8 +50,9 @@ The first line is the verdict, and the rest is detail:
 amiss: pass (fix 0, check 0, pre-existing 0, errors 0, exit 0)
 ```
 
-A Fix is a reference this change broke; `observe` reports it without blocking, `enforce`
-fails the run on it. A Check is a file that changed under a paragraph that did not, listed
+A Fix is a reference this change broke, or one whose history the comparison could not
+decide, which blocks the same way; `observe` reports it without blocking, `enforce` fails
+the run on it. A Check is a file that changed under a paragraph that did not, listed
 for a person to read and never a verdict. Pre-existing is the backlog, the problems that were
 already there before this change. The same Fix counts under both profiles; the exit code
 carries the verdict. 0 means the run completed and nothing blocks, 1 means a finding blocks,
