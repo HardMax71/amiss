@@ -310,10 +310,16 @@ pub(super) fn line_resolution(
     let projection = if let Some(cached) = line_projections.get(&range).copied() {
         cached
     } else {
-        resolver.scan.charge(
+        let charged = resolver.scan.charge(
             Aggregate::LineFragmentBytes,
             u64::try_from(body.len()).unwrap_or(u64::MAX),
-        )?;
+        );
+        if let Err(Error::ResourceLimit { .. }) = charged {
+            return Ok(Resolution::UnsupportedSemantics(
+                UnsupportedSemantics::CodeFragment(Target::Blob(blob)),
+            ));
+        }
+        charged?;
         let projection = selected_line_bytes(body, range)
             .map(|selected| line_projection(mode, selected))
             .transpose()?;

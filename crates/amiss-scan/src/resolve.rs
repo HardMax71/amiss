@@ -38,7 +38,7 @@ pub(crate) use line::{named_region_bytes, selected_line_bytes};
 use crate::published::routed;
 use crate::route::normalized_path_under;
 use anchor::{fragment_resolution, linked_label};
-use content::{CachedContent, read_target};
+use content::{CachedContent, located_content};
 use syntax::{same_repo_suffix, split_components, unreadable, unsupported_intent};
 
 pub const TARGET_PROJECTION_DOMAIN: &str = "amiss/scanner-target-projection";
@@ -609,7 +609,7 @@ fn blob_target(
     mode: GitMode,
     oid: &Oid,
 ) -> Result<Target<RepoPath>, Error> {
-    let content = read_target(resolver, path, mode, oid)?;
+    let content = located_content(resolver, path, mode, oid)?;
     let mode = match mode {
         GitMode::RegularFile => BlobMode::Regular,
         GitMode::ExecutableFile => BlobMode::Executable,
