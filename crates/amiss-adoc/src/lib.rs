@@ -156,11 +156,12 @@ fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str)
             .and_then(|(_offset, next)| block::setext_level(line, next))
             .map(|level| Title {
                 level,
-                text: line.trim().to_owned(),
+                text: macros::without_anchors(line),
                 span: (at, at.saturating_add(line.len())),
             });
         underline = setext.is_some();
         if let Some(title) = macros::title(line, at).or(setext) {
+            extraction.anchors.extend(macros::declared_anchors(line));
             // Asciidoctor names a title by its text only when it holds a space or a capital.
             if title.text.contains(' ') || title.text.chars().any(char::is_uppercase) {
                 extraction.anchors.push(title.text.clone());

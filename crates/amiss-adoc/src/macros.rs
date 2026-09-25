@@ -237,69 +237,156 @@ fn boundary(line: &str, index: usize) -> bool {
         .is_none_or(|character| !character.is_alphanumeric() && character != '_')
 }
 
-/// A section title is one to six `=` characters, a space, and the text.
+/// A section title is one to six `=` characters, or the `#` characters
+/// Asciidoctor accepts from Markdown, a space, and the text. An anchor written
+/// into the title is an identity of its own, so the text a generated identity
+/// is made from leaves it out.
 #[must_use]
 pub fn title(line: &str, at: usize) -> Option<Title> {
+    let marker = line
+        .chars()
+        .next()
+        .filter(|first| matches!(first, '=' | '#'))?;
     let level = line
         .chars()
-        .take_while(|character| *character == '=')
+        .take_while(|character| *character == marker)
         .count();
-    if level == 0 || level > 6 {
+    if level > 6 {
         return None;
     }
-    let text = line.get(level..)?.strip_prefix(' ')?.trim();
+    let text = without_anchors(line.get(level..)?.strip_prefix(' ')?);
     if text.is_empty() {
         return None;
     }
     Some(Title {
         level,
-        text: text.to_owned(),
+        text,
         span: (at, at.saturating_add(line.len())),
     })
 }
 
-/// Every identity one line declares: the anchor a line carries alone, in
-/// either spelling, or each anchor written in the flow of its text.
+/// Text with every `[[id]]` anchor taken out and trimmed, which is what
+/// Asciidoctor makes a section's generated identity from.
+#[must_use]
+pub fn without_anchors(text: &str) -> String {
+    let mut kept = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find("[[") {
+        let Some(close) = rest.get(open..).and_then(|tail| tail.find("]]")) else {
+            break;
+        };
+        kept.push_str(rest.get(..open).unwrap_or_default());
+        rest = rest
+            .get(open.saturating_add(close).saturating_add(2)..)
+            .unwrap_or_default();
+    }
+    kept.push_str(rest);
+    kept.trim().to_owned()
+}
+
+/// Every identity one line declares: what a line standing alone as a block
+/// anchor, `[[id,reftext]]`, or as an attribute list names, or else each
+/// anchor, bibliography anchor and `anchor:` macro written in the flow of its
+/// text, with the reference text any of them carries where a natural cross
+/// reference could name it.
 #[must_use]
 pub fn declared_anchors(line: &str) -> Vec<String> {
-    if let Some(alone) = block_anchor(line) {
-        return vec![alone];
+    let trimmed = line.trim();
+    let alone = match trimmed
+        .strip_prefix("[[")
+        .and_then(|rest| rest.strip_suffix("]]"))
+        .filter(|inside| !inside.contains('['))
+    {
+        Some(inside) => named(Some(inside)),
+        None => trimmed
+            .strip_prefix('[')
+            .and_then(|rest| rest.strip_suffix(']'))
+            .map(attribute_ids)
+            .unwrap_or_default(),
+    };
+    if !alone.is_empty() {
+        return alone;
     }
     let skips = passthrough_spans(line);
     let mut found = Vec::new();
     let mut index = 0;
     while let Some(open) = line.get(index..).and_then(|tail| tail.find("[[")) {
         let at = index.saturating_add(open);
-        index = at.saturating_add(2);
+        let bibliography = line.get(at..).is_some_and(|tail| tail.starts_with("[[["));
+        let (fence, closer) = if bibliography {
+            ("[[[", "]]]")
+        } else {
+            ("[[", "]]")
+        };
+        index = at.saturating_add(fence.len());
         let opened = !skips.iter().any(|(start, end)| at >= *start && at < *end)
             && !matches!(
                 line.get(..at).and_then(|before| before.chars().next_back()),
                 Some('\\' | '[')
             );
-        let Some(close) = line.get(index..).and_then(|tail| tail.find("]]")) else {
+        let Some(close) = line.get(index..).and_then(|tail| tail.find(closer)) else {
             break;
         };
-        if opened && let Some(id) = anchor_id(line.get(index..index.saturating_add(close))) {
-            found.push(id);
+        if opened {
+            found.extend(named(line.get(index..index.saturating_add(close))));
         }
-        index = index.saturating_add(close).saturating_add(2);
+        index = index.saturating_add(close).saturating_add(closer.len());
     }
+    found.extend(
+        line.match_indices("anchor:")
+            .filter(|(at, _)| {
+                boundary(line, *at) && !skips.iter().any(|(start, end)| (*start..*end).contains(at))
+            })
+            .filter_map(|(at, name)| {
+                line.get(at.saturating_add(name.len())..)
+                    .and_then(target_of)
+            })
+            .flat_map(|(id, reftext, _end)| named(Some(&format!("{id},{reftext}")))),
+    );
     found
 }
 
-/// An anchor a document declares outright, on its own line, in either spelling.
-fn block_anchor(line: &str) -> Option<String> {
-    let trimmed = line.trim();
-    let inside = trimmed
-        .strip_prefix("[[")
-        .and_then(|rest| rest.strip_suffix("]]"))
-        .or_else(|| {
-            trimmed
-                .strip_prefix("[#")
-                .and_then(|rest| rest.strip_suffix(']'))
-        })?;
-    let id = inside.split(',').next().unwrap_or_default().trim();
-    (!id.is_empty() && !id.contains(char::is_whitespace)).then(|| id.to_owned())
+/// An anchor's identity under Asciidoctor's own grammar, then the reference
+/// text after its comma where a natural cross reference could name it.
+fn named(inside: Option<&str>) -> Vec<String> {
+    let Some(inside) = inside else {
+        return Vec::new();
+    };
+    let (id, reftext) = inside.split_once(',').unwrap_or((inside, ""));
+    anchor_id(Some(id))
+        .into_iter()
+        .chain(reference_text(reftext))
+        .collect()
+}
+
+/// Reference text a natural cross reference names, which Asciidoctor reads as
+/// text rather than as an identity only when it holds a space or a capital.
+#[must_use]
+pub fn reference_text(text: &str) -> Option<String> {
+    let text = text.trim().trim_matches('"');
+    (text.contains(' ') || text.chars().any(char::is_uppercase)).then(|| text.to_owned())
+}
+
+/// The identities one attribute list names: the `#id` shorthand in its first
+/// positional attribute, and its named `id` and `reftext` attributes.
+fn attribute_ids(inside: &str) -> Vec<String> {
+    inside
+        .split(',')
+        .enumerate()
+        .flat_map(|(position, attribute)| {
+            let attribute = attribute.trim();
+            let shorthand = attribute
+                .split_once('#')
+                .filter(|_split| position == 0)
+                .and_then(|(_style, shorthand)| anchor_id(shorthand.split(['.', '%']).next()));
+            let assigned = match attribute.split_once('=') {
+                Some(("id", value)) => anchor_id(Some(value.trim().trim_matches('"'))),
+                Some(("reftext", value)) => reference_text(value),
+                Some(_) | None => None,
+            };
+            shorthand.into_iter().chain(assigned)
+        })
+        .collect()
 }
 
 /// Asciidoctor's own ID grammar, which the flow of text needs and a line
