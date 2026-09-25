@@ -15,7 +15,17 @@ watchdogs, is described in [Security model](security.md).
 Line-fragment work is charged pessimistically: the complete target size, once per
 distinct target identity (path, file mode, and object id) and numeric range. Successful
 and out-of-range results are cached, so repeated identical anchors do not multiply the
-charge. A changed object or mode at the same path is charged again.
+charge. A changed object or mode at the same path is charged again. A range the budget
+cannot afford is not judged: it stays unsupported rather than ending the run, the way a
+heading anchor does below. A value claim is the exception, since it has no unsupported
+outcome, so a claim past the budget still crosses it.
+
+One referenced target past `referenced-target-blob-bytes` costs that target and not the run.
+Its path resolves from the tree without its bytes being read, its evidence digests are taken
+from its Git object id under their own domain, which moves exactly when the bytes do, and a
+fragment into it stays unsupported. A link to a demo video or a large generated file therefore
+resolves on every commit, and deleting the file is still a missing target. A value claim reads
+its target line, so a claim on such a file still crosses the ceiling.
 
 Heading-anchor work is charged the same way and by the same rule, once per target identity
 rather than per anchor, because the identities every known renderer would publish are built
