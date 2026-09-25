@@ -46,6 +46,11 @@ pub fn blocks(text: &str) -> Vec<Block> {
             }
         }
 
+        if paragraph.as_ref().is_some_and(|block| {
+            setext_level(text.get(block.span.0..start).unwrap_or_default(), line).is_some()
+        }) {
+            continue;
+        }
         if let Some((fence, delimiter)) = fence_of(line) {
             flush(&mut found, &mut paragraph, start);
             open.push((fence, delimiter, offset));
@@ -77,6 +82,30 @@ pub fn blocks(text: &str) -> Vec<Block> {
     }
     found.sort_by_key(|block| block.span);
     found
+}
+
+/// The level a two-line section title declares, Asciidoctor's own rule: one
+/// line that opens with neither a space nor a dot and carries no list marker,
+/// over a run of `=`, `-`, `~`, `^` or `+` within one character of its length.
+#[must_use]
+pub fn setext_level(title: &str, underline: &str) -> Option<usize> {
+    let title = title.strip_suffix('\n').unwrap_or(title);
+    let title = title.strip_suffix('\r').unwrap_or(title);
+    let underline = underline.trim_end();
+    let marker = underline.chars().next()?;
+    let level = ['=', '-', '~', '^', '+']
+        .iter()
+        .position(|mark| *mark == marker)?
+        .saturating_add(1);
+    let length = underline.chars().count();
+    (length >= 2
+        && underline.chars().all(|character| character == marker)
+        && !title.contains('\n')
+        && !title.trim().is_empty()
+        && !title.starts_with([' ', '\t', '.'])
+        && !is_list_item(title)
+        && title.chars().count().abs_diff(length) < 2)
+        .then_some(level)
 }
 
 fn flush(found: &mut Vec<Block>, paragraph: &mut Option<Block>, end: usize) {
