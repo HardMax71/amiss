@@ -327,12 +327,12 @@ intersphinx anywhere, which can bring in another project's glossary through an e
 that never names it. An image a substitution
 definition names, `.. |logo| image:: logo.png`, is an image like any other, and the link an
 image or figure opens, its `:target:` option, is a destination of its own. A relative
-`:doc:` target resolves beside its document, read under the suffix its root reads and again
+`:doc:` target resolves beside its document, read under each suffix its root reads and again
 as the author wrote it, so a docname carrying a dot of its own reaches the file that name
 takes the suffix of. One already spelled with a suffix keeps it, since that spelling was the
 adapter's and the adapter runs before any root is known. A
 source-root-absolute one resolves under the directory holding `conf.py` when that file sits
-above the document in the tree, under the suffix that `conf.py` declares, and stays a declared
+above the document in the tree, under each suffix that `conf.py` declares, and stays a declared
 site route when nothing names the Sphinx root. An entry of a `toctree` body is a docname the
 same way and resolves the same way, bare or as `Title <docname>`; its options, `self`, URLs,
 and glob patterns name no single document and are passed over. A `:ref:` resolves against the snapshot's label table, built after
@@ -366,9 +366,10 @@ same table, which a MyST document fills through `(name)=`, its attribute blocks,
 at that same table: `[text](name)` where the tree holds no such file, and `[text](#name)` where
 the document itself publishes no such identity, are looked up as labels before either is
 reported missing, so the tree keeps whatever answer it had and a name nobody declares stays
-the missing target it was. A source-root docname such as `` {doc}`/api` `` stays a declared
-site route in a Markdown document, because the root lookup that answers one is read for
-reStructuredText alone. Every other role is counted and left alone: `` {py:class}`Widget` ``,
+the missing target it was. A source-root docname such as `` {doc}`/api` `` resolves under that
+root the same way, and a root that loads MyST reads `.md` beside the suffixes `conf.py`
+declares, since MyST adds it when it loads, so a `:doc:` and a `{doc}` each reach a page
+written in the other format. Every other role is counted and left alone: `` {py:class}`Widget` ``,
 `` {func}`echo` `` and `` {issue}`4211` `` name a domain inventory Sphinx builds while it runs
 or a link template `conf.py` holds, so each is recorded as unsupported semantics rather than
 resolved, guessed, or reported missing. A plain link can name the same object,
