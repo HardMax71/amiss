@@ -41,6 +41,7 @@ pub(crate) fn log<'report, P, R, M, E>(
     Log {
         schema: "https://json.schemastore.org/sarif-2.1.0.json",
         runs: [Run {
+            column_kind: "unicodeCodePoints",
             invocations: [Invocation {
                 execution_successful: payload.result.complete,
                 exit_code: payload.result.exit_code,

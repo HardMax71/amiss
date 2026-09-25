@@ -75,6 +75,10 @@ fn typed_sarif_preserves_optional_fields_and_canonical_order() {
     let bytes = serde_json::to_vec(&log).unwrap();
     assert_eq!(bytes, serde_json_canonicalizer::to_vec(&log).unwrap());
     let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        value["runs"][0]["columnKind"], "unicodeCodePoints",
+        "a run with results names the unit its columns count, as SARIF requires"
+    );
     let run = &value["runs"][0];
     let invocation = &run["invocations"][0];
     assert_eq!(invocation["executionSuccessful"], false);
