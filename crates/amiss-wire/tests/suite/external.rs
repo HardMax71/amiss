@@ -1237,23 +1237,31 @@ fn forge_facts_refute_only_after_visibility_and_resolution() {
 #[test]
 fn stray_or_repeated_evidence_invalidates_the_assessment() {
     let plan = planned(introduced("https://a.example/x"));
-    for rows in [
-        vec![probe("https://other.example/y", "get", 200)],
-        vec![
-            probe("https://a.example/x", "get", 200),
-            probe("https://a.example/x", "head", 200),
-        ],
-        vec![forge_row("https://a.example/x", "readable", None)],
+    for (rows, refusal) in [
+        (
+            vec![probe("https://other.example/y", "get", 200)],
+            "evidence row 1 names https://other.example/y, which the plan did not introduce",
+        ),
+        (
+            vec![
+                probe("https://a.example/x", "get", 200),
+                probe("https://a.example/x", "head", 200),
+            ],
+            "evidence row 2 repeats https://a.example/x, which an earlier row already answered",
+        ),
+        (
+            vec![forge_row("https://a.example/x", "readable", None)],
+            "evidence row 1 answers https://a.example/x through a forge API, but the plan introduced it as a plain URL",
+        ),
     ] {
-        assert!(matches!(
-            assess(
-                &serde_json_canonicalizer::to_vec(&plan).unwrap(),
-                &evidence(&plan, rows),
-                "0.0.0",
-                sample_digest(),
-            ),
-            Err(AssessDefect::UnboundEvidence)
-        ));
+        let defect = assess(
+            &serde_json_canonicalizer::to_vec(&plan).unwrap(),
+            &evidence(&plan, rows),
+            "0.0.0",
+            sample_digest(),
+        )
+        .unwrap_err();
+        assert_eq!(defect.to_string(), refusal);
     }
     let Value::Object(members) = serde_json::from_slice::<Value>(&evidence(&plan, Vec::new()))
         .expect("the evidence is strict JSON")
@@ -1273,7 +1281,7 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
             "0.0.0",
             sample_digest()
         ),
-        Err(AssessDefect::UnboundEvidence)
+        Err(AssessDefect::ForeignPlan { .. })
     ));
 }
 
@@ -1387,7 +1395,7 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
             "0.0.0",
             sample_digest()
         ),
-        Err(AssessDefect::UnboundEvidence)
+        Err(AssessDefect::UnplannedTail { row: 1, .. })
     ));
     let visibility_only = assess(
         &serde_json_canonicalizer::to_vec(&plan).unwrap(),
