@@ -80,6 +80,12 @@ pub enum SourceConstruct {
     MdbookInclude,
     #[strum(serialize = "markdown-mkdocs-snippet")]
     MkdocsSnippet,
+    #[strum(serialize = "markdown-liquid-link")]
+    MarkdownLiquidLink,
+    #[strum(serialize = "markdown-liquid-url")]
+    MarkdownLiquidUrl,
+    #[strum(serialize = "markdown-hugo-ref")]
+    MarkdownHugoRef,
     #[strum(serialize = "html-anchor")]
     HtmlAnchor,
     #[strum(serialize = "html-image")]

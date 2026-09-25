@@ -379,7 +379,7 @@ fn resolve_destination(
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute),
             ));
         }
-        if generator_alias(path_part) {
+        if generator_alias(path_part, construct) {
             return Ok((
                 unsupported_intent(query, fragment),
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),

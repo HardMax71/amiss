@@ -529,6 +529,64 @@ fn a_download_names_a_file_and_a_numref_a_label() {
     ));
 }
 
+/// A Jekyll `link` or `post_url` tag names a file under the site source, and a
+/// Hugo `ref` names a page beside the page, under the language's content or
+/// by its bare name in any case; one naming nothing fails the build, so it is missing,
+/// while the same tag with no generator declared above it is undecided.
+#[test]
+fn a_generator_template_names_a_file_of_its_site() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("site/_config.yml", "title: probe\n"),
+            ("site/_docs/data.md", "# Data\n"),
+            ("site/_posts/2020-01-02-hello.markdown", "# Hello\n"),
+            (
+                "site/guide.md",
+                "[a]({% link _docs/data.md %})\n\n[b]({% post_url 2020-01-02-hello %})\n\n[c]({% link _docs/gone.md %})\n",
+            ),
+            ("web/hugo.toml", "title = 'probe'\n"),
+            ("web/content/en/docs/releases.md", "# Releases\n\n## Cadence\n"),
+            ("web/content/en/community/_index.md", "# Community\n"),
+            (
+                "web/content/en/docs/guide.md",
+                "[a]({{< ref \"releases.md#cadence\" >}})\n\n[b]({{<relref community >}})\n\n[c]({{< relref \"/docs/releases\" >}})\n\n[d]({{< ref \"gone.md\" >}})\n\n[e]({{< ref \"Community\" >}})\n",
+            ),
+            ("loose/page.md", "[a]({% link _docs/data.md %})\n"),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    for (document, line) in [
+        ("site/guide.md", 1),
+        ("site/guide.md", 3),
+        ("web/content/en/docs/guide.md", 1),
+        ("web/content/en/docs/guide.md", 3),
+        ("web/content/en/docs/guide.md", 5),
+        ("web/content/en/docs/guide.md", 9),
+    ] {
+        assert!(
+            matches!(answer(&rows, document, line), Resolution::Resolved { .. }),
+            "{document}:{line}: {:?}",
+            answer(&rows, document, line)
+        );
+    }
+    for (document, line) in [("site/guide.md", 5), ("web/content/en/docs/guide.md", 7)] {
+        assert!(
+            matches!(
+                answer(&rows, document, line),
+                Resolution::Missing(Missing::PathNotFound { .. })
+            ),
+            "{document}:{line}: {:?}",
+            answer(&rows, document, line)
+        );
+    }
+    assert!(matches!(
+        answer(&rows, "loose/page.md", 1),
+        Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent)
+    ));
+}
+
 /// A `:term:` names a glossary term any page of the root declares, in any
 /// case. One nobody declares is missing, unless intersphinx is loaded, since
 /// then it may be another project's term.

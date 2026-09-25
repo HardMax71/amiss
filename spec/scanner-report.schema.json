@@ -2949,6 +2949,9 @@
         "markdown-link-reference-definition",
         "markdown-mdbook-include",
         "markdown-mkdocs-snippet",
+        "markdown-liquid-link",
+        "markdown-liquid-url",
+        "markdown-hugo-ref",
         "html-anchor",
         "html-image"
       ]
@@ -2986,6 +2989,9 @@
         "markdown-link-reference-definition",
         "markdown-mdbook-include",
         "markdown-mkdocs-snippet",
+        "markdown-liquid-link",
+        "markdown-liquid-url",
+        "markdown-hugo-ref",
         "html-anchor",
         "html-image"
       ]
