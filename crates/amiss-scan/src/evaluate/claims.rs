@@ -8,7 +8,7 @@ use amiss_wire::report::model::{
 };
 use amiss_wire::report::{FindingKind, FixKind};
 
-use crate::claim::{ClaimMissingReason, ClaimVerdict};
+use crate::claim::{ClaimMissingReason, ClaimVerdict, Moved};
 use crate::scanned::SpanDisplay;
 
 use super::control::control_fact_finding;
@@ -32,6 +32,7 @@ pub struct ClaimGroup {
     pub observed: ClaimObserved,
     pub observed_digest: Option<Digest>,
     pub observed_line: Option<Vec<u8>>,
+    pub moved: Moved,
 }
 
 pub(crate) fn source_multiplicities(
@@ -60,20 +61,23 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
         observed: ClaimObserved,
         observed_digest: Option<Digest>,
         observed_line: Option<&'outcome [u8]>,
+        moved: Option<&'outcome Moved>,
     }
 
     let mut keyed: BTreeMap<(&RepoPath, &str, FindingKind), Vec<Keyed<'_>>> = BTreeMap::new();
     for outcome in outcomes {
-        let (kind, observed, observed_digest, observed_line) = match &outcome.verdict {
+        let (kind, observed, observed_digest, observed_line, moved) = match &outcome.verdict {
             ClaimVerdict::Attested => continue,
             ClaimVerdict::Broken {
                 observed_digest,
                 observed,
+                moved,
             } => (
                 FindingKind::ClaimBroken,
                 ClaimObserved::LineDiffers,
                 Some(*observed_digest),
                 Some(observed.as_slice()),
+                Some(moved),
             ),
             ClaimVerdict::TargetMissing(reason) => (
                 FindingKind::ClaimTargetMissing,
@@ -83,6 +87,7 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
                     ClaimMissingReason::LfsPointer => ClaimObserved::TargetLfsPointer,
                     ClaimMissingReason::LineOutOfRange => ClaimObserved::LineOutOfRange,
                 },
+                None,
                 None,
                 None,
             ),
@@ -96,6 +101,7 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
                 observed,
                 observed_digest,
                 observed_line,
+                moved,
             });
     }
     keyed
@@ -120,6 +126,7 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
                 observed: representative.observed,
                 observed_digest: representative.observed_digest,
                 observed_line: representative.observed_line.map(<[u8]>::to_vec),
+                moved: representative.moved.cloned().unwrap_or(Moved::Nowhere),
             })
         })
         .collect()
@@ -158,19 +165,20 @@ pub(super) fn claim_finding(group: &ClaimGroup, profile: Profile) -> Result<Find
 
 /// The provable rewrite for a lone broken claim, or None: grouped members
 /// share one finding but not one edit, and a target-missing claim has no
-/// derivable content.
+/// derivable content. Where the expected words moved to one other line, the
+/// claim follows them there; where they sit on several, no one line is the
+/// answer; and only where they are gone is the changed value taken up.
 fn claim_fix(group: &ClaimGroup) -> Option<FindingFix> {
     if group.kind != FindingKind::ClaimBroken || group.member_count != 1 {
         return None;
     }
-    let observed = group.observed_line.as_deref()?;
-    let replacement = crate::claim::rewrite(
-        &group.name,
-        &group.target_path,
-        group.line,
-        observed,
-        group.carrier,
-    )?;
+    let (line, words) = match &group.moved {
+        Moved::To { line, words } => (*line, words.as_slice()),
+        Moved::Ambiguous => return None,
+        Moved::Nowhere => (group.line, group.observed_line.as_deref()?),
+    };
+    let replacement =
+        crate::claim::rewrite(&group.name, &group.target_path, line, words, group.carrier)?;
     let span = group.representative_span?;
     Some(FindingFix {
         path: RepoPathText::try_from(group.document.as_str()?.to_owned()).ok()?,
