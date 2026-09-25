@@ -42,7 +42,7 @@ from this repository's release workflow.
 
 Then check the staged state against the last commit. `--object-format` is `sha1` for nearly
 every repository; `git rev-parse --show-object-format` prints yours. The form below names only
-`HEAD`, so it works on a fresh repository and on a depth-1 clone alike:
+`HEAD`, so it works on a depth-1 clone and on any repository with at least one commit:
 
 ```sh
 amiss check --repo . --object-format sha1 \
