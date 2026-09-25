@@ -157,6 +157,10 @@ declare_taxonomy! {
             meaning: "the staged index file does not parse under the index grammar; remove .git/index and run git reset to rebuild it, or compare two commits instead of the index",
             metadata: Some(&GIT),
         },
+        GitIndexOutsideRepository => {
+            meaning: "GIT_INDEX_FILE names an index outside this repository's own git directory, and the scan reads nothing there; unset it, or run from the repository whose Git process set it",
+            metadata: Some(&GIT),
+        },
         GitIndexUnmerged => {
             meaning: "the index holds unmerged conflict entries, so no single staged state exists; finish or abort the merge before checking the index",
             metadata: Some(&GIT),

@@ -415,21 +415,9 @@ fn run(invocation: &Invocation, reserve: &mut BufWriter<Stdout>) -> ExitCode {
         Ok(input) => input,
         Err(detail) => return fatal(invocation, &engine, &[detail], reserve),
     };
-    let repo = match amiss_git::Repository::open(&invocation.repo, invocation.object_format) {
+    let repo = match open_repository(invocation) {
         Ok(repo) => repo,
-        Err(_defect) => {
-            return fatal(
-                invocation,
-                &engine,
-                &[ErrorDetail {
-                    code: AnalysisErrorCode::GitRepositoryUnavailable,
-                    path: None,
-                    path_bytes: None,
-                    resource: None,
-                }],
-                reserve,
-            );
-        }
+        Err(detail) => return fatal(invocation, &engine, &[detail], reserve),
     };
 
     let identity = invocation.identity.as_ref();
@@ -533,6 +521,26 @@ fn semantic_input(
     let template = amiss_wire::semantic::SemanticEvidenceTemplate::parse(&bytes)
         .map_err(|error| amiss_scan::semantic::configuration_detail(&error))?;
     Ok(amiss_scan::semantic::Input::Template(template))
+}
+
+/// The repository the invocation names, reading the index Git set for this
+/// process when the candidate is the staged state.
+fn open_repository(invocation: &Invocation) -> Result<amiss_git::Repository, ErrorDetail> {
+    let unavailable = |code| ErrorDetail {
+        code,
+        path: None,
+        path_bytes: None,
+        resource: None,
+    };
+    let mut repo = amiss_git::Repository::open(&invocation.repo, invocation.object_format)
+        .map_err(|_defect| unavailable(AnalysisErrorCode::GitRepositoryUnavailable))?;
+    if invocation.candidate == CandidateSelector::Index
+        && let Some(index) = env::var_os("GIT_INDEX_FILE").filter(|index| !index.is_empty())
+    {
+        repo.select_index(std::path::Path::new(&index))
+            .map_err(|_defect| unavailable(AnalysisErrorCode::GitIndexOutsideRepository))?;
+    }
+    Ok(repo)
 }
 
 /// The repair verb pins the index before the evaluation reads it, so the
