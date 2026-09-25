@@ -264,11 +264,11 @@ the findings count has its own separate ceiling in [Limits and refusals](limits.
 
 `--format sarif` writes exactly one line to stdout: a SARIF 2.1.0 log projected from the
 same payload. Every finding row becomes a result under its kind's rule, `fail` as `error`,
-`warn` as `warning`, and `record` as `note`, with the row's own `description` as the message,
-and a row carrying a `fix` projects it as a SARIF fix with the byte region and replacement.
-The finding key rides as a `partialFingerprints` entry, so a consumer that reads it
-deduplicates across runs by the identity the report uses; GitHub code scanning keys alerts on
-its own line hash and ignores fixes. A row located in the base, such as a reference the change
+`warn` as `warning`, and `record` as `note`, with the row's own `description` as the message.
+A row carrying a `fix` projects it as a SARIF fix with the byte region and replacement, and the
+finding key rides as a `partialFingerprints` entry, so a consumer that reads either matches
+results across runs by the identity the report uses. GitHub code scanning reads neither, as
+[CI](ci.md) explains. A row located in the base, such as a reference the change
 resolved or removed, is left out: the line it names is gone from the candidate, and a
 code-scanning tool closes an alert only when its row stops appearing. A location renders
 when the wire path is printable text, percent-encoded into the artifact URI so a hostile
