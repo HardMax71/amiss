@@ -70,6 +70,8 @@ pub enum SourceConstruct {
     RstDownloadRole,
     #[strum(serialize = "rst-numref-role")]
     RstNumrefRole,
+    #[strum(serialize = "rst-term-role")]
+    RstTermRole,
     #[strum(serialize = "rst-target-option")]
     RstTargetOption,
     #[strum(serialize = "markdown-link-reference-definition")]

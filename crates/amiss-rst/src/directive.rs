@@ -106,11 +106,12 @@ fn without_inline_literals(line: &str) -> std::borrow::Cow<'_, str> {
     std::borrow::Cow::Owned(masked)
 }
 
-const SPHINX_ROLES: [(&str, ReferenceKind); 4] = [
+const SPHINX_ROLES: [(&str, ReferenceKind); 5] = [
     (":doc:`", ReferenceKind::DocRole),
     (":download:`", ReferenceKind::DownloadRole),
     (":ref:`", ReferenceKind::RefRole),
     (":numref:`", ReferenceKind::NumrefRole),
+    (":term:`", ReferenceKind::TermRole),
 ];
 
 struct RoleState {
@@ -174,7 +175,7 @@ fn interpreted_text(line: &str, at: usize, found: &mut Vec<Reference>) {
                 let target = written.split_whitespace().collect::<Vec<_>>().join(" ");
                 let phrase_allowed = matches!(
                     role.kind,
-                    ReferenceKind::RefRole | ReferenceKind::NumrefRole
+                    ReferenceKind::RefRole | ReferenceKind::NumrefRole | ReferenceKind::TermRole
                 );
                 let acceptable = !target.is_empty()
                     && (phrase_allowed || !target.contains(' '))

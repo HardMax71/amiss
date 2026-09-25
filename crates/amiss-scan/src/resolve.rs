@@ -195,7 +195,9 @@ impl<'a> Resolver<'a> {
         }
         if matches!(
             occurrence.occurrence.construct,
-            SourceConstruct::RstRefRole | SourceConstruct::RstNumrefRole
+            SourceConstruct::RstRefRole
+                | SourceConstruct::RstNumrefRole
+                | SourceConstruct::RstTermRole
         ) {
             return self.resolve_label(
                 document_path,
