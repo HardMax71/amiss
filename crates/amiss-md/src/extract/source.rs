@@ -142,3 +142,38 @@ pub(super) fn token(suffix: &str, span: (usize, usize)) -> Result<String, Fault>
         .map(str::to_owned)
         .ok_or(Fault::InvalidSourceSpan)
 }
+
+/// The files an agent instruction file pulls in with a line of its own,
+/// `@AGENTS.md`, which Claude Code and Gemini CLI read as an import of that
+/// file beside the one writing it. The last segment has to name a file, so a
+/// package scope such as `@babel/core` is not one. Discovery keeps them only
+/// in the files those tools read.
+pub(super) fn agent_imports(suffix: &str, span: (usize, usize)) -> Vec<((usize, usize), String)> {
+    let mut found = Vec::new();
+    let mut at = span.0;
+    for line in suffix
+        .get(span.0..span.1)
+        .unwrap_or_default()
+        .split_inclusive('\n')
+    {
+        let start = at;
+        at = at.saturating_add(line.len());
+        let trimmed = line.trim();
+        let Some(target) = trimmed.strip_prefix('@') else {
+            continue;
+        };
+        let named = target
+            .rsplit('/')
+            .next()
+            .is_some_and(|last| last.len() > 1 && last.contains('.') && !last.starts_with('.'));
+        if !named || target.starts_with(['/', '~', '@']) || target.contains(char::is_whitespace) {
+            continue;
+        }
+        let from = start.saturating_add(line.len().saturating_sub(line.trim_start().len()));
+        found.push((
+            (from, from.saturating_add(trimmed.len())),
+            target.to_owned(),
+        ));
+    }
+    found
+}

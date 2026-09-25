@@ -2983,6 +2983,7 @@
         "rst-doc-role",
         "rst-ref-role",
         "markdown-link-reference-definition",
+        "markdown-agent-import",
         "html-anchor",
         "html-image"
       ]
@@ -3012,6 +3013,7 @@
         "rst-doc-role",
         "rst-ref-role",
         "markdown-link-reference-definition",
+        "markdown-agent-import",
         "html-anchor",
         "html-image"
       ]

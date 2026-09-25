@@ -82,6 +82,10 @@ pub struct DocumentRecord {
 /// builds for `:ref:`. A name declared twice is marked rather than guessed
 /// between. A document no declaration governs keeps no role, so a brace before
 /// a code span there is the prose it looks like.
+/// The agent instruction files whose `@path` lines import another file:
+/// Claude Code's two and Gemini CLI's.
+const AGENT_IMPORTERS: [&[u8]; 3] = [b"CLAUDE.md", b"CLAUDE.local.md", b"GEMINI.md"];
+
 fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> Result<(), Error> {
     discovery.sphinx_included = sphinx_included(discovery);
     let governed: Vec<bool> = discovery
@@ -98,6 +102,18 @@ fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> 
         let DocumentStatus::Scanned(scanned) = &mut record.status else {
             continue;
         };
+        let file = record.path.as_bytes().rsplit(|byte| *byte == b'/').next();
+        let agent = file.is_some_and(|name| AGENT_IMPORTERS.contains(&name));
+        if !agent
+            && scanned
+                .occurrences
+                .iter()
+                .any(|entry| entry.occurrence.construct == SourceConstruct::MarkdownAgentImport)
+        {
+            Arc::make_mut(scanned)
+                .occurrences
+                .retain(|entry| entry.occurrence.construct != SourceConstruct::MarkdownAgentImport);
+        }
         let reads_roles = match scanned.adapter {
             Adapter::Rst => true,
             Adapter::Markdown => governed,

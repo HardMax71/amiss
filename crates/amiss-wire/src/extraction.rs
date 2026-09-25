@@ -64,6 +64,8 @@ pub enum SourceConstruct {
     RstRefRole,
     #[strum(serialize = "markdown-link-reference-definition")]
     LinkReferenceDefinition,
+    #[strum(serialize = "markdown-agent-import")]
+    MarkdownAgentImport,
     #[strum(serialize = "html-anchor")]
     HtmlAnchor,
     #[strum(serialize = "html-image")]

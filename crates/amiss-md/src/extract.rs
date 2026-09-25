@@ -296,6 +296,7 @@ impl Sweep<'_> {
                 self.declared.extend(heading::glossary_terms(node));
                 directive_declarations(self, span);
                 self.headings.extend(heading::definition_terms(node));
+                self.agent_imports(span, path, *owners);
             }
             Kind::Link { url } => {
                 let children_end = node.children.last().map(|child| child.span.1);
@@ -358,6 +359,18 @@ impl Sweep<'_> {
             Kind::Root | Kind::Other => {}
         }
         Ok(true)
+    }
+
+    /// The agent imports a paragraph writes, each at its own ordinal.
+    fn agent_imports(&mut self, span: (usize, usize), path: &[usize], owners: Owners) {
+        let construct = SourceConstruct::MarkdownAgentImport;
+        for (within, (at, target)) in source::agent_imports(self.suffix, span)
+            .into_iter()
+            .enumerate()
+        {
+            let import_path = [path, &[within]].concat();
+            self.push(construct, target.clone(), target, at, &import_path, owners);
+        }
     }
 
     fn orphan(&mut self, node: &Node, path: &[usize], owners: Owners) {
