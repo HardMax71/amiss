@@ -1118,3 +1118,34 @@ fn an_agent_file_import_is_a_reference() {
             .any(|(document, _)| document == "docs/README.md")
     );
 }
+
+/// Starlight writes `_top` on the title of every page it builds, so the
+/// fragment resolves on any page of a project whose configuration loads it,
+/// and nowhere else.
+#[test]
+fn a_starlight_page_publishes_its_top() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            (
+                "site/astro.config.mjs",
+                "import starlight from '@astrojs/starlight';\nexport default {};\n",
+            ),
+            (
+                "site/src/content/docs/guide.md",
+                "# Guide\n\n[top](#_top)\n",
+            ),
+            ("plain/guide.md", "# Guide\n\n[top](#_top)\n"),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    assert!(matches!(
+        answer(&rows, "site/src/content/docs/guide.md", 3),
+        Resolution::Resolved { .. }
+    ));
+    assert!(matches!(
+        answer(&rows, "plain/guide.md", 3),
+        Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+    ));
+}

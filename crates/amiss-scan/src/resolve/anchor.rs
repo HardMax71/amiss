@@ -125,7 +125,13 @@ fn anchor_resolution(
     fragment: &str,
 ) -> Result<Resolution<RepoPath>, Error> {
     // The HTML standard scrolls `#top`, in any case, to the top of every page.
-    if fragment.eq_ignore_ascii_case("top") {
+    // Starlight writes `_top` on the title of every page it builds.
+    let starlight = resolver
+        .snapshot
+        .starlight_roots
+        .iter()
+        .any(|root| crate::route::within(path.as_bytes(), root));
+    if fragment.eq_ignore_ascii_case("top") || (starlight && fragment == "_top") {
         return Ok(Resolution::Resolved {
             target: Target::Blob(blob),
         });

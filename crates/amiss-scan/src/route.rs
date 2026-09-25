@@ -97,7 +97,7 @@ pub(crate) const ZOLA: RouteRule = RouteRule {
     serves: &[Spelling::ContentRoot],
 };
 
-const ASTRO: RouteRule = RouteRule {
+pub(crate) const ASTRO: RouteRule = RouteRule {
     name: "astro",
     declared_by: &[
         "astro.config.ts",
