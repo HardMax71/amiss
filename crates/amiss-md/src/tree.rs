@@ -1,6 +1,8 @@
 mod markdown;
 mod mdx;
 
+use amiss_wire::extraction::HeadingSource;
+
 pub(crate) use markdown::from_markdown;
 pub(crate) use mdx::from_mdast;
 
@@ -45,6 +47,12 @@ pub(crate) enum Kind {
     LinkReference(Reference),
     ImageReference(Reference),
     Definition(Definition),
+    /// A footnote's call, or its note with the note's blocks as children,
+    /// under the label as written.
+    Footnote {
+        label: String,
+        source: HeadingSource,
+    },
     Other,
 }
 

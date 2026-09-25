@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
-use amiss_wire::extraction::Fault;
+use amiss_wire::extraction::{Fault, HeadingSource};
 use linkify::{LinkFinder, LinkKind};
 use pulldown_cmark::{Event, LinkType, Options, Parser, RefDefs, Tag, TagEnd};
 
@@ -198,10 +198,16 @@ impl Builder<'_> {
                 self.leaf(Kind::InlineCode(text.into_string()), span)?;
             }
             Event::Html(_) | Event::InlineHtml(_) => self.leaf(Kind::Html, span)?,
-            Event::FootnoteReference(_)
-            | Event::HardBreak
-            | Event::Rule
-            | Event::TaskListMarker(_) => self.leaf(Kind::Other, span)?,
+            Event::FootnoteReference(label) => {
+                let kind = Kind::Footnote {
+                    label: label.into_string(),
+                    source: HeadingSource::FootnoteReference,
+                };
+                self.leaf(kind, span)?;
+            }
+            Event::HardBreak | Event::Rule | Event::TaskListMarker(_) => {
+                self.leaf(Kind::Other, span)?;
+            }
         }
         Ok(())
     }
@@ -301,9 +307,15 @@ fn open(tag: Tag<'_>, definitions: &RefDefs<'_>) -> Result<(Kind, bool), Fault> 
             },
             true,
         ),
+        Tag::FootnoteDefinition(label) => (
+            Kind::Footnote {
+                label: label.into_string(),
+                source: HeadingSource::FootnoteDefinition,
+            },
+            false,
+        ),
         Tag::BlockQuote(_)
         | Tag::List(_)
-        | Tag::FootnoteDefinition(_)
         | Tag::DefinitionList
         | Tag::DefinitionListTitle
         | Tag::DefinitionListDefinition

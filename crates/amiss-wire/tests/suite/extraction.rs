@@ -19,6 +19,8 @@ fn block_and_heading_names_are_nonempty_and_distinct() {
         HeadingSource::Rst,
         HeadingSource::RawHtml,
         HeadingSource::DefinitionTerm,
+        HeadingSource::FootnoteReference,
+        HeadingSource::FootnoteDefinition,
     ]
     .map(Into::<&'static str>::into);
     for table in [blocks.as_slice(), sources.as_slice()] {
