@@ -6,6 +6,11 @@ There is no working-directory mode, no branch-name resolution, and no fetching. 
 object is not in the local object store, the run refuses; see
 [Limits and refusals](limits.md).
 
+The staged index is the one Git keeps for this process: `index` in the private git directory,
+or the file `GIT_INDEX_FILE` names when Git sets it, as it does for a hook under
+`git commit -a` or a partial commit. That file has to sit in the same private git directory;
+one anywhere else is refused with `GIT_INDEX_OUTSIDE_REPOSITORY` rather than read.
+
 ## What refs name
 
 Branch refs describe identity and link scope; they never select either snapshot. The rolling
