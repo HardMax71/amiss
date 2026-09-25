@@ -34,6 +34,8 @@ pub(crate) fn from_markdown(suffix: &str, options: Options) -> Result<Node, Faul
     } else {
         suffix
     };
+    let bodies = admonition_bodies(suffix)?;
+    let suffix = bodies.as_deref().unwrap_or(suffix);
     let mut events = Parser::new_ext(suffix, options).into_offset_iter();
     let winners = events.reference_definitions().clone();
     let definitions = definitions(suffix, options, &winners)?;
@@ -55,6 +57,88 @@ pub(crate) fn from_markdown(suffix: &str, options: Options) -> Result<Node, Faul
         )?;
     }
     builder.finish()
+}
+
+/// Python-Markdown's admonition, details and tabbed extensions nest a block
+/// under an opener line, `!!! note`, `??? tip` or `=== "Tab"`, indented four
+/// columns past it, which `CommonMark` reads as indented code once a blank
+/// line comes first. A bullet written into the indentation of the body's
+/// first line makes the body a list item whose content starts at that same
+/// column, and a space swapped for a bullet keeps every offset. A line inside
+/// a fence shows the syntax rather than using it.
+fn admonition_bodies(suffix: &str) -> Result<Option<String>, Fault> {
+    let mut bytes = suffix.as_bytes().to_vec();
+    let mut written = false;
+    let mut opener: Option<usize> = None;
+    let mut fence: Option<(char, usize)> = None;
+    let mut start = 0_usize;
+    for line in suffix.split_inclusive('\n') {
+        let body = line.trim_start_matches(' ');
+        let indent = line.len().saturating_sub(body.len());
+        let line_start = start;
+        start = start.saturating_add(line.len());
+        if body.trim().is_empty() {
+            continue;
+        }
+        if let Some(column) = opener.take()
+            && indent == column.saturating_add(4)
+            && let Some(byte) = bytes.get_mut(line_start.saturating_add(column))
+        {
+            *byte = b'-';
+            written = true;
+        }
+        let run = fence_run(body);
+        match (fence, run) {
+            (Some((mark, open)), Some((close_mark, close)))
+                if close_mark == mark
+                    && close >= open
+                    && body.trim_start_matches(mark).trim().is_empty() =>
+            {
+                fence = None;
+            }
+            (Some(_), _) => {}
+            (None, Some(_)) => fence = run,
+            (None, None) => opener = opens(body).then_some(indent),
+        }
+    }
+    if !written {
+        return Ok(None);
+    }
+    String::from_utf8(bytes)
+        .map(Some)
+        .map_err(|_invalid| Fault::ParserError)
+}
+
+/// The fence character a line opens or closes with and how many of it run.
+fn fence_run(body: &str) -> Option<(char, usize)> {
+    ['`', '~'].into_iter().find_map(|mark| {
+        let run = body
+            .len()
+            .saturating_sub(body.trim_start_matches(mark).len());
+        (run >= 3).then_some((mark, run))
+    })
+}
+
+/// An opener as the three extensions spell it: `!!!`, `???` or `???+`, one
+/// optional space, type words and an optional quoted title; or `===` with
+/// its `!` and `+` flags, a space, and a quoted title.
+fn opens(body: &str) -> bool {
+    let line = body.trim_end();
+    let word = |next: char| next.is_alphanumeric() || matches!(next, '_' | '-');
+    if let Some(rest) = ["???+", "!!!", "???"]
+        .into_iter()
+        .find_map(|marker| line.strip_prefix(marker))
+    {
+        let rest = rest.strip_prefix(' ').unwrap_or(rest);
+        let (words, title) = rest.split_once(" \"").unwrap_or((rest, "\""));
+        return words.starts_with(word)
+            && words.chars().all(|next| word(next) || next == ' ')
+            && title.ends_with('"');
+    }
+    line.strip_prefix("===")
+        .map(|rest| rest.trim_start_matches(['!', '+']))
+        .and_then(|rest| rest.strip_prefix(' '))
+        .is_some_and(|title| title.trim_start().starts_with('"') && title.ends_with('"'))
 }
 
 /// How many times the document is parsed again for definitions `CommonMark`

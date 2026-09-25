@@ -7,6 +7,14 @@ Each occurrence keeps two spellings of its destination. The raw one is the exact
 the source. The semantic one is what those bytes mean after the format's own decoding. So `[a](&amp;b)` records both `&amp;b` and `&b`, and a change to
 either the spelling or the meaning is visible later.
 
+Markdown is read the way Python-Markdown nests a block under an opener line. The
+admonition, details and tabbed extensions put a body under `!!! note`, `??? tip` or
+`=== "Tab"` by indenting it four columns, which CommonMark reads as indented code once a
+blank line comes before it. That body is parsed as Markdown instead, so a link inside a
+MkDocs admonition is checked like any other, and the same lines inside a fence stay the
+example they show. Across the corpus only MkDocs trees write an opener with a body under
+it, so the reading is not gated on a `mkdocs.yml`.
+
 What the parser cannot see into is declared instead of skipped. Raw HTML blocks and [MDX](https://mdxjs.com)
 expressions become opaque regions, reported with their size and place as
 `opaque-html-region` and `opaque-mdx-region` findings, so a link hidden inside JSX is a
