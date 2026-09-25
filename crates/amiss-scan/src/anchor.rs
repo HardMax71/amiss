@@ -37,6 +37,7 @@ pub enum Keep {
     AlphabeticNumericUnderscore,
     AsciiAlphanumeric,
     AnythingButC0,
+    MdnId,
 }
 
 /// The characters a renderer turns into a separator. A hyphen is one under
@@ -84,11 +85,13 @@ pub enum Head {
     StripNonLetter,
 }
 
-/// Whether a run of separators becomes one separator.
+/// Whether a run of separators becomes one separator, or only a run of
+/// ASCII whitespace does, before it is mapped, so written underscores stay.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Runs {
     AsWritten,
     Collapse,
+    CollapseWhitespace,
 }
 
 /// Whether separators at either end survive.
@@ -115,12 +118,15 @@ pub enum RawHtml {
     Ignored,
 }
 
-/// Whether the renderer builds an identity from a definition-list term. Only
-/// Hugo does, under `autoDefinitionTermID`, and it numbers a repeat on the
-/// same counter the headings use.
+/// Whether the renderer builds an identity from a definition-list term. Hugo
+/// does under `autoDefinitionTermID`, numbering a repeat on the same counter
+/// the headings use. MDN names its terms and its raw HTML headings once every
+/// Markdown heading holds its identity, numbering each from `_2` against all
+/// of them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Terms {
     Anchored,
+    AfterHeadings,
     Ignored,
 }
 
@@ -156,6 +162,9 @@ pub struct AnchorRule {
     pub attribute: Attribute,
     pub raw_html: RawHtml,
     pub terms: Terms,
+    /// The files whose presence on a target's ancestor chain turns the rule
+    /// on; a rule declared by nothing is read in every tree.
+    pub declared_by: &'static [&'static str],
 }
 
 /// The rule github.com publishes heading identities under, which is also the
@@ -182,6 +191,7 @@ const fn github() -> AnchorRule {
         attribute: Attribute::Literal,
         raw_html: RawHtml::Anchored,
         terms: Terms::Ignored,
+        declared_by: &[],
     }
 }
 
@@ -196,10 +206,14 @@ pub const DEFINITION_TERMS: AnchorRule = AnchorRule {
     ..github()
 };
 
+/// The front-matter schema MDN's content repositories keep at their root, the
+/// one file that marks a tree rari builds.
+const MDN_CONTENT: &[&str] = &["front-matter-config.json", ".front-matter-config.json"];
+
 /// Every renderer rule the resolver knows. Adding one can only grow the set an
 /// anchor may match, so the set is the union and a missing rule is the only
 /// way to report a live anchor as absent.
-pub const RULES: [AnchorRule; 12] = [
+pub const RULES: [AnchorRule; 13] = [
     github(),
     AnchorRule {
         name: "gitea",
@@ -221,6 +235,7 @@ pub const RULES: [AnchorRule; 12] = [
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
         terms: Terms::Ignored,
+        declared_by: &[],
     },
     AnchorRule {
         name: "forgejo",
@@ -242,6 +257,7 @@ pub const RULES: [AnchorRule; 12] = [
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
         terms: Terms::Ignored,
+        declared_by: &[],
     },
     AnchorRule {
         name: "mdbook",
@@ -263,6 +279,7 @@ pub const RULES: [AnchorRule; 12] = [
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
         terms: Terms::Ignored,
+        declared_by: &[],
     },
     AnchorRule {
         name: "mdbook-smart",
@@ -284,6 +301,7 @@ pub const RULES: [AnchorRule; 12] = [
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
         terms: Terms::Ignored,
+        declared_by: &[],
     },
     AnchorRule {
         name: "goldmark",
@@ -305,6 +323,7 @@ pub const RULES: [AnchorRule; 12] = [
         attribute: Attribute::Literal,
         raw_html: RawHtml::Ignored,
         terms: Terms::Ignored,
+        declared_by: &[],
     },
     AnchorRule {
         name: "python-markdown",
@@ -326,6 +345,7 @@ pub const RULES: [AnchorRule; 12] = [
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
         terms: Terms::Ignored,
+        declared_by: &[],
     },
     AnchorRule {
         name: "pymdownx",
@@ -347,6 +367,7 @@ pub const RULES: [AnchorRule; 12] = [
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
         terms: Terms::Ignored,
+        declared_by: &[],
     },
     AnchorRule {
         name: "mdit-vue",
@@ -368,6 +389,7 @@ pub const RULES: [AnchorRule; 12] = [
         attribute: Attribute::Honored,
         raw_html: RawHtml::Ignored,
         terms: Terms::Ignored,
+        declared_by: &[],
     },
     AnchorRule {
         name: "kramdown",
@@ -389,6 +411,7 @@ pub const RULES: [AnchorRule; 12] = [
         attribute: Attribute::Literal,
         raw_html: RawHtml::Ignored,
         terms: Terms::Ignored,
+        declared_by: &[],
     },
     AnchorRule {
         name: "asciidoctor",
@@ -410,6 +433,7 @@ pub const RULES: [AnchorRule; 12] = [
         attribute: Attribute::Literal,
         raw_html: RawHtml::Ignored,
         terms: Terms::Ignored,
+        declared_by: &[],
     },
     AnchorRule {
         name: "docutils",
@@ -431,6 +455,29 @@ pub const RULES: [AnchorRule; 12] = [
         attribute: Attribute::Literal,
         raw_html: RawHtml::Ignored,
         terms: Terms::Ignored,
+        declared_by: &[],
+    },
+    AnchorRule {
+        name: "mdn",
+        typography: Typography::Plain,
+        normalize: Normalize::None,
+        fold: Fold::None,
+        head: Head::AsWritten,
+        trim: Trim::AfterRemoval,
+        case: Case::FullBeforeFilter,
+        keep: Keep::MdnId,
+        separators: Separators::Space,
+        runs: Runs::CollapseWhitespace,
+        edges: Edges::AsWritten,
+        leading_digit_prefix: None,
+        separator: '_',
+        prefix: None,
+        empty: Empty::Fill("sect"),
+        duplicates: Duplicates::UnderscoreFromTwo,
+        attribute: Attribute::Literal,
+        raw_html: RawHtml::Anchored,
+        terms: Terms::AfterHeadings,
+        declared_by: MDN_CONTENT,
     },
 ];
 
@@ -607,7 +654,7 @@ pub(crate) const MYST_LINK: DeclarationRule = DeclarationRule {
 /// renderer's slug, plus the spellings a declared generator owns, grouped
 /// by the profile that reads each one. An identity rule joins the union beside
 /// the renderer rules, so it can only grow the set an anchor may match.
-pub const DECLARATIONS: [DeclarationRule; 24] = [
+pub const DECLARATIONS: [DeclarationRule; 25] = [
     DeclarationRule {
         name: "html-id",
         spelling: "an `id` or `name` attribute on a raw HTML element, or on one written \
@@ -693,6 +740,12 @@ pub const DECLARATIONS: [DeclarationRule; 24] = [
         name: "mdx-partial",
         spelling: "a default import of a relative document, rendered as an element",
         adapters: &[Adapter::Mdx],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "mdn-interactive-example",
+        spelling: "an `InteractiveExample` macro call, which renders a `Try it` heading",
+        adapters: &[Adapter::Markdown],
         declared_by: &[],
     },
     DeclarationRule {

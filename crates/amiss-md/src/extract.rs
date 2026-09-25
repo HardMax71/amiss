@@ -272,7 +272,10 @@ impl Sweep<'_> {
             }
             Kind::Html => self.html_entry(span, path, *owners),
             Kind::Heading => heading_entry(self, node),
-            Kind::ListItem => owners.list_item = Some(span),
+            Kind::ListItem => {
+                owners.list_item = Some(span);
+                self.headings.extend(heading::mdn_term(node));
+            }
             Kind::TableCell => owners.cell = Some(span),
             Kind::Paragraph => {
                 owners.paragraph = Some(span);
@@ -327,6 +330,7 @@ impl Sweep<'_> {
                         self.snippets.extend(content_tab(line, span));
                         self.snippets.extend(shortcode_call(line, span));
                         self.declared.extend(heading::myst_target(line));
+                        self.declared.extend(heading::interactive_example(line));
                     }
                 }
                 let after_node = path.last().is_some_and(|index| *index > 0);

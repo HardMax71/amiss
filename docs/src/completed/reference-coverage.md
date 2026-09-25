@@ -29,7 +29,7 @@ transcription is not checked against, because a rule that quietly stops matching
 exactly like one that still matches.
 
 What the rules are and how far apart they sit is
-[What twelve renderers call a heading](../anchor-rules.md). Published in
+[What thirteen renderers call a heading](../anchor-rules.md). Published in
 [#135](https://github.com/hardmax71/amiss/pull/135), pinned in
 [#137](https://github.com/hardmax71/amiss/pull/137), resolved in
 [#138](https://github.com/hardmax71/amiss/pull/138), then extended over four more changes to reach

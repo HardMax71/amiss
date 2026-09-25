@@ -111,6 +111,14 @@
         "expectations": "transcribed from docutils.nodes make_id, _non_id_chars and _non_id_at_ends, then hand-traced case by case",
         "cross_checked": "not cross-checked against a running Docutils; make_id returning nothing is published as no anchor here, where a document assigns a serial id instead",
         "source": "https://sourceforge.net/p/docutils/code/HEAD/tree/trunk/docutils/docutils/nodes.py"
+      },
+      {
+        "name": "mdn",
+        "serves": [
+          "MDN Web Docs"
+        ],
+        "expectations": "rari's anchorize at a86696d, compiled from crates/rari-md/src/anchor.rs and run over each case",
+        "source": "https://github.com/mdn/rari/blob/main/crates/rari-md/src/anchor.rs"
       }
     ]
   },
@@ -131,7 +139,8 @@
         "mdit-vue": "setup-config",
         "kramdown": "setup--config",
         "asciidoctor": "_setup_config",
-        "docutils": "setup-config"
+        "docutils": "setup-config",
+        "mdn": "setup_config"
       }
     },
     {
@@ -150,7 +159,8 @@
         "mdit-vue": "foo-bar-baz",
         "kramdown": "foobar-baz",
         "asciidoctor": "_foo_bar_baz",
-        "docutils": "foo-bar-baz"
+        "docutils": "foo-bar-baz",
+        "mdn": "foo_bar_baz"
       }
     },
     {
@@ -169,7 +179,8 @@
         "mdit-vue": "a-b",
         "kramdown": "a----b",
         "asciidoctor": "_ab",
-        "docutils": "a-b"
+        "docutils": "a-b",
+        "mdn": "a_--_b"
       }
     },
     {
@@ -188,7 +199,8 @@
         "mdit-vue": "a-b",
         "kramdown": "a--b",
         "asciidoctor": "_a_b",
-        "docutils": "a-b"
+        "docutils": "a-b",
+        "mdn": "a_..._b"
       }
     },
     {
@@ -207,7 +219,8 @@
         "mdit-vue": "a-b",
         "kramdown": "a--b",
         "asciidoctor": "_a_b",
-        "docutils": "a-b"
+        "docutils": "a-b",
+        "mdn": "a_b"
       }
     },
     {
@@ -226,7 +239,8 @@
         "mdit-vue": "_100",
         "kramdown": "section",
         "asciidoctor": "_100",
-        "docutils": null
+        "docutils": null,
+        "mdn": "100"
       }
     },
     {
@@ -245,7 +259,8 @@
         "mdit-vue": "_2026",
         "kramdown": "section",
         "asciidoctor": "_2026",
-        "docutils": null
+        "docutils": null,
+        "mdn": "2026"
       }
     },
     {
@@ -264,7 +279,8 @@
         "mdit-vue": "_3d-printing",
         "kramdown": "d-printing",
         "asciidoctor": "_3d_printing",
-        "docutils": "d-printing"
+        "docutils": "d-printing",
+        "mdn": "3d_printing"
       }
     },
     {
@@ -283,7 +299,8 @@
         "mdit-vue": "hyphen",
         "kramdown": "hyphen-",
         "asciidoctor": "_hyphen",
-        "docutils": "hyphen"
+        "docutils": "hyphen",
+        "mdn": "-hyphen-"
       }
     },
     {
@@ -302,7 +319,8 @@
         "mdit-vue": "a-b-c",
         "kramdown": "abc",
         "asciidoctor": "_a_b_c",
-        "docutils": "a-b-c"
+        "docutils": "a-b-c",
+        "mdn": "a.b.c"
       }
     },
     {
@@ -321,7 +339,8 @@
         "mdit-vue": "c-c",
         "kramdown": "c--c",
         "asciidoctor": "_c_c",
-        "docutils": "c-c"
+        "docutils": "c-c",
+        "mdn": "c_c"
       }
     },
     {
@@ -340,7 +359,8 @@
         "mdit-vue": "what-is-code",
         "kramdown": "what-is-code",
         "asciidoctor": "_what_is_code",
-        "docutils": "what-is-code"
+        "docutils": "what-is-code",
+        "mdn": "what_is_code"
       }
     },
     {
@@ -359,7 +379,8 @@
         "mdit-vue": "resume-cv",
         "kramdown": "rsum--cv",
         "asciidoctor": "_résumé_cv",
-        "docutils": "resume-cv"
+        "docutils": "resume-cv",
+        "mdn": "résumé_cv"
       }
     },
     {
@@ -378,7 +399,8 @@
         "mdit-vue": "cafe-latte",
         "kramdown": "cafe-latte",
         "asciidoctor": "_café_latte",
-        "docutils": "cafe-latte"
+        "docutils": "cafe-latte",
+        "mdn": "café_latte"
       }
     },
     {
@@ -397,7 +419,8 @@
         "mdit-vue": "istanbul",
         "kramdown": "stanbul",
         "asciidoctor": "_i̇stanbul",
-        "docutils": "istanbul"
+        "docutils": "istanbul",
+        "mdn": "i̇stanbul"
       }
     },
     {
@@ -416,7 +439,8 @@
         "mdit-vue": "日本語の見出し",
         "kramdown": "section",
         "asciidoctor": "_日本語の見出し",
-        "docutils": null
+        "docutils": null,
+        "mdn": "日本語の見出し"
       }
     },
     {
@@ -435,7 +459,8 @@
         "mdit-vue": "ইন্সটল",
         "kramdown": "section",
         "asciidoctor": "_ইন্সটল",
-        "docutils": null
+        "docutils": null,
+        "mdn": "ইন্সটল"
       }
     },
     {
@@ -454,7 +479,8 @@
         "mdit-vue": "emoji-🎉-party",
         "kramdown": "emoji--party",
         "asciidoctor": "_emoji_party",
-        "docutils": "emoji-party"
+        "docutils": "emoji-party",
+        "mdn": "emoji_🎉_party"
       }
     },
     {
@@ -473,7 +499,8 @@
         "mdit-vue": "❤️-sponsors",
         "kramdown": "sponsors",
         "asciidoctor": "_️_sponsors",
-        "docutils": "sponsors"
+        "docutils": "sponsors",
+        "mdn": "❤️_sponsors"
       }
     },
     {
@@ -492,7 +519,8 @@
         "mdit-vue": "第-1-章",
         "kramdown": "section",
         "asciidoctor": "_第_1_章",
-        "docutils": null
+        "docutils": null,
+        "mdn": "第_1_章"
       }
     },
     {
@@ -511,7 +539,8 @@
         "mdit-vue": "",
         "kramdown": "section",
         "asciidoctor": null,
-        "docutils": null
+        "docutils": null,
+        "mdn": "..."
       }
     },
     {
@@ -530,7 +559,8 @@
         "mdit-vue": "unicode-ahnlich",
         "kramdown": "ncd-hnlich",
         "asciidoctor": "_ünïcödé_ähnlich",
-        "docutils": "unicode-ahnlich"
+        "docutils": "unicode-ahnlich",
+        "mdn": "ünïcödé_ähnlich"
       }
     },
     {
@@ -549,7 +579,8 @@
         "mdit-vue": "xii-chapter",
         "kramdown": "chapter",
         "asciidoctor": "_ⅻ_chapter",
-        "docutils": "xii-chapter"
+        "docutils": "xii-chapter",
+        "mdn": "ⅻ_chapter"
       }
     },
     {
@@ -568,7 +599,8 @@
         "mdit-vue": "command-duration",
         "kramdown": "commandduration",
         "asciidoctor": "_commandduration",
-        "docutils": "command-duration"
+        "docutils": "command-duration",
+        "mdn": "command duration"
       }
     }
   ],

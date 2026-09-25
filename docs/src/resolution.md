@@ -249,8 +249,8 @@ the resource ID Antora reads it as and anchored at the family directory of its m
 component is every source root whose `antora.yml` spells the same name, and one reserving the
 `ext` block is assembled by an extension, so a resource it does not hold is undecided rather
 than absent. A heading anchor on an AsciiDoc target resolves through the Asciidoctor rule in
-[What twelve renderers call a heading](anchor-rules.md), which is the only rule whose separator
-is `_` and whose identities all carry a prefix.
+[What thirteen renderers call a heading](anchor-rules.md), the only rule whose identities all
+carry a prefix.
 
 An AsciiDoc document publishes three identities a cross reference can name. A block anchor,
 `[#install]` or `[[install]]` on a line of its own, and an inline anchor, `[[remove-refs]]` in
@@ -268,7 +268,7 @@ cross reference to `fig-$1`. An indented line carrying a list marker is a list i
 Asciidoctor checks first.
 
 A reStructuredText heading anchor resolves through the Docutils rule in
-[What twelve renderers call a heading](anchor-rules.md), and the labels a document declares
+[What thirteen renderers call a heading](anchor-rules.md), and the labels a document declares
 outright with `.. _name:` resolve as themselves. The two Sphinx roles are modelled by
 name, which is why the grammar profile says `docutils-rst-sphinx-refs`. A relative
 `:doc:` target resolves beside its document, read under the suffix its root reads and again
@@ -301,7 +301,7 @@ rather than `.rst`, and `` {ref}`install-step` `` is the label `:ref:` names, lo
 same table, which a MyST document fills through `(name)=`, its attribute blocks, the
 `:name:` a directive carries, the terms of a `{.glossary}` list and the object a
 `domain:type` directive describes. The `myst-link` rule in
-[What twelve renderers call a heading](anchor-rules.md) points a plain link
+[What thirteen renderers call a heading](anchor-rules.md) points a plain link
 at that same table: `[text](name)` where the tree holds no such file, and `[text](#name)` where
 the document itself publishes no such identity, are looked up as labels before either is
 reported missing, so the tree keeps whatever answer it had and a name nobody declares stays
@@ -388,14 +388,18 @@ headings occupy. An anchor no rule
 publishes is `kind: missing` with `reason: heading-anchor-not-found`, an ordinary missing
 target; the row also carries `near`, the one published identity the fragment names apart from
 typography when exactly one exists and null otherwise. The fold covers the two spellings
-the pinned rules disagree on, case and the separator character, so a duplicate suffix
-written `_1` folds together with `-1`; a lone reference over a verbatim-located fragment
-turns that neighbor into the finding's `fix`. The union is deliberate: adding a rule can only grow what an anchor may match, and no
+the pinned rules disagree on, case and the separator character, in two steps: case alone
+first, then case and the separator together, since the `mdn` rule publishes with `_` what
+most rules publish with `-`. A duplicate suffix written `_1` still folds together with `-1`
+in the second step, and a lone reference over a verbatim-located fragment turns that
+neighbor into the finding's `fix`. A fragment holding `:~:` carries a text directive, which a
+browser answers by finding text on the page, so it names no identity and is declined as an
+unsupported fragment. The union is deliberate: adding a rule can only grow what an anchor may match, and no
 repository policy narrows it. A document can add to it, by declaring an identity the way it
 would add a heading, which is an edit to the target that a reviewer reads rather than a
 setting that clears a finding. A footnote joins the union too, under the spellings six
 renderers publish for a note and its first call, `fn:1` and `fnref:1` among them.
-[What twelve renderers call a heading](anchor-rules.md) holds the rules, what each was checked
+[What thirteen renderers call a heading](anchor-rules.md) holds the rules, what each was checked
 against, and how far apart they are.
 
 What the check will not do is judge on a parse that did not happen. A target that is not a
