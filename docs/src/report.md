@@ -260,10 +260,12 @@ the findings count has its own separate ceiling in [Limits and refusals](limits.
 `--format sarif` writes exactly one line to stdout: a SARIF 2.1.0 log projected from the
 same payload. Every finding row becomes a result under its kind's rule, `fail` as `error`,
 `warn` as `warning`, and `record` as `note`, with the row's own `description` as the message,
-and a row carrying a `fix` projects it as a SARIF fix with the byte region and replacement,
-which GitHub renders as a suggested edit
-and the finding key riding as the stable `partialFingerprints` entry, so an ingesting
-scanner deduplicates across runs by the same identity the report uses. A location renders
+and a row carrying a `fix` projects it as a SARIF fix with the byte region and replacement.
+The finding key rides as a `partialFingerprints` entry, so a consumer that reads it
+deduplicates across runs by the identity the report uses; GitHub code scanning keys alerts on
+its own line hash and ignores fixes. A row located in the base, such as a reference the change
+resolved or removed, is left out: the line it names is gone from the candidate, and a
+code-scanning tool closes an alert only when its row stops appearing. A location renders
 when the wire path is printable text, percent-encoded into the artifact URI so a hostile
 path cannot break it. Retained analysis errors become tool execution notifications, an
 incomplete run reports `executionSuccessful` false, and a rejected machine invocation
@@ -272,7 +274,8 @@ change facts, ordering, totals, or the exit class; the canonical report stays th
 wire, and consumers that need the full evidence read it there.
 
 `--format codequality` projects the same payload as GitLab's Code Quality artifact: a
-JSON array with one issue per finding row in report order, the row's `description` as
+JSON array with one issue per finding row in report order, leaving out rows located in the
+base for the same reason, the row's `description` as
 the issue text, its kind as `check_name`, and `fail` as `major`, `warn` as `minor`, and
 `record` as `info`. The finding key rides as the fingerprint, so GitLab's diff of target
 against head recognizes the same finding across runs by the identity the report uses.
