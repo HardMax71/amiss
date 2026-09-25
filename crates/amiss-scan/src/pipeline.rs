@@ -3,11 +3,12 @@ use std::collections::BTreeMap;
 
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
 use amiss_wire::model::{Adapter, ArtifactId, BranchRef, Oid, RepoPath};
+use amiss_wire::report::IntentKind;
 use amiss_wire::report::model::ControlsUnavailableReason;
 use amiss_wire::report::{
     EngineProvenance, ErrorDetail, adapter_contract, model::AnalysisErrorCode,
 };
-use amiss_wire::resolution::{Missing, Resolution};
+use amiss_wire::resolution::{Missing, Resolution, UnsupportedSemantics};
 
 use crate::Error;
 use crate::correlate::{Observation, Side, correlate, unique_path_pairs};
@@ -160,27 +161,8 @@ fn resolved_observation(
 ) -> Result<Observation, Error> {
     let (intent, resolution, external_destination) =
         resolver.resolve_scanned(context.forge, context.semantic, adapter, path, occurrence)?;
-    let identity = observation_input(ObservationIdentity {
-        adapter,
-        contract_digest: adapter_contract_digest,
-        document: path,
-        repository_path: intent.repository_path.as_ref(),
-        construct: occurrence.occurrence.construct,
-        node_path: &occurrence.occurrence.node_path,
-        projection_digest: occurrence.projection_digest,
-        intent: &intent,
-        raw_destination_digest: occurrence.raw_destination_digest,
-    })?;
-    let id = {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(OBSERVATION_ID_DOMAIN).chain_update([0_u8]),
-        );
-        serde_json::to_writer(&mut writer, &identity)
-            .map(|()| amiss_wire::model::Digest::from(writer.0.finalize().0))
-    }
-    .map_err(|_defect| Error::Internal)?;
-    Ok(Observation {
-        id,
+    let mut observation = Observation {
+        id: amiss_wire::model::Digest::from([0_u8; 32]),
         adapter_contract_digest,
         document: path.clone(),
         span: occurrence.occurrence.span,
@@ -197,7 +179,85 @@ fn resolved_observation(
         resolution,
         fragment_span: occurrence.occurrence.fragment_span,
         path_span: occurrence.occurrence.path_span,
-    })
+    };
+    observation.id = observation_id(&observation)?;
+    Ok(observation)
+}
+
+/// The id an observation carries for the document, construct and intent it
+/// holds, so an intent read again carries the id that intent names.
+fn observation_id(observation: &Observation) -> Result<amiss_wire::model::Digest, Error> {
+    let identity = observation_input(ObservationIdentity {
+        adapter: observation.adapter,
+        contract_digest: observation.adapter_contract_digest,
+        document: &observation.document,
+        repository_path: observation.intent.repository_path.as_ref(),
+        construct: observation.construct,
+        node_path: &observation.node_path,
+        projection_digest: observation.projection_digest,
+        intent: &observation.intent,
+        raw_destination_digest: observation.raw_destination_digest,
+    })?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(OBSERVATION_ID_DOMAIN).chain_update([0_u8]),
+    );
+    serde_json::to_writer(&mut writer, &identity)
+        .map(|()| amiss_wire::model::Digest::from(writer.0.finalize().0))
+        .map_err(|_defect| Error::Internal)
+}
+
+/// A site route the base served from a page the candidate no longer holds.
+/// The candidate cannot anchor the route to a page it lacks, so the route
+/// reads as undecided there and the pair splits, a deleted page passing as a
+/// removed reference. Read under the base's anchoring it is the missing page
+/// it now is. A route the candidate serves from any page of its own stays
+/// its own, and a page it still holds is never called missing.
+fn vanished_routes(
+    base: &Side,
+    candidate: &mut Side,
+    snapshot: &SnapshotDiscovery,
+) -> Result<(), Error> {
+    let served: BTreeMap<(&RepoPath, amiss_wire::model::Digest), &Observation> = base
+        .observations
+        .iter()
+        .filter(|observation| {
+            observation.intent.kind == IntentKind::RepositoryPath
+                && matches!(observation.resolution, Resolution::Resolved { .. })
+        })
+        .map(|observation| {
+            (
+                (&observation.document, observation.raw_destination_digest),
+                observation,
+            )
+        })
+        .collect();
+    for observation in &mut candidate.observations {
+        let undecided = observation.intent.kind == IntentKind::SiteRoute
+            && matches!(
+                observation.resolution,
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute)
+            );
+        let Some(prior) = served
+            .get(&(&observation.document, observation.raw_destination_digest))
+            .filter(|_| undecided)
+        else {
+            continue;
+        };
+        let Some(path) = prior.intent.repository_path.clone() else {
+            continue;
+        };
+        if snapshot.locate(&path).is_some() {
+            continue;
+        }
+        observation.intent = prior.intent.clone();
+        observation.resolution = Resolution::Missing(Missing::PathNotFound {
+            path,
+            near: None,
+            same_object_at: None,
+        });
+        observation.id = observation_id(observation)?;
+    }
+    Ok(())
 }
 
 fn evaluate_projections(
@@ -384,6 +444,7 @@ fn conclude(
         return construct_incomplete(setup, failures);
     }
     let mut candidate_side = candidate.1;
+    vanished_routes(&base.1, &mut candidate_side, candidate.0)?;
     let relocations = candidate_side
         .observations
         .iter()

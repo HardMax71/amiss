@@ -579,7 +579,10 @@ Under that file at `src/content/docs`, `/en/guides/astro-components/` is
 under `page-url`. Grafana serves `docs/sources` at `/docs/grafana/latest/` and writes that
 prefix into its own links, so its base carries it and a route without it stays where it was.
 
-The tree has to hold the page. A route that reaches no file keeps the boundary it had, because
+The tree has to hold the page, on the side being read or, for a page a change deletes, on the
+base that served it: an unchanged link to a page the candidate dropped is then a missing target
+at that page's path rather than an undecided route. A route that reaches no file keeps the
+boundary it had, because
 a site serves routes its own build makes up and a tree can enumerate only what it holds:
 Astro's translated pages fall back to English, Kubernetes generates its API reference from
 OpenAPI, its blog is published at a permalink its sources do not spell, and its images come
