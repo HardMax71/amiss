@@ -14,11 +14,14 @@ use amiss_wire::resolution::{
 };
 use amiss_wire::uri::{absolute_valid, decode_fragment, scheme};
 
+use amiss_adoc::ImagesDir;
+
 use crate::Error;
 use crate::declared::Declarations;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::{DocumentClassification, classify};
 use crate::published::anchors;
+use crate::published::image_home;
 use crate::published::redirected;
 use crate::published::unplaced;
 use crate::resources::{Aggregate, ScanResources};
@@ -291,9 +294,10 @@ fn resolve_destination(
         is_image,
         path_part,
     );
+    let home = image_home(resolver.snapshot, document_path, is_image, &anchors);
     if template_expression(semantic)
         || (adapter == Adapter::AsciiDoc
-            && ((is_image && anchors.is_empty()) || awaits_attribute(semantic)))
+            && (home == ImagesDir::Unknown || awaits_attribute(semantic)))
     {
         return Ok((
             unsupported_intent(query, fragment),

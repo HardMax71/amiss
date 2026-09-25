@@ -203,6 +203,76 @@ fn resolved_commit_identities_survive_discovery_failures() {
     }
 }
 
+/// An `AsciiDoc` image outside any site resolves where Asciidoctor and a forge
+/// read it: beside its document when nothing sets `imagesdir`, and under the
+/// one literal directory the header sets. A chapter another document
+/// includes, or a document setting it anywhere else, stays undecided.
+#[test]
+fn an_asciidoc_image_resolves_where_its_imagesdir_puts_it() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("guide/images")).unwrap();
+    for (path, body) in [
+        ("README.adoc", "= Readme\n\nimage::shot.png[]\n"),
+        ("shot.png", "png"),
+        (
+            "guide/book.adoc",
+            "= Book\n:imagesdir: images\n\ninclude::chapter.adoc[]\n\nimage::cover.png[]\n",
+        ),
+        ("guide/images/cover.png", "png"),
+        ("guide/chapter.adoc", "== Chapter\n\nimage::figure.png[]\n"),
+        (
+            "odd.adoc",
+            "= Odd\n\nText.\n\n:imagesdir: late\n\nimage::x.png[]\n",
+        ),
+    ] {
+        fs::write(root.join(path), body).unwrap();
+    }
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = oid(git(root, &["rev-parse", "HEAD"]).trim());
+    git(root, &["rm", "-q", "shot.png"]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = oid(git(root, &["rev-parse", "HEAD"]).trim());
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let report =
+        payload(&commit_pair(&repo, &engine(), None, &shell(), &base, &candidate).unwrap());
+    let mut read: Vec<(&str, &str, &str)> = report["observations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|row| {
+            let side = row["sides"]["same"]
+                .as_object()
+                .or_else(|| row["sides"]["each"]["candidate"].as_object())?;
+            Some((
+                side["observation_id_input"]["document"].as_str()?,
+                side["resolution"]["kind"].as_str()?,
+                side["resolution"]["reason"].as_str().unwrap_or_default(),
+            ))
+        })
+        .filter(|(document, _, _)| !document.is_empty())
+        .collect();
+    read.sort_unstable();
+    assert_eq!(
+        read,
+        [
+            ("README.adoc", "missing", "path-not-found"),
+            ("guide/book.adoc", "resolved", ""),
+            ("guide/book.adoc", "resolved", ""),
+            (
+                "guide/chapter.adoc",
+                "unsupported-semantics",
+                "attribute-dependent"
+            ),
+            ("odd.adoc", "unsupported-semantics", "attribute-dependent"),
+        ],
+        "{}",
+        report["observations"]
+    );
+}
+
 #[test]
 fn exact_relocation_evidence_requires_one_removed_and_one_added_identity() {
     let dir = TempDir::new().unwrap();

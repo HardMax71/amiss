@@ -247,7 +247,12 @@ the resource ID Antora reads it as and anchored at the family directory of its m
 `xref:index.adoc[]` in `modules/api/nav.adoc` names `modules/api/pages/index.adoc`. The
 component is every source root whose `antora.yml` spells the same name, and one reserving the
 `ext` block is assembled by an extension, so a resource it does not hold is undecided rather
-than absent. A heading anchor on an AsciiDoc target resolves through the Asciidoctor rule in
+than absent. Outside Antora an image joins `imagesdir`, which is empty unless a document sets
+it, so a document that sets none reads its images beside itself, the way Asciidoctor and a
+forge's preview both do, and one whose header sets a single literal directory reads them under
+it. A document another includes takes its includer's value, and one that sets it anywhere past
+the header, twice, or through an attribute leaves its images undecided. A heading anchor on an
+AsciiDoc target resolves through the Asciidoctor rule in
 [What twelve renderers call a heading](anchor-rules.md), which is the only rule whose separator
 is `_` and whose identities all carry a prefix.
 

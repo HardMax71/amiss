@@ -1,3 +1,5 @@
+use amiss_adoc::ImagesDir;
+
 use crate::discovery::Located;
 use crate::discovery::SnapshotDiscovery;
 use crate::discovery::declared_at;
@@ -91,7 +93,14 @@ pub(crate) fn anchors(
         return vec![declared];
     }
     match adapter {
-        Adapter::AsciiDoc => antora_anchor(snapshot, document, construct, path_part),
+        Adapter::AsciiDoc => {
+            let antora = antora_anchor(snapshot, document, construct, path_part);
+            if antora.is_empty() && is_image {
+                images_anchor(snapshot, document, path_part)
+            } else {
+                antora
+            }
+        }
         Adapter::Markdown | Adapter::Mdx => {
             markdown_anchors(snapshot, document, construct, is_image, path_part)
         }
@@ -252,6 +261,53 @@ pub(crate) fn unrouted(
         .unwrap_or_default()
         .split(|byte| *byte == b'/')
         .any(|segment| segment.starts_with(UNROUTED_OPENING.as_bytes()))
+}
+
+/// Where an `AsciiDoc` document outside any site reads its images from. A page
+/// of an Antora module takes the module's image family, and a document another
+/// includes takes the includer's `imagesdir`, neither of which it says itself.
+/// A reference that is no image, or one a site rule already placed, needs no
+/// home and is answered as beside.
+pub(crate) fn image_home(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    image: bool,
+    placed: &[(Vec<u8>, String)],
+) -> ImagesDir {
+    if !image || !placed.is_empty() {
+        return ImagesDir::Beside;
+    }
+    if snapshot.asciidoc_included.contains(document)
+        || antora_module(snapshot, document.as_bytes()).is_some()
+    {
+        return ImagesDir::Unknown;
+    }
+    let record = snapshot
+        .document(document.as_bytes())
+        .filter(|record| record.adapter == Some(Adapter::AsciiDoc));
+    match record.map(|record| &record.status) {
+        Some(crate::discovery::DocumentStatus::Scanned(scanned)) => scanned.images_dir.clone(),
+        Some(_) | None => ImagesDir::Unknown,
+    }
+}
+
+/// An image under the one literal `imagesdir` its document sets, read from
+/// the document's own directory. A URL or a path from the root is not under it.
+fn images_anchor(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    path_part: &str,
+) -> Vec<(Vec<u8>, String)> {
+    let ImagesDir::Under(images) = image_home(snapshot, document, true, &[]) else {
+        return Vec::new();
+    };
+    if scheme(path_part).is_some() || path_part.starts_with('/') {
+        return Vec::new();
+    }
+    vec![(
+        directory(document.as_bytes()).to_vec(),
+        format!("{images}/{path_part}"),
+    )]
 }
 
 /// An Antora resource ID, `[module:][family$]relative`, anchored at the family
