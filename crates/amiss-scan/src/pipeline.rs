@@ -1,5 +1,5 @@
 use sha2::Digest as _;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
 use amiss_wire::model::{Adapter, ArtifactId, BranchRef, Oid, RepoPath};
@@ -65,6 +65,7 @@ pub(crate) struct ObservationContext<'a> {
     pub(crate) engine: &'a EngineProvenance,
     pub(crate) forge: Option<&'a ForgeContext>,
     pub(crate) semantic: crate::semantic::View<'a>,
+    pub(crate) renderers: Option<&'a BTreeSet<String>>,
 }
 
 /// Builds one side's observations from its discovery: every scanned
@@ -88,6 +89,7 @@ pub(crate) fn side_observations(
         .collect();
     let mut cache = TargetCache::default();
     let mut resolver = Resolver::new(repo, git_resources, scan_resources, &mut cache, discovery);
+    resolver.renderers = context.renderers;
     let observation_count = discovery
         .documents
         .iter()
@@ -785,6 +787,7 @@ fn evaluate_tree(
             engine,
             forge,
             semantic,
+            renderers: includes.renderers.as_ref(),
         },
         &discovery,
         candidate,

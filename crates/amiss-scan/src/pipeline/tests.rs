@@ -34,6 +34,7 @@ fn resolved_observations_bind_the_fields_retained_for_reporting() {
             labels: &labels,
             routes: None,
         },
+        renderers: None,
     };
     let paths = [
         RepoPath::new("docs/quoted-\"β.md".to_owned()).unwrap(),

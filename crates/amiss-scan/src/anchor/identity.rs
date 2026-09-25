@@ -13,7 +13,8 @@ use super::{
 /// anchors the document declares itself, in raw HTML or in an attribute block,
 /// plus the definition-list terms one renderer publishes beside its headings,
 /// plus the footnotes every renderer publishes under its own spelling. `read`
-/// says which heading rules the target's tree turns on.
+/// says which heading rules the target's tree turns on and a repository's pin
+/// leaves.
 #[must_use]
 pub fn anchor_set(
     headings: &[Heading],

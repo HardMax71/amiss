@@ -20,6 +20,8 @@ pub const RECORD_SET_SOURCE: &str = "record-set";
 pub const SOURCE_MARKER_BYTES: usize = 256;
 /// Maximum old names one policy may declare for its default branch.
 pub const DEFAULT_BRANCH_ALIASES: usize = 16;
+/// Maximum heading renderers one policy may pin its Markdown anchors to.
+pub const ANCHOR_RENDERERS: usize = 16;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
@@ -146,6 +148,8 @@ pub struct ScannerPolicy {
     pub finding_dispositions: Vec<FindingDisposition>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_branch_aliases: Option<Vec<BranchRef>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor_renderers: Option<Vec<String>>,
 }
 
 /// Checks a directly constructed source through the same closed grammar and
@@ -327,6 +331,29 @@ impl Document for ScannerPolicy {
         }
         sorted_set("$.default_branch_aliases", aliases, |left, right| {
             left.as_str().cmp(right.as_str())
+        })?;
+
+        let Some(renderers) = self.anchor_renderers.as_deref() else {
+            return Ok(());
+        };
+        if renderers.is_empty() || renderers.len() > ANCHOR_RENDERERS {
+            return fail("$.anchor_renderers", ErrorKind::LimitExceeded);
+        }
+        for (index, name) in renderers.iter().enumerate() {
+            let spelled = name.len() <= 64
+                && name.starts_with(|first: char| first.is_ascii_lowercase())
+                && name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
+            if !spelled {
+                return fail(
+                    &format!("$.anchor_renderers[{index}]"),
+                    ErrorKind::InvalidValue,
+                );
+            }
+        }
+        sorted_set("$.anchor_renderers", renderers, |left, right| {
+            left.cmp(right)
         })
     }
 }

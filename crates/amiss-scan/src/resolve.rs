@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
@@ -133,6 +133,8 @@ pub struct Resolver<'a> {
     cache: &'a mut TargetCache,
     snapshot: &'a SnapshotDiscovery,
     commit_oid: Option<Oid>,
+    /// The heading renderers the candidate policy pins Markdown anchors to.
+    pub(crate) renderers: Option<&'a BTreeSet<String>>,
 }
 
 impl<'a> Resolver<'a> {
@@ -151,6 +153,7 @@ impl<'a> Resolver<'a> {
             cache,
             snapshot,
             commit_oid: None,
+            renderers: None,
         }
     }
 

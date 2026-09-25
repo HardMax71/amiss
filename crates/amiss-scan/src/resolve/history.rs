@@ -68,6 +68,7 @@ pub(super) fn lookup(
         cache: resolver.cache,
         snapshot: &snapshot,
         commit_oid: Some(commit_oid.clone()),
+        renderers: resolver.renderers,
     };
     match super::lookup(
         &mut historical,

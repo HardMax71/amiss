@@ -61,6 +61,7 @@ fn staged_candidate(
             engine,
             forge,
             semantic,
+            renderers: includes.renderers.as_ref(),
         },
         &discovery,
         Some(candidate),
