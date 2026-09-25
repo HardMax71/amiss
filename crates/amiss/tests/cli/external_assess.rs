@@ -210,7 +210,13 @@ fn evidence_for_a_foreign_plan_is_refused() {
     ]);
     assert_eq!(code, 2);
     assert!(stdout.is_empty());
-    assert!(stderr.contains("binds another plan"), "{stderr}");
+    assert!(
+        stderr.contains(&format!(
+            "the evidence binds plan sha256:{}, not this plan",
+            "0".repeat(64)
+        )),
+        "{stderr}"
+    );
 }
 
 #[test]

@@ -178,7 +178,7 @@ pub enum ForgeTail {
 pub enum EvidenceDefect {
     #[error(transparent)]
     Wire(Error),
-    #[error("external evidence violates its contract: {0}")]
+    #[error("external evidence violates its contract: {0:?}")]
     Contract(wary::Report),
 }
 
