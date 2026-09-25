@@ -15,7 +15,8 @@ use crate::resources::ScanResources;
 use crate::{Error, lfs};
 
 /// One side's acquired repository policy: the digest is null exactly when the
-/// path is absent, and absence has empty semantics.
+/// path is absent, or on the base side holds a policy that does not parse, and
+/// absence has empty semantics.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PolicySide {
     pub digest: Option<Digest>,

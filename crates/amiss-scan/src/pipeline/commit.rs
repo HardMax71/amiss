@@ -11,9 +11,9 @@ use crate::resources::{ScanLimits, ScanResources};
 use super::external::{external_gate, external_reason};
 use super::{
     CandidateEvaluation, CandidateOutcomes, Evaluated, ExternalVerified, PipelineFailure,
-    PipelineResult, ResolvedTree, SetupShell, binding_mismatch, conclude, controls_failure, detail,
-    effective_limits, effective_policy, effective_shell, evaluate_tree, floor_gate, pair_effects,
-    policy_unavailable_reason, resolve_tree,
+    PipelineResult, ResolvedTree, SetupShell, base_policy, binding_mismatch, conclude,
+    controls_failure, detail, effective_limits, effective_policy, effective_shell, evaluate_tree,
+    floor_gate, pair_effects, policy_unavailable_reason, resolve_tree,
 };
 
 /// The fallback identity projection when a snapshot cannot be established:
@@ -264,8 +264,13 @@ fn pair_policies(
         setup.controls_unavailable = Some(policy_unavailable_reason(&details));
         PipelineFailure::new(setup, details)
     };
-    let base_policy =
-        crate::policy::acquire(repo, git_resources, base_scan, &base_tree.0).map_err(&fallback)?;
+    let base_policy = base_policy(crate::policy::acquire(
+        repo,
+        git_resources,
+        base_scan,
+        &base_tree.0,
+    ))
+    .map_err(&fallback)?;
     let candidate_policy =
         crate::policy::acquire(repo, git_resources, candidate_scan, &candidate_tree.0)
             .map_err(fallback)?;
