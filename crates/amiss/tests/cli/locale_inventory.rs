@@ -26,6 +26,7 @@ fn context() -> LocaleTreeContext {
         source: side("docs", "en"),
         target: side("docs/de-DE", "de-DE"),
         documents: vec![".md".to_owned()],
+        excluded: None,
     }
 }
 

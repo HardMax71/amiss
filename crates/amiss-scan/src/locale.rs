@@ -40,13 +40,17 @@ pub struct LocaleSide {
 }
 
 /// The producer's whole input beyond the tree: which subtree each locale
-/// owns and which file suffixes are pages at all.
+/// owns, which file suffixes are pages at all, and the roots of the locales
+/// the audit leaves out, whose pages belong to neither side. A site that keeps
+/// its source locale at the content root holds every other locale under it,
+/// so those roots have to be named.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LocaleTreeContext {
     pub source: LocaleSide,
     pub target: LocaleSide,
     pub documents: Vec<String>,
+    pub excluded: Option<Vec<RepoPathText>>,
 }
 
 /// The context's own grammar is its shape; what it claims is checked against
@@ -264,7 +268,15 @@ fn walk(
         .map_err(InventoryError::Snapshot)?;
     let mut source = Pages::new();
     let mut target = Pages::new();
+    let excluded = context.excluded.as_deref().unwrap_or_default();
     for (path, (mode, oid)) in &discovery.entries {
+        if excluded.iter().any(|root| {
+            path.as_bytes()
+                .strip_prefix(root.as_str().as_bytes())
+                .is_some_and(|rest| rest.starts_with(b"/"))
+        }) {
+            continue;
+        }
         let Some(text) = path.as_str() else {
             for (side, pages) in [
                 (&context.source, &mut source),
@@ -360,6 +372,14 @@ fn validate(context: &LocaleTreeContext, plan: &LocaleCoveragePlan) -> Result<()
         }
     }
     if context.documents.is_empty() {
+        return Err(InventoryError::Context);
+    }
+    let excluded = context.excluded.as_deref().unwrap_or_default();
+    if !excluded
+        .iter()
+        .zip(excluded.iter().skip(1))
+        .all(|(previous, current)| previous.as_str() < current.as_str())
+    {
         return Err(InventoryError::Context);
     }
     let ordered = context
