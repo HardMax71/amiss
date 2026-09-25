@@ -529,6 +529,40 @@ fn a_download_names_a_file_and_a_numref_a_label() {
     ));
 }
 
+/// Sphinx reads an image, figure, include or literalinclude path that starts
+/// with `/` from the directory holding `conf.py`, not as a site route.
+#[test]
+fn a_directive_slash_path_starts_at_the_source_root() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("docs/conf.py", "project = 'probe'\n"),
+            ("docs/_static/logo.png", "png\n"),
+            ("docs/snippets/part.rst", "Part text.\n"),
+            ("docs/code/example.py", "print()\n"),
+            (
+                "docs/guide/index.rst",
+                "Guide\n=====\n\n.. image:: /_static/logo.png\n\n.. figure:: /_static/gone.png\n\n.. include:: /snippets/part.rst\n\n.. literalinclude:: /code/example.py\n",
+            ),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    for line in [4, 8, 10] {
+        assert!(
+            matches!(
+                answer(&rows, "docs/guide/index.rst", line),
+                Resolution::Resolved { .. }
+            ),
+            "line {line}"
+        );
+    }
+    assert!(matches!(
+        answer(&rows, "docs/guide/index.rst", 6),
+        Resolution::Missing(Missing::PathNotFound { .. })
+    ));
+}
+
 /// A `literalinclude` selection is checked the way a line fragment is: a
 /// `:lines:` range the file does not hold is out of range, one it holds
 /// resolves, and a `:pyobject:` is a code fragment the run declines.
