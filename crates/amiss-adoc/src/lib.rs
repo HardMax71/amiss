@@ -144,6 +144,13 @@ fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str)
             });
             continue;
         }
+        // Asciidoctor drops a line opening with `//` and no third slash.
+        if bare
+            .strip_prefix("//")
+            .is_some_and(|rest| !rest.starts_with('/'))
+        {
+            continue;
+        }
         let setext = rows
             .get(row.saturating_add(1))
             .and_then(|(_offset, next)| block::setext_level(line, next))
