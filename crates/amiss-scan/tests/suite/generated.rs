@@ -562,6 +562,61 @@ fn an_included_fragment_reads_from_its_page() {
     ));
 }
 
+/// Antora reads a partial's cross references and images from the module of
+/// each page that includes it and its includes from the partial itself, so a
+/// partial another module includes misses what only its own module holds.
+#[test]
+fn an_antora_partial_reads_from_its_pages_module() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("docs/antora.yml", "name: comp\nversion: ~\n"),
+            (
+                "docs/modules/ROOT/pages/index.adoc",
+                "= Index\n\ninclude::partial$shared.adoc[]\n",
+            ),
+            ("docs/modules/ROOT/pages/other.adoc", "= Other\n"),
+            ("docs/modules/ROOT/images/pic.png", "png\n"),
+            (
+                "docs/modules/ROOT/partials/shared.adoc",
+                "See xref:other.adoc[].\n\nimage::pic.png[]\n\ninclude::partial$nested.adoc[]\n\ninclude::sibling.adoc[]\n",
+            ),
+            ("docs/modules/ROOT/partials/nested.adoc", "Nested.\n"),
+            ("docs/modules/ROOT/partials/sibling.adoc", "Sibling.\n"),
+            (
+                "docs/modules/extra/pages/page.adoc",
+                "= Extra\n\ninclude::ROOT:partial$shared.adoc[]\n",
+            ),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    let partial = "docs/modules/ROOT/partials/shared.adoc";
+    for (line, missing) in [
+        (1, "docs/modules/extra/pages/other.adoc"),
+        (3, "docs/modules/extra/images/pic.png"),
+    ] {
+        assert!(
+            matches!(
+                answer(&rows, partial, line),
+                Resolution::Missing(Missing::PathNotFound { path, .. }) if path.as_bytes() == missing.as_bytes()
+            ),
+            "line {line}: {:?}",
+            answer(&rows, partial, line)
+        );
+    }
+    for (line, target) in [
+        (5, "docs/modules/ROOT/partials/nested.adoc"),
+        (7, "docs/modules/ROOT/partials/sibling.adoc"),
+    ] {
+        assert_eq!(
+            blob(answer(&rows, partial, line)),
+            Some(target),
+            "line {line}"
+        );
+    }
+}
+
 /// A file two pages include has to reach its target from both, so the page
 /// whose directory lacks it is where it is missing.
 #[test]

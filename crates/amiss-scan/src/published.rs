@@ -1,6 +1,8 @@
 mod construct;
 mod sphinx;
 
+pub(crate) use construct::{antora_includes, antora_page};
+
 use crate::discovery::Located;
 use crate::discovery::SnapshotDiscovery;
 use crate::discovery::declared_at;

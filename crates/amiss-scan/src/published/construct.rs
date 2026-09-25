@@ -1,15 +1,16 @@
 use std::collections::BTreeSet;
 
-use amiss_wire::extraction::SourceConstruct;
+use amiss_wire::extraction::{SourceConstruct, TransclusionKind};
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::uri::scheme;
 
-use crate::discovery::{SnapshotDiscovery, site_root, snippet_root};
+use crate::discovery::{DocumentStatus, SnapshotDiscovery, followed, site_root, snippet_root};
 use crate::route::{HUGO, JEKYLL, directory, join, normalized_path_under, within};
 
 /// The rules the document or its construct selects whatever else the tree
-/// declares: a file a Sphinx page includes reads a relative path from that
-/// page, and then a Sphinx docname in either format, an mkdocs snippet under
+/// declares: a file a Sphinx or Antora page includes reads a relative path
+/// from that page, all but an Antora include, which Antora reads from the
+/// file that writes it, and then a Sphinx docname in either format, an mkdocs snippet under
 /// the directory declaring mkdocs, and a Jekyll or Hugo template under the
 /// site of its own generator. None where nothing selects one.
 pub(super) fn anchors(
@@ -21,6 +22,7 @@ pub(super) fn anchors(
     path_part: &str,
 ) -> Option<Vec<(Vec<u8>, String)>> {
     if let Some(pages) = snapshot.fragment_pages.get(document)
+        && !(adapter == Adapter::AsciiDoc && construct == Some(SourceConstruct::AsciidocInclude))
         && !path_part.is_empty()
         && !path_part.starts_with('/')
         && scheme(path_part).is_none()
@@ -49,6 +51,50 @@ pub(super) fn anchors(
     }
     (construct == Some(SourceConstruct::MarkdownHugoRef))
         .then(|| hugo_anchors(snapshot, document, path_part))
+}
+
+/// Whether a document is an Antora page, which renders the partials it
+/// includes: a file in the `pages` family of its module.
+pub(crate) fn antora_page(snapshot: &SnapshotDiscovery, document: &RepoPath) -> bool {
+    let raw = document.as_bytes();
+    super::antora_module(snapshot, raw).is_some_and(|(root, module)| {
+        within(raw, &join(&join(&join(root, b"modules"), module), b"pages"))
+    })
+}
+
+/// The files one `AsciiDoc` file includes, each named by an Antora resource ID
+/// or a path, and read from the file itself, which is how Antora reads an
+/// include nested in a partial.
+pub(crate) fn antora_includes(snapshot: &SnapshotDiscovery, file: &RepoPath) -> Vec<RepoPath> {
+    let Some(DocumentStatus::Scanned(scanned)) = snapshot
+        .document(file.as_bytes())
+        .map(|record| &record.status)
+    else {
+        return Vec::new();
+    };
+    let Some(source) = scanned.anchor_source.as_ref() else {
+        return Vec::new();
+    };
+    followed(&source.transclusions)
+        .into_iter()
+        .filter(|entry| entry.kind != Ok(TransclusionKind::Literal))
+        .filter_map(|entry| {
+            let (parent, relative) = super::anchors(
+                snapshot,
+                Adapter::AsciiDoc,
+                file,
+                Some(SourceConstruct::AsciidocInclude),
+                false,
+                &entry.target,
+            )
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| (directory(file.as_bytes()).to_vec(), entry.target.clone()));
+            normalized_path_under(&parent, false, &relative)
+                .ok()
+                .map(|(path, _)| path)
+        })
+        .collect()
 }
 
 /// A relative reference in a file some pages render is read from each of
