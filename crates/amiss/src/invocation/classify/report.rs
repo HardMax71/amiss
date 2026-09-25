@@ -72,7 +72,8 @@ pub(super) fn classify_report_command(
         | Verb::Adopt
         | Verb::Claim
         | Verb::PolicyInclude
-        | Verb::LocaleInventory => {
+        | Verb::LocaleInventory
+        | Verb::LocalePlan => {
             refusals.insert(invalid(
                 AnalysisErrorCode::InvalidInvocation.meaning().to_owned(),
             ));

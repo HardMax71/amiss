@@ -17,7 +17,7 @@ mod inventory;
 mod report;
 
 use authoring::{classify_claim, classify_policy_include};
-use inventory::classify_locale_inventory;
+use inventory::{classify_locale_inventory, classify_locale_plan};
 use report::classify_report_command;
 
 type Validation<T> = Result<T, Refusal>;
@@ -58,6 +58,7 @@ fn lexical(gathered: &Gathered, format: OutputFormat) -> BTreeSet<Refusal> {
         (gathered.index, "--index"),
         (gathered.explain_scope, "--explain-scope"),
         (gathered.full, "--full"),
+        (gathered.require_lineage, "--require-lineage"),
     ] {
         if count > 1 {
             refusals.insert(invalid(format!("{flag} appears more than once")));
@@ -84,6 +85,7 @@ pub(super) fn command(
         Verb::LocaleInventory => {
             return classify_locale_inventory(refusals, gathered, format);
         }
+        Verb::LocalePlan => return classify_locale_plan(refusals, gathered, format),
         Verb::PolicyInclude => {
             return classify_policy_include(refusals, gathered).map(Command::PolicyInclude);
         }

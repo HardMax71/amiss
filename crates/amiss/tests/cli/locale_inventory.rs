@@ -189,3 +189,119 @@ fn the_grammar_closes_the_inventory_form() {
         assert_eq!(code, 2);
     }
 }
+
+/// A plan written from a report binds exactly the evidence the inventory
+/// stages from that report's candidate, so the assessment reaches a verdict
+/// about pages rather than refusing a mismatched binding, and nothing in the
+/// chain was sealed by hand.
+#[test]
+#[expect(clippy::too_many_lines, reason = "one end-to-end locale audit")]
+fn a_plan_written_from_a_report_binds_the_inventory_it_judges()
+-> Result<(), Box<dyn std::error::Error>> {
+    let chain = amiss_fixtures::commit_chain(&[
+        ("base", &[("README.md", "# Widget\n")]),
+        (
+            "docs",
+            &[
+                ("docs/index.md", "# Widget\n"),
+                ("docs/guide/start.md", "# Start\n"),
+                ("docs/de-DE/index.md", "# Widget (de)\n"),
+            ],
+        ),
+    ])?;
+    let scratch = tempfile::tempdir()?;
+    let [base, head] = [0, 1].map(|at| chain.commits.get(at).map(|commit| commit.id.clone()));
+    let (Some(base), Some(head)) = (base, head) else {
+        return Err("the fixture holds two commits".into());
+    };
+    let context = shown(scratch.path(), "context.json");
+    std::fs::write(&context, serde_json::to_vec(&self::context())?)?;
+    let (code, report, stderr) = support::amiss(&[
+        "check",
+        "--repo",
+        &chain.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &head,
+        "--repository",
+        "github.com/acme/widget",
+        "--ref",
+        "refs/heads/main",
+        "--default-branch-ref",
+        "refs/heads/main",
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0, "{stderr} {}", String::from_utf8_lossy(&report));
+    let report_path = shown(scratch.path(), "report.json");
+    std::fs::write(&report_path, &report)?;
+    let (code, plan, stderr) = support::amiss(&[
+        "locale-plan",
+        "--report",
+        &report_path,
+        "--context",
+        &context,
+        "--site",
+        "widget-docs",
+        "--channel",
+        "stable",
+        "--fallback",
+        "source-identical",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    let plan_path = shown(scratch.path(), "written-plan.json");
+    std::fs::write(&plan_path, &plan)?;
+    let (code, evidence, stderr) = support::amiss(&[
+        "locale-inventory",
+        "--repo",
+        &chain.repo,
+        "--plan",
+        &plan_path,
+        "--context",
+        &context,
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    let evidence_path = shown(scratch.path(), "written-evidence.json");
+    std::fs::write(&evidence_path, &evidence)?;
+    let (code, assessment, stderr) = support::amiss(&[
+        "locale-assess",
+        "--plan",
+        &plan_path,
+        "--evidence",
+        &evidence_path,
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    let payload = support::payload(&assessment);
+    assert_eq!(payload["verdict"], "refuted");
+    assert_eq!(payload["coverage"]["target_missing"][0], "guide/start.md");
+
+    let (code, human, stderr) = support::amiss(&[
+        "locale-plan",
+        "--report",
+        &report_path,
+        "--context",
+        &context,
+        "--site",
+        "widget-docs",
+        "--channel",
+        "stable",
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    let human = String::from_utf8(human)?;
+    assert!(
+        human.starts_with("amiss locale-plan: en to de-DE for widget-docs on stable\n"),
+        "{human}"
+    );
+    Ok(())
+}

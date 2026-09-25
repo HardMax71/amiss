@@ -61,9 +61,14 @@ pub(super) struct Gathered {
     pub(super) semantic_template: Slot,
     pub(super) target: Slot,
     pub(super) target_bytes_hex: Slot,
+    pub(super) site: Slot,
+    pub(super) channel: Slot,
+    pub(super) scope_version: Slot,
+    pub(super) fallback: Slot,
     pub(super) index: usize,
     pub(super) explain_scope: usize,
     pub(super) full: usize,
+    pub(super) require_lineage: usize,
     pub(super) refusals: BTreeSet<Refusal>,
 }
 
@@ -120,6 +125,10 @@ pub(super) fn gather(argv: &[OsString]) -> Gathered {
             gathered.full = gathered.full.saturating_add(1);
             continue;
         }
+        if token == "--require-lineage" {
+            gathered.require_lineage = gathered.require_lineage.saturating_add(1);
+            continue;
+        }
         let Some(slot) = slot_for(&mut gathered, token) else {
             let reason = if token.contains('=') {
                 format!("options take a separate value, not {}", atom(token))
@@ -172,13 +181,17 @@ fn slot_for<'a>(gathered: &'a mut Gathered, option: &str) -> Option<&'a mut Slot
         "--semantic-template" => Some(&mut gathered.semantic_template),
         "--target" => Some(&mut gathered.target),
         "--target-bytes-hex" => Some(&mut gathered.target_bytes_hex),
+        "--site" => Some(&mut gathered.site),
+        "--channel" => Some(&mut gathered.channel),
+        "--scope-version" => Some(&mut gathered.scope_version),
+        "--fallback" => Some(&mut gathered.fallback),
         _ => None,
     }
 }
 
 /// Every option's count beside its spelling, so a form can refuse what it
 /// does not own; `--full` is judged once, before the verb is known.
-pub(super) fn counts(gathered: &Gathered) -> [(usize, &'static str); 30] {
+pub(super) fn counts(gathered: &Gathered) -> [(usize, &'static str); 35] {
     [
         (gathered.repo.occurrences, "--repo"),
         (gathered.object_format.occurrences, "--object-format"),
@@ -214,8 +227,13 @@ pub(super) fn counts(gathered: &Gathered) -> [(usize, &'static str); 30] {
         ),
         (gathered.target.occurrences, "--target"),
         (gathered.target_bytes_hex.occurrences, "--target-bytes-hex"),
+        (gathered.site.occurrences, "--site"),
+        (gathered.channel.occurrences, "--channel"),
+        (gathered.scope_version.occurrences, "--scope-version"),
+        (gathered.fallback.occurrences, "--fallback"),
         (gathered.index, "--index"),
         (gathered.explain_scope, "--explain-scope"),
+        (gathered.require_lineage, "--require-lineage"),
     ]
 }
 

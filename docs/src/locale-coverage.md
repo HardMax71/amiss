@@ -246,17 +246,25 @@ they hold.
 `documents` is byte-sorted, and every entry starts with a dot. A file whose name ends in none of
 them is not a page, so images, partials, and configuration never turn into missing translations.
 
-Running it takes two commands:
+Running it takes three commands. `amiss locale-plan` writes the plan from the accepted report
+and the layout, so nothing is sealed by hand: the report fixes the docs candidate, its
+repository, and its identity digest, the layout fixes both locales and the producer, and the flags
+fix the scope and the policy. The report has to come from a commit-pair `check` that named its
+repository, since the plan binds a commit and a repository:
 
 ```sh
+amiss locale-plan --report amiss-report.json --context locales.json \
+  --site widget-docs --channel stable --fallback source-identical --format json > coverage-plan.json
 amiss locale-inventory --repo . --plan coverage-plan.json --context locales.json \
   --format json > coverage-evidence.json
 amiss locale-assess --plan coverage-plan.json --evidence coverage-evidence.json
 ```
 
-The plan has to name the producer whose evidence it will accept, and the context digest is part of
-that identity, so the first run against a new context is what tells you the line to write into the
-plan. Human output ends with it:
+A written plan requires every source page, allows the one `--fallback` class it names on every
+page, and requires target lineage only with `--require-lineage`. Its policy identity is
+`amiss-locale-plan`, with the context digest taken over those rules. A policy naming only some
+pages, or several fallback classes, is still written by hand. Human output from the inventory ends
+with the producer line the plan named:
 
 ```text
 amiss locale-inventory: en 42 pages complete
