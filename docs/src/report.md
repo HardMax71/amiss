@@ -168,7 +168,9 @@ The four records that answer for a single reference, `target-declared-untracked`
 key on the document alone. That makes one row per document and kind: `aggregation.member_count`
 counts its references, `observation_ids` names each of them, and the location is the first.
 Each reference keeps its own resolution and reason on its observation row. An invalid
-reference keeps a row of its own, since it carries an attribution.
+reference keeps a row of its own, since it carries an attribution. `aggregation.locations_omitted`
+counts the members whose place the row cannot point to: none where `observation_ids` names every
+member, and all but the representative for a claim or control row, which names no observation.
 
 `feedback` is the smaller review surface derived by the engine from those exact findings.
 Related introduced problems become one `fix` per target, changed targets under unchanged

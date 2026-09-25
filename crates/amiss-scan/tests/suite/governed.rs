@@ -355,6 +355,13 @@ fn assert_governed_boundary(
         Some(expected_member_count),
         "{id} report member count"
     );
+    assert_eq!(
+        finding
+            .pointer("/aggregation/locations_omitted")
+            .and_then(Value::as_u64),
+        Some(expected_member_count.saturating_sub(1)),
+        "{id} locates one member and counts the others it cannot point to"
+    );
     assert_eq!(actual_sources(finding, id), expected_sources, "{id}");
 }
 
