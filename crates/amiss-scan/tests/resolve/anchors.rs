@@ -167,6 +167,49 @@ fn an_included_asciidoc_chapter_declines_what_it_does_not_hold() {
     }
 }
 
+/// Zola transliterates a heading to ASCII before it names it, which no rule
+/// in the table does, so a page under Zola with a heading outside ASCII
+/// declines what it does not publish. An ASCII heading still resolves, and a
+/// page outside Zola still proves absence.
+#[test]
+fn a_zola_page_with_a_transliterated_heading_declines_what_it_lacks() {
+    let files: &[(&str, &str)] = &[
+        ("site/config.toml", "base_url = \"https://example.com\"\n"),
+        ("site/content/ru.md", "# Привет мир\n\n## Setup\n"),
+        ("site/content/_index.md", "# Index\n"),
+        ("plain/ru.md", "# Привет мир\n"),
+        ("plain/index.md", "# P\n"),
+    ];
+    let chain = commit_chain(&[("zola", files)]).unwrap_or_else(|_defect| panic!("commit"));
+    let mut bed = bed_at(chain, 0, ScanLimits::CONTRACT, GitLimits::CONTRACT);
+    for (document, destination, want) in [
+        ("site/content/_index.md", "ru.md#privet-mir", "declined"),
+        ("site/content/_index.md", "ru.md#setup", "resolved"),
+        ("plain/index.md", "ru.md#privet-mir", "missing"),
+    ] {
+        let row = bed
+            .run_as(Adapter::Markdown, None, document, false, destination)
+            .unwrap_or_else(|_defect| panic!("resolve {destination}"))
+            .1;
+        let got = if matches!(row, Resolution::Resolved { .. }) {
+            "resolved"
+        } else if matches!(
+            row,
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(_))
+        ) {
+            "declined"
+        } else if matches!(
+            row,
+            Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+        ) {
+            "missing"
+        } else {
+            "other"
+        };
+        assert_eq!(got, want, "{document}: {destination}");
+    }
+}
+
 /// A target the evaluation cannot read, parse, or afford keeps the unsupported
 /// answer. Reporting it missing would be reporting on a parse that never ran.
 #[test]

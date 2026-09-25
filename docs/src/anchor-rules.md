@@ -487,5 +487,9 @@ served by one of them can see an anchor reported missing that its own site resol
 Hugo's non-github id types, Sphinx and Docusaurus's custom slug functions are the known
 cases. Within MDN, a heading whose text is a macro takes its identity from what the macro
 renders, which only the definition-list terms model, and a live sample's frame,
-`frame_` and the sample's identity, is not read. The fix for any of them is another row, derived and pinned the same way, since the
+`frame_` and the sample's identity, is not read. Zola is a narrower case: it transliterates a heading to ASCII before slugging it, so
+`Привет мир` publishes `privet-mir`, and no rule here transliterates. A page under a Zola
+`config.toml` whose headings reach outside ASCII therefore keeps absence undecided: an
+identity the union knows still resolves, and one it does not is declined rather than
+reported missing. The fix for any of them is another row, derived and pinned the same way, since the
 union only grows.
