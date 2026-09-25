@@ -47,6 +47,11 @@ The two-sided comparison reduces to a quadrant:
 | **block unchanged** | no finding | `dependency-changed-subject-unchanged` |
 | **block changed** | `subject-changed` | `dependency-and-subject-cochanged` |
 
+A reference into its own page has that page as its dependency: a same-page fragment, or an
+empty destination carrying an attribute list the way MkDocs declares `[](){#id}`. Any edit
+anywhere on the page would change it. A page cannot go stale against itself, so such a
+reference keeps its target change and its story is the block's alone.
+
 And the finding the tool exists for, as a change:
 
 ```diff
