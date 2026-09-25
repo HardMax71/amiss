@@ -1,9 +1,10 @@
 mod tests;
 
+use std::io::Read as _;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs as _};
 use std::time::{Duration, Instant};
 
-use reqwest::blocking::Client;
+use reqwest::blocking::{Client, Response};
 use reqwest::redirect::Policy;
 use url::Url;
 
@@ -12,6 +13,9 @@ use amiss_wire::external::{ProbeFailure, ProbeMethod};
 const CONNECT: Duration = Duration::from_secs(5);
 const OPERATION: Duration = Duration::from_secs(10);
 const MAX_HOPS: usize = 5;
+/// How much of an HTML page is read for an instant refresh, which a
+/// redirect stub states in its head.
+const REFRESH_BYTES: u64 = 16 * 1024;
 
 pub(crate) enum Observation {
     Answered {
@@ -133,6 +137,22 @@ fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
         };
         let status = response.status().as_u16();
         if !response.status().is_redirection() {
+            let refreshed = response
+                .status()
+                .is_success()
+                .then(|| page_head(&client, &url, response, get, deadline))
+                .flatten()
+                .and_then(|head| refresh_target(&url, &head))
+                .and_then(vetted)
+                .filter(|next| *next != url);
+            if let Some(next) = refreshed {
+                standing_redirect = Some((
+                    status,
+                    standing_redirect.is_none_or(|(_status, permanent)| permanent),
+                ));
+                url = next;
+                continue;
+            }
             return Attempted::Answered {
                 status,
                 redirect: moved(
@@ -209,6 +229,94 @@ fn advance_redirect(standing: Option<(u16, bool)>, status: u16) -> (u16, bool) {
     let permanent = matches!(status, 301 | 308)
         && standing.is_none_or(|(_previous_status, permanent)| permanent);
     (status, permanent)
+}
+
+/// The opening bytes of an HTML page that answered: the body already in
+/// hand under GET, or one more GET after HEAD, since HEAD carries none.
+fn page_head(
+    client: &Client,
+    url: &Url,
+    response: Response,
+    get: bool,
+    deadline: Instant,
+) -> Option<Vec<u8>> {
+    let html = |response: &Response| {
+        response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.trim_start().starts_with("text/html"))
+    };
+    if !html(&response) {
+        return None;
+    }
+    let response = if get {
+        response
+    } else {
+        let left = remaining(deadline)?;
+        let fetched = client
+            .get(url.clone())
+            .timeout(OPERATION.min(left))
+            .send()
+            .ok()?;
+        (fetched.status().is_success() && html(&fetched)).then_some(fetched)?
+    };
+    let mut head = Vec::new();
+    response.take(REFRESH_BYTES).read_to_end(&mut head).ok()?;
+    Some(head)
+}
+
+/// Where an instant refresh sends a browser: the first `meta` element whose
+/// `http-equiv` is `refresh` and whose `content` is a zero delay and a URL,
+/// read against the page's own URL. A later delay is a page a reader sees
+/// first, so it moves nothing.
+fn refresh_target(current: &Url, head: &[u8]) -> Option<Url> {
+    let text = String::from_utf8_lossy(head);
+    let folded = text.to_ascii_lowercase();
+    folded.match_indices("<meta").find_map(|(start, _)| {
+        let end = folded.get(start..)?.find('>')?.checked_add(start)?;
+        let tag = text.get(start..end)?;
+        let refresh = attribute(tag, "http-equiv")?.eq_ignore_ascii_case("refresh");
+        let (delay, target) = attribute(tag, "content")?.split_once([';', ','])?;
+        let instant = !delay.trim().is_empty()
+            && delay.trim().bytes().all(|byte| matches!(byte, b'0' | b'.'));
+        let target = target.trim_start();
+        let target = match target.get(..3) {
+            Some(key) if key.eq_ignore_ascii_case("url") => {
+                target.get(3..)?.trim_start().strip_prefix('=')?.trim()
+            }
+            Some(_) | None => target.trim(),
+        };
+        let target = target.trim_matches(['"', '\'']);
+        (refresh && instant && !target.is_empty())
+            .then(|| current.join(target).ok())
+            .flatten()
+    })
+}
+
+/// One attribute's value inside a tag, found by its name in any case where a
+/// space opens it: quoted, or up to the next space.
+fn attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
+    let folded = tag.to_ascii_lowercase();
+    folded.match_indices(name).find_map(|(at, _)| {
+        let opened = at
+            .checked_sub(1)
+            .and_then(|before| folded.as_bytes().get(before))
+            .is_some_and(u8::is_ascii_whitespace);
+        let rest = tag.get(at.checked_add(name.len())?..)?.trim_start();
+        let value = rest.strip_prefix('=')?.trim_start();
+        let quoted = value
+            .chars()
+            .next()
+            .filter(|first| matches!(first, '"' | '\''));
+        let value = match quoted {
+            Some(quote) => value.get(1..)?.split(quote).next()?,
+            None => value
+                .split(|ch: char| ch.is_ascii_whitespace() || ch == '/')
+                .next()?,
+        };
+        opened.then_some(value)
+    })
 }
 
 fn redirect_target(current: &Url, headers: &reqwest::header::HeaderMap) -> Option<Url> {

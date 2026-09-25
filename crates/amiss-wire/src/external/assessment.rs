@@ -339,8 +339,9 @@ fn judge(
                 Some(429) => (ExternalVerdict::Unproven, Some(ExternalReason::RateLimited)),
                 None | Some(_) => (ExternalVerdict::Unproven, Some(ExternalReason::Unavailable)),
             };
-            let retarget = redirect_chain_permanent
-                .is_some_and(|permanent| permanent)
+            // A move offered as an edit must land on a page that answered.
+            let retarget = (redirect_chain_permanent.is_some_and(|permanent| permanent)
+                && verdict == ExternalVerdict::Reachable)
                 .then(|| final_destination.clone())
                 .flatten();
             (verdict, reason, retarget)
