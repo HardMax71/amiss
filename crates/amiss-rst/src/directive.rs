@@ -57,9 +57,31 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
         found.push(build(ReferenceKind::FileOption, path, at, lead, line.len()));
         return found;
     }
-    interpreted_text(line, at, &mut found);
+    interpreted_text(&without_inline_literals(line), at, &mut found);
     found.sort_by_key(|reference| reference.span);
     found
+}
+
+/// The line with each inline literal blanked byte for byte, so a role or a
+/// link written inside double backticks is shown rather than read, and every
+/// offset past it stays where it was.
+fn without_inline_literals(line: &str) -> std::borrow::Cow<'_, str> {
+    if !line.contains("``") {
+        return std::borrow::Cow::Borrowed(line);
+    }
+    let mut masked = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(open) = rest.find("``") {
+        let after = rest.get(open.saturating_add(2)..).unwrap_or_default();
+        let Some(close) = after.find("``") else {
+            break;
+        };
+        masked.push_str(rest.get(..open).unwrap_or_default());
+        masked.extend(std::iter::repeat_n(' ', close.saturating_add(4)));
+        rest = after.get(close.saturating_add(2)..).unwrap_or_default();
+    }
+    masked.push_str(rest);
+    std::borrow::Cow::Owned(masked)
 }
 
 const SPHINX_ROLES: [(&str, ReferenceKind); 2] = [
