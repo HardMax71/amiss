@@ -1,11 +1,11 @@
 mod model;
 mod tests;
 
-use std::collections::BTreeSet;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 
-use amiss_wire::report::model::{
-    Finding, FindingFix, FindingLocation, LocationSide, ReportPayload,
-};
+use amiss_wire::model::Digest;
+use amiss_wire::report::model::{FindingFix, FindingLocation, LocationSide, ReportPayload};
 use amiss_wire::report::{Disposition, FindingKind};
 
 use model::{
@@ -17,14 +17,16 @@ use model::{
 /// The SARIF projection: a non-wire convenience over the same payload that
 /// cannot change facts, ordering, totals, or exit. Findings become results
 /// under their kind's rule, retained analysis errors become tool execution
-/// notifications, and the finding key rides as the stable fingerprint. A row
-/// located in the base names a line the candidate no longer has, and code
-/// scanning closes an alert only when its row stops appearing, so it is left
-/// out.
-pub(crate) fn log<P, R, M, E>(
-    payload: &ReportPayload<P, R, M, E>,
-    path_text: impl Fn(&P) -> Option<&str> + Copy,
-) -> Log<'_> {
+/// notifications, and the finding key rides as the stable fingerprint. A
+/// row's message leads with its own words where it has some, so two broken
+/// links under one rule do not read alike. A row located in the base names a
+/// line the candidate no longer has, and code scanning closes an alert only
+/// when its row stops appearing, so it is left out.
+pub(crate) fn log<'report, P, R, M, E>(
+    payload: &'report ReportPayload<P, R, M, E>,
+    path_bytes: impl Fn(&P) -> Option<Cow<'_, [u8]>> + Copy,
+    words: &BTreeMap<Digest, String>,
+) -> Log<'report> {
     let exported = || {
         payload
             .findings
@@ -49,13 +51,33 @@ pub(crate) fn log<P, R, M, E>(
                         descriptor: Descriptor { id: row.code },
                         level: Level::Error,
                         message: Message {
-                            text: &row.description,
+                            text: Cow::Borrowed(&row.description),
                         },
                     })
                     .collect(),
             }],
             results: exported()
-                .map(|row| finding_result(row, &present, path_text))
+                .map(|row| FindingResult {
+                    fixes: row.fix.as_ref().map(|value| [fix(value)]),
+                    level: match row.effective_disposition {
+                        Disposition::Fail => Level::Error,
+                        Disposition::Warn => Level::Warning,
+                        Disposition::Record => Level::Note,
+                    },
+                    locations: location(&row.location, path_bytes).map(|location| [location]),
+                    message: Message {
+                        text: words
+                            .get(&row.finding_key)
+                            .map_or(Cow::Borrowed(row.description.as_str()), |words| {
+                                Cow::Owned(format!("{words}: {}", row.description))
+                            }),
+                    },
+                    partial_fingerprints: Fingerprints {
+                        finding_key: row.finding_key,
+                    },
+                    rule_id: row.kind,
+                    rule_index: present.iter().position(|candidate| *candidate == row.kind),
+                })
                 .collect(),
             tool: Tool {
                 driver: Driver {
@@ -64,9 +86,13 @@ pub(crate) fn log<P, R, M, E>(
                     rules: present
                         .into_iter()
                         .map(|kind| Rule {
+                            help: Message {
+                                text: Cow::Borrowed(kind.meaning()),
+                            },
+                            help_uri: "https://hardmax71.github.io/amiss/profiles.html",
                             id: kind,
                             short_description: Message {
-                                text: kind.meaning(),
+                                text: Cow::Borrowed(kind.meaning()),
                             },
                         })
                         .collect(),
@@ -75,30 +101,6 @@ pub(crate) fn log<P, R, M, E>(
             },
         }],
         version: "2.1.0",
-    }
-}
-
-fn finding_result<'report, P, E>(
-    row: &'report Finding<P, E>,
-    present: &[FindingKind],
-    path_text: impl Fn(&P) -> Option<&str> + Copy,
-) -> FindingResult<'report> {
-    FindingResult {
-        fixes: row.fix.as_ref().map(|value| [fix(value)]),
-        level: match row.effective_disposition {
-            Disposition::Fail => Level::Error,
-            Disposition::Warn => Level::Warning,
-            Disposition::Record => Level::Note,
-        },
-        locations: location(&row.location, path_text).map(|location| [location]),
-        message: Message {
-            text: &row.description,
-        },
-        partial_fingerprints: Fingerprints {
-            finding_key: row.finding_key,
-        },
-        rule_id: row.kind,
-        rule_index: present.iter().position(|candidate| *candidate == row.kind),
     }
 }
 
@@ -117,27 +119,27 @@ fn fix(fix: &FindingFix) -> Fix<'_> {
                     byte_offset: fix.span.start_byte,
                 },
                 inserted_content: Message {
-                    text: &fix.replacement,
+                    text: Cow::Borrowed(&fix.replacement),
                 },
             }],
         }],
         description: Message {
-            text: &fix.description,
+            text: Cow::Borrowed(&fix.description),
         },
     }
 }
 
-/// A location renders only when the wire path is printable text; a
-/// byte-form path names no artifact URI, and the row still carries it.
+/// A location's URI percent-encodes the path's own bytes, so a name that is
+/// not UTF-8 still names its file, the same bytes a checkout writes.
 fn location<P>(
     location: &FindingLocation<P>,
-    path_text: impl Fn(&P) -> Option<&str>,
+    path_bytes: impl Fn(&P) -> Option<Cow<'_, [u8]>>,
 ) -> Option<Location> {
-    let path = location.path.as_ref().and_then(path_text)?;
+    let path = location.path.as_ref().and_then(path_bytes)?;
     Some(Location {
         physical_location: PhysicalLocation {
             artifact_location: ArtifactLocation {
-                uri: percent_encoding::utf8_percent_encode(path, URI_PATH_ENCODE_SET).to_string(),
+                uri: percent_encoding::percent_encode(&path, URI_PATH_ENCODE_SET).to_string(),
             },
             region: location.span.map(|span| Region {
                 end_column: span.end_column,

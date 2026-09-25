@@ -179,36 +179,42 @@ where
     P: PartialEq,
     F: Fn(&R) -> (ResolutionTag, Option<String>),
 {
+    let path_atom = |value: Option<&P>| {
+        value.map_or_else(
+            || "-".to_owned(),
+            |value| match path(value) {
+                Ok(text) => amiss_wire::human::atom(text),
+                Err(hex) => hex::decode(hex.as_bytes()).map_or_else(
+                    |_defect| amiss_wire::human::atom(&hex),
+                    |bytes| amiss_wire::human::atom_bytes(&bytes),
+                ),
+            },
+        )
+    };
+    let words = || human::finding_words(payload, path_atom, &resolution);
     match format {
         OutputFormat::Json => {
             json(reserve)?;
         }
         OutputFormat::Sarif => {
-            output::write_serialized(&sarif::log(payload, |value| path(value).ok()))?;
+            output::write_serialized(&sarif::log(
+                payload,
+                |value| match path(value) {
+                    Ok(text) => Some(Cow::Borrowed(text.as_bytes())),
+                    Err(hex) => hex::decode(hex.as_bytes()).ok().map(Cow::Owned),
+                },
+                &words(),
+            ))?;
         }
         OutputFormat::CodeQuality => {
-            output::write_serialized(&codequality::issues(payload, |value| {
-                path(value).map_or_else(|hex| hex, Cow::Borrowed)
-            }))?;
+            output::write_serialized(&codequality::issues(
+                payload,
+                |value| path(value).map_or_else(|hex| hex, Cow::Borrowed),
+                &words(),
+            ))?;
         }
-        OutputFormat::Junit => junit::write(payload, reserve, |value| path(value).ok())?,
-        OutputFormat::Human => human::report(
-            payload,
-            options,
-            |value| {
-                value.map_or_else(
-                    || "-".to_owned(),
-                    |value| match path(value) {
-                        Ok(text) => amiss_wire::human::atom(text),
-                        Err(hex) => hex::decode(hex.as_bytes()).map_or_else(
-                            |_defect| amiss_wire::human::atom(&hex),
-                            |bytes| amiss_wire::human::atom_bytes(&bytes),
-                        ),
-                    },
-                )
-            },
-            resolution,
-        ),
+        OutputFormat::Junit => junit::write(payload, reserve, |value| path(value).ok(), &words())?,
+        OutputFormat::Human => human::report(payload, options, path_atom, resolution),
     }
     Ok(())
 }

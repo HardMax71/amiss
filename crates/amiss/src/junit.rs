@@ -13,14 +13,17 @@ enum CaseStatus<'value> {
     Problem {
         element: &'static str,
         kind: &'value str,
-        description: &'value str,
+        description: Cow<'value, str>,
     },
 }
 
+/// A failing case's message leads with its row's own words where it has
+/// some, so two failures of one kind read apart in the test widget.
 pub(crate) fn write<P, R, M, E>(
     payload: &ReportPayload<P, R, M, E>,
     output: &mut dyn std::io::Write,
     path_text: impl Fn(&P) -> Option<&str>,
+    words: &std::collections::BTreeMap<amiss_wire::model::Digest, String>,
 ) -> std::io::Result<()> {
     let result = &payload.result;
     let findings = payload.findings.iter();
@@ -64,12 +67,12 @@ pub(crate) fn write<P, R, M, E>(
             ReportStatus::Fail => CaseStatus::Problem {
                 element: "failure",
                 kind: "amiss-result",
-                description: "fail",
+                description: Cow::Borrowed("fail"),
             },
             ReportStatus::Incomplete => CaseStatus::Problem {
                 element: "error",
                 kind: "amiss-result",
-                description: "incomplete",
+                description: Cow::Borrowed("incomplete"),
             },
             ReportStatus::Pass => CaseStatus::Pass,
         };
@@ -82,7 +85,11 @@ pub(crate) fn write<P, R, M, E>(
                 CaseStatus::Problem {
                     element: "failure",
                     kind: row.kind.as_ref(),
-                    description: &row.description,
+                    description: words
+                        .get(&row.finding_key)
+                        .map_or(Cow::Borrowed(row.description.as_str()), |words| {
+                            Cow::Owned(format!("{words}: {}", row.description))
+                        }),
                 }
             } else {
                 CaseStatus::Note(format!(
@@ -108,7 +115,7 @@ pub(crate) fn write<P, R, M, E>(
                 CaseStatus::Problem {
                     element: "error",
                     kind: row.code.as_ref(),
-                    description: &row.description,
+                    description: Cow::Borrowed(&row.description),
                 },
             )?;
         }
@@ -160,7 +167,7 @@ fn write_case(
             description,
         } => {
             let kind = xml_10(kind);
-            let description = xml_10(description);
+            let description = xml_10(&description);
             writer
                 .create_element(element)
                 .with_attribute(("message", description.as_ref()))

@@ -72,11 +72,13 @@ fn the_sarif_projection_mirrors_the_report_and_stays_deterministic() {
                 .and_then(|prints| prints.get("amissFindingKey/v1")),
             finding.get("finding_key"),
         );
-        assert_eq!(
-            result
-                .get("message")
-                .and_then(|message| message.get("text")),
-            finding.get("description")
+        let text = result["message"]["text"].as_str().unwrap();
+        let description = finding["description"].as_str().unwrap();
+        assert!(
+            text == description
+                || (text.starts_with(finding["kind"].as_str().unwrap())
+                    && text.ends_with(&format!(": {description}"))),
+            "a row's message leads with its own words, then the kind's sentence: {text}"
         );
         let level = result.get("level").unwrap().as_str().unwrap();
         let expected = match finding

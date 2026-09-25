@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use serde::Serialize;
 
 use amiss_wire::model::Digest;
@@ -55,13 +57,15 @@ pub(super) struct Driver {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct Rule {
+    pub(super) help: Message<'static>,
+    pub(super) help_uri: &'static str,
     pub(super) id: FindingKind,
     pub(super) short_description: Message<'static>,
 }
 
 #[derive(Serialize)]
 pub(super) struct Message<'report> {
-    pub(super) text: &'report str,
+    pub(super) text: Cow<'report, str>,
 }
 
 #[derive(Serialize)]

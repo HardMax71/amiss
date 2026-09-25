@@ -58,7 +58,14 @@ fn mirrored_issues(profile: &str) -> Vec<serde_json::Value> {
     for (issue, finding) in issues.iter().zip(&findings) {
         assert_eq!(issue.get("check_name"), finding.get("kind"));
         assert_eq!(issue.get("fingerprint"), finding.get("finding_key"));
-        assert_eq!(issue.get("description"), finding.get("description"));
+        let text = issue["description"].as_str().unwrap();
+        let description = finding["description"].as_str().unwrap();
+        assert!(
+            text == description
+                || (text.starts_with(finding["kind"].as_str().unwrap())
+                    && text.ends_with(&format!(": {description}"))),
+            "an issue leads with its row's own words, then the kind's sentence: {text}"
+        );
         let expected = match finding["effective_disposition"].as_str().unwrap() {
             "fail" => "major",
             "warn" => "minor",
