@@ -34,7 +34,7 @@ mkdocs	pass	21	0	332	0	1
 mkdocs-material	pass	103	0	1039	5	4
 myst-parser	pass	32	0	218	24	3
 nextra	pass	243	2	20	224	5
-numpy	pass	627	0	1188	36	22
+numpy	pass	627	0	1189	36	21
 ohmyzsh	pass	387	7	155	0	7
 opentelemetry.io	pass	2019	5	3095	7274	16
 prettier	pass	147	0	180	18	1

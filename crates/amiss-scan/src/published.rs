@@ -57,7 +57,9 @@ pub(crate) fn routed(
     }
     candidates(path)
         .into_iter()
-        .find(|(_, candidate)| {
+        .map(|(_, candidate)| candidate)
+        .chain(sphinx::page_sources(snapshot, path))
+        .find(|candidate| {
             matches!(
                 snapshot.locate(candidate),
                 Some(Located::Entry(
@@ -66,10 +68,7 @@ pub(crate) fn routed(
                 ))
             )
         })
-        .map_or_else(
-            || snapshot.published_routes.get(path).unwrap_or(path).clone(),
-            |(_, candidate)| candidate,
-        )
+        .unwrap_or_else(|| snapshot.published_routes.get(path).unwrap_or(path).clone())
 }
 
 /// Where a generator declared in the tree anchors this destination: each
