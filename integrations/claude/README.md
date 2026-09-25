@@ -6,6 +6,10 @@ the proof-gated fixes a blocking report carries. The skill text lives at
 [skills/amiss/SKILL.md](skills/amiss/SKILL.md) and assumes an installed `amiss` binary
 (`cargo install --locked amiss`, pinned to the version the repository's CI reviews).
 
+It also ships one hook. Before any Bash call that runs `git commit`, the staged check runs
+under `enforce-introduced`; exit class 1 or 2 blocks the call and hands the report to the agent,
+since Claude Code blocks a tool call on a hook's exit 2 ([hooks/](hooks/)).
+
 The repository doubles as its own marketplace, so installation is two commands:
 
 ```text
