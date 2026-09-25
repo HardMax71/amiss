@@ -26,14 +26,16 @@ matches.
 | `mdit-vue` | VitePress, VuePress | a wide punctuation class collapses to one separator; a leading digit takes `_` |
 | `kramdown` | Jekyll, GitHub Pages | strips the leading run of non-letters; ASCII only; empty becomes `section` |
 | `docutils` | Docutils and Sphinx | every non-alphanumeric run becomes one separator, so `foo_bar` is `foo-bar`; a leading digit run is stripped rather than prefixed; NFKD then ASCII fold, so `Ⅻ chapter` is `xii-chapter` |
-| `asciidoctor` | Asciidoctor and Antora, at the default `idprefix` and `idseparator` | the only rule whose separator is `_` and whose every identity carries a fixed prefix; hyphens and dots survive as themselves; repeats number from `_2` |
+| `asciidoctor` | Asciidoctor and Antora, at the default `idprefix` and `idseparator` | the only rule whose separator is `_` and whose every identity carries a fixed prefix; spaces, hyphens, dots and underscores all become one `_`; keeps Unicode letters; `(C)`, `...`, arrows and `--` vanish, so `A -- B` is `_ab`; repeats number from `_2` |
 
 The AsciiDoc rule is the one pinned to a configuration rather than to a renderer's only
 behaviour. `idprefix` and `idseparator` are document attributes, and this engine evaluates no
 attributes, so the rule holds their defaults and a document set that overrides either publishes
-identities the rule does not know. Two divergences are known and unverified against a running
-Asciidoctor: a title whose every character is filtered away publishes nothing here, and the
-attribute-driven cases above.
+identities the rule does not know. The title is read after Asciidoctor's replacements, which turn
+`(C)`, `(R)`, `(TM)`, an ellipsis, the four arrows and a dash between words into character
+references that the id rule then deletes; a spaced ` -- ` takes its spaces with it. A title
+whose every character is filtered away gets an empty id, which no link can name, so it publishes
+nothing here.
 
 An anchor resolves when any of them would publish it, or when the document declares it
 outright. Adding a rule can only grow that set, so a rule missing from the table is the
@@ -335,9 +337,9 @@ Seven rules have a runnable implementation, and against those the table reproduc
 9,049 headings harvested from the ten repositories in [The scan ledger](ledger.md) with no
 mismatch: github-slugger 2.0.0 and comrak 0.54.0 for `github`, goldmark 1.8.4,
 python-markdown 3.10, pymdownx, `@mdit-vue/shared`, and kramdown's own generator. The
-remaining five are transcribed and traced by hand: Gitea's `CleanValue`, Forgejo's
-`prefixedIDs`, mdBook's `id_from_content`, Asciidoctor's `Section.generate_id`, and Docutils'
-`make_id`. The
+`asciidoctor` column is what Asciidoctor 2.1.0.alpha.0 generated for each case. The remaining
+four are transcribed and traced by hand: Gitea's `CleanValue`, Forgejo's `prefixedIDs`,
+mdBook's `id_from_content`, and Docutils' `make_id`. The
 [published vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/heading-anchor-vectors.json)
 name which of the twelve is which and what each transcription is not checked against.
 
