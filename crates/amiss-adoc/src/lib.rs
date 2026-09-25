@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 pub mod adapter;
 pub mod block;
 pub mod macros;
@@ -29,6 +31,9 @@ pub struct Extraction {
     pub opaque: Vec<(usize, usize)>,
     pub blocks: usize,
     pub nesting: usize,
+    /// The document attributes its own entries define so far, by lowercased
+    /// name, each with whether its value names one the document does not.
+    attributes: BTreeMap<String, (String, bool)>,
 }
 
 /// What a block does to the text inside it. `Verbatim` is listing and
@@ -54,12 +59,15 @@ pub struct Block {
     pub list_item: bool,
 }
 
-/// One section title, with the level its `=` run declares.
+/// One section title, with the level its `=` run declares, and whether its
+/// text names an attribute the document does not define, which leaves its
+/// identity to whatever defines that attribute when the site is built.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Title {
     pub level: usize,
     pub text: String,
     pub span: (usize, usize),
+    pub unresolved: bool,
 }
 
 /// The reasons a document is refused before anything is extracted.
@@ -158,9 +166,22 @@ fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str)
                 level,
                 text: macros::without_anchors(line),
                 span: (at, at.saturating_add(line.len())),
+                unresolved: false,
             });
         underline = setext.is_some();
-        if let Some(title) = macros::title(line, at).or(setext) {
+        if let Some((name, value)) = attribute_entry(bare) {
+            match value {
+                Some(value) => {
+                    let defined = substituted(value, &extraction.attributes);
+                    extraction.attributes.insert(name, defined);
+                }
+                None => {
+                    extraction.attributes.remove(&name);
+                }
+            }
+        }
+        if let Some(mut title) = macros::title(line, at).or(setext) {
+            (title.text, title.unresolved) = substituted(&title.text, &extraction.attributes);
             extraction.anchors.extend(macros::declared_anchors(line));
             // Asciidoctor names a title by its text only when it holds a space or a capital.
             if title.text.contains(' ') || title.text.chars().any(char::is_uppercase) {
@@ -181,6 +202,80 @@ fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str)
             extraction.references.push(reference);
         }
     }
+}
+
+/// A document attribute entry, `:name: value`, with its name lowercased the
+/// way Asciidoctor stores it; `:name!:` and `:!name:` unset the attribute.
+fn attribute_entry(line: &str) -> Option<(String, Option<&str>)> {
+    let (name, value) = line.strip_prefix(':')?.split_once(':')?;
+    let (name, unset) = match (name.strip_prefix('!'), name.strip_suffix('!')) {
+        (Some(name), _) | (None, Some(name)) => (name, true),
+        (None, None) => (name.strip_suffix('@').unwrap_or(name), false),
+    };
+    let named = name
+        .chars()
+        .next()
+        .is_some_and(|first| first.is_alphanumeric() || first == '_')
+        && name
+            .chars()
+            .all(|next| next.is_alphanumeric() || matches!(next, '_' | '-'));
+    if !named || !(value.is_empty() || value.starts_with([' ', '\t'])) {
+        return None;
+    }
+    let value = value.trim();
+    Some((
+        name.to_lowercase(),
+        (!unset).then(|| value.strip_suffix(" \\").unwrap_or(value)),
+    ))
+}
+
+/// Text with each attribute reference replaced the way Asciidoctor replaces
+/// it: a defined attribute by its value, the empty built-ins by nothing or a
+/// space, and an escaped one left as written. Whether a reference named an
+/// attribute this document does not define comes back beside the text.
+fn substituted(text: &str, attributes: &BTreeMap<String, (String, bool)>) -> (String, bool) {
+    let mut out = String::with_capacity(text.len());
+    let mut unresolved = false;
+    let mut rest = text;
+    while let Some(open) = rest.find('{') {
+        let (before, from) = rest.split_at(open);
+        let Some(close) = from.find('}') else {
+            break;
+        };
+        let name = from.get(1..close).unwrap_or_default();
+        let escaped = before.ends_with('\\');
+        out.push_str(
+            before
+                .strip_suffix('\\')
+                .filter(|_| escaped)
+                .unwrap_or(before),
+        );
+        let simple = !name.is_empty()
+            && name
+                .chars()
+                .all(|next| next.is_alphanumeric() || matches!(next, '_' | '-'));
+        let value = attributes
+            .get(&name.to_lowercase())
+            .map(|(value, inner)| (value.as_str(), *inner))
+            .or(match name {
+                "empty" | "blank" => Some(("", false)),
+                "sp" => Some((" ", false)),
+                _ => None,
+            });
+        match (escaped, value) {
+            (false, Some((value, inner))) if simple => {
+                unresolved |= inner;
+                out.push_str(value);
+            }
+            _ => {
+                unresolved |= !escaped && (simple || name.contains(':'));
+                out.push_str(from.get(..=close).unwrap_or_default());
+            }
+        }
+        rest = from.get(close.saturating_add(1)..).unwrap_or_default();
+    }
+    out.push_str(rest);
+    (out, unresolved)
 }
 
 fn lines(body: &str) -> impl Iterator<Item = (usize, &str)> {
