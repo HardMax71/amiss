@@ -57,7 +57,12 @@ pub(crate) fn run(author: &AuthorInvocation) -> ExitCode {
         );
         return ExitCode::FAILURE;
     };
-    // Double quotes first, single quotes for lines that hold them.
+    // Double quotes first, single quotes for lines that hold them, and
+    // backslash escapes for a line holding both.
+    let escaped = expected
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('&', "\\&");
     let spellings = [
         format!(
             "[amiss:{}]: <amiss:value?path={}&line=L{}> \"{expected}\"",
@@ -71,6 +76,12 @@ pub(crate) fn run(author: &AuthorInvocation) -> ExitCode {
             author.path.as_str(),
             author.line
         ),
+        format!(
+            "[amiss:{}]: <amiss:value?path={}&line=L{}> \"{escaped}\"",
+            author.name,
+            author.path.as_str(),
+            author.line
+        ),
     ];
     for definition in &spellings {
         if round_trips(definition, author, expected) {
@@ -79,8 +90,8 @@ pub(crate) fn run(author: &AuthorInvocation) -> ExitCode {
         }
     }
     eprintln!(
-        "amiss claim: the line cannot be spelled into the claim grammar; neither title \
-         quoting survives extraction, so pick another line"
+        "amiss claim: the line cannot be spelled into the claim grammar; no title quoting, \
+         escaped or not, survives extraction, so pick another line"
     );
     ExitCode::FAILURE
 }

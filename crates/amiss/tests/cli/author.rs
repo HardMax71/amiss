@@ -98,8 +98,49 @@ fn a_printed_definition_evaluates_attested() {
     assert_eq!(report["summary"]["unattested_claims"], 0, "{report}");
 }
 
-/// Every refusal answers alone: a line past the file names the count, a line
-/// both quotings cannot carry refuses unspelled, and a missing file says so.
+/// A line holding both quotes, and an entity a title would decode, is spelled
+/// with backslash escapes, and the printed claim evaluates attested.
+#[test]
+fn a_line_holding_both_quotes_is_escaped_and_attested() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    init_repository(root).unwrap();
+    fs::write(root.join("subject.txt"), "say \"it's\" \\ &amp; done\n").unwrap();
+    fs::write(root.join("docs.md"), "# D\n").unwrap();
+    let base = commit_worktree(root, &[], "base").unwrap().id;
+    let shown = root.to_str().unwrap();
+    let (code, stdout, stderr) = amiss(&author_args(shown, "subject.txt", "1", "mixed"));
+    assert_eq!(code, 0, "{stderr}");
+    let definition = String::from_utf8(stdout).unwrap();
+    assert_eq!(
+        definition,
+        "[amiss:mixed]: <amiss:value?path=subject.txt&line=L1> \"say \\\"it's\\\" \\\\ \\&amp; done\"\n"
+    );
+    fs::write(root.join("docs.md"), format!("# D\n\n{definition}")).unwrap();
+    let candidate = commit_worktree(root, &[], "claimed").unwrap().id;
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        shown,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "enforce",
+        "--format",
+        "json",
+    ]);
+    let report = payload(&stdout);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(report["summary"]["governed_claims"], 1, "{report}");
+    assert_eq!(report["summary"]["unattested_claims"], 0, "{report}");
+}
+
+/// Every refusal answers alone: a line past the file names the count, and a
+/// missing file says so.
 #[test]
 fn refusals_answer_alone() {
     let dir = TempDir::new().unwrap();
@@ -114,18 +155,9 @@ fn refusals_answer_alone() {
     assert_eq!(code, 1);
     assert!(stderr.contains("holds 2 lines"), "{stderr}");
 
-    let (code, _stdout, stderr) = amiss(&author_args(root, "mixed.txt", "2", "unspellable"));
-    assert_eq!(code, 1);
-    assert!(stderr.contains("neither title quoting"), "{stderr}");
-
     let (code, _stdout, stderr) = amiss(&author_args(root, "absent.txt", "1", "gone"));
     assert_eq!(code, 1);
     assert!(stderr.contains("unreadable"), "{stderr}");
-
-    fs::write(dir.path().join("entity.txt"), "a&amp;b\n").unwrap();
-    let (code, _stdout, stderr) = amiss(&author_args(root, "entity.txt", "1", "entity"));
-    assert_eq!(code, 1, "an entity-bearing line decodes away from itself");
-    assert!(stderr.contains("neither title quoting"), "{stderr}");
 }
 
 /// The authoring form owns exactly four flags: scan flags, a zero line, a
