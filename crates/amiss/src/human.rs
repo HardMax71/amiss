@@ -207,7 +207,9 @@ pub(crate) fn engine_resolution(
                 Missing::HeadingAnchorNotFound { near, .. } => {
                     (near.as_ref().map(|near| atom(near)), None)
                 }
-                Missing::LineFragmentOutOfRange { .. } | Missing::LabelNotDeclared => (None, None),
+                Missing::LineFragmentOutOfRange { .. }
+                | Missing::SelectionNotFound { .. }
+                | Missing::LabelNotDeclared => (None, None),
             };
             Some(missing_detail(MissingTag::from(missing), near, moved))
         }

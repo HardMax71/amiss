@@ -910,7 +910,8 @@ fn a_directive_slash_path_starts_at_the_source_root() {
 
 /// A `literalinclude` selection is checked the way a line fragment is: a
 /// `:lines:` range the file does not hold is out of range, one it holds
-/// resolves, and a `:pyobject:` is a code fragment the run declines.
+/// resolves, and a `:pyobject:` the file defines nowhere is a selection the
+/// file does not carry.
 #[test]
 fn a_literalinclude_selection_is_checked_as_a_line_range() {
     let chain = amiss_fixtures::commit_chain(&[(
@@ -936,8 +937,79 @@ fn a_literalinclude_selection_is_checked_as_a_line_range() {
     ));
     assert!(matches!(
         answer(&rows, "docs/index.rst", 10),
-        Resolution::UnsupportedSemantics(UnsupportedSemantics::CodeFragment(_))
+        Resolution::Missing(Missing::SelectionNotFound { .. })
     ));
+}
+
+/// An include that selects part of a file by a marker is answered by the
+/// marker: an mdBook `ANCHOR:`, a snippet's `[start:]` section, an `AsciiDoc`
+/// `tag::`, the text a `literalinclude` starts after, or the `def` or `class`
+/// a `:pyobject:` names. A marker the file does not carry is a selection the
+/// file does not hold, and a line selection is a line range whose end stops
+/// at the end of the file, the way every include grammar stops it.
+#[test]
+fn an_include_selection_is_answered_by_the_marker_it_names() -> std::io::Result<()> {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("book/book.toml", "[book]\n"),
+            ("book/src/SUMMARY.md", "# Summary\n"),
+            (
+                "book/src/chapter.md",
+                "{{#include listing.rs:main}}\n\n{{#include listing.rs:gone}}\n\n\
+                 {{#include listing.rs:2:3}}\n\n{{#include listing.rs:40:50}}\n\n\
+                 {{#include listing.rs:2:9}}\n",
+            ),
+            (
+                "book/src/listing.rs",
+                "// ANCHOR: main\nfn main() {}\n// ANCHOR_END: main\n",
+            ),
+            ("site/mkdocs.yml", "site_name: probe\n"),
+            (
+                "site/docs/page.md",
+                "--8<-- \"snippets/code.py:setup\"\n\n--8<-- \"snippets/code.py:teardown\"\n",
+            ),
+            (
+                "site/snippets/code.py",
+                "# --8<-- [start:setup]\nx = 1\n# --8<-- [end:setup]\n",
+            ),
+            (
+                "adoc/guide.adoc",
+                "= Guide\n\ninclude::code.rb[tag=hello]\n\ninclude::code.rb[tags=bye]\n",
+            ),
+            ("adoc/code.rb", "# tag::hello[]\nputs 1\n# end::hello[]\n"),
+            ("docs/conf.py", "project = 'probe'\n"),
+            ("docs/code.py", "# begin\ndef run():\n    pass\n"),
+            (
+                "docs/index.rst",
+                "Index\n=====\n\n.. literalinclude:: code.py\n   :start-after: # begin\n\n\
+                 .. literalinclude:: code.py\n   :start-after: # nowhere\n\n\
+                 .. literalinclude:: code.py\n   :pyobject: run\n",
+            ),
+        ],
+    )])?;
+    let rows = answers(&chain);
+    let found = |document: &str, line: u64| {
+        matches!(answer(&rows, document, line), Resolution::Resolved { .. })
+    };
+    let lost = |document: &str, line: u64| {
+        matches!(
+            answer(&rows, document, line),
+            Resolution::Missing(Missing::SelectionNotFound { .. })
+        )
+    };
+    assert!(found("book/src/chapter.md", 1) && lost("book/src/chapter.md", 3));
+    assert!(found("book/src/chapter.md", 5));
+    assert!(matches!(
+        answer(&rows, "book/src/chapter.md", 7),
+        Resolution::Missing(Missing::LineFragmentOutOfRange { .. })
+    ));
+    assert!(found("book/src/chapter.md", 9));
+    assert!(found("site/docs/page.md", 1) && lost("site/docs/page.md", 3));
+    assert!(found("adoc/guide.adoc", 3) && lost("adoc/guide.adoc", 5));
+    assert!(found("docs/index.rst", 4) && lost("docs/index.rst", 7));
+    assert!(found("docs/index.rst", 10));
+    Ok(())
 }
 
 /// An `AsciiDoc` section named with an attribute the document defines takes

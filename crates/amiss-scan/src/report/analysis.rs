@@ -45,13 +45,15 @@ fn occurrence(
     );
     serde_json::to_writer(&mut writer, &input).map_err(|_defect| crate::Error::Internal)?;
     let fragment = match &observation.resolution {
-        Resolution::Missing(Missing::HeadingAnchorNotFound { .. } | Missing::LabelNotDeclared) => {
-            observation
-                .intent
-                .fragment
-                .clone()
-                .filter(|fragment| !fragment.is_empty())
-        }
+        Resolution::Missing(
+            Missing::HeadingAnchorNotFound { .. }
+            | Missing::LabelNotDeclared
+            | Missing::SelectionNotFound { .. },
+        ) => observation
+            .intent
+            .fragment
+            .clone()
+            .filter(|fragment| !fragment.is_empty()),
         Resolution::Missing(
             Missing::PathNotFound { .. } | Missing::LineFragmentOutOfRange { .. },
         )

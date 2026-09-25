@@ -119,6 +119,9 @@ pub enum MissingResolution<P = RepoPathText> {
         )]
         same_object_at: Option<Nullable<P>>,
     },
+    SelectionNotFound {
+        path: P,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
