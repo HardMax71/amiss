@@ -39,6 +39,18 @@ fn a_footnote_call_in_a_heading_contributes_nothing() {
     assert_eq!(texts(&got), vec!["Note".to_owned()]);
 }
 
+/// A BOM is not text to any renderer, so a first-line heading after one is
+/// still a heading, and its span still counts the BOM's raw bytes.
+#[test]
+fn a_bom_leaves_a_first_line_heading_a_heading() {
+    for adapter in [Adapter::Markdown, Adapter::Mdx] {
+        let got = extraction(adapter, "\u{feff}# Guide Title\n\nText.\n");
+        let heading = only(&got);
+        assert_eq!(heading.text, "Guide Title");
+        assert_eq!(heading.span, (3, 16));
+    }
+}
+
 #[test]
 fn setext_and_closed_atx_headings_are_recorded() {
     let source = "Title\n=====\n\n## Closed ##\n";

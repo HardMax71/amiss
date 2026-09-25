@@ -56,3 +56,14 @@ pub fn recognize(source: &[u8]) -> Option<Region> {
     }
     None
 }
+
+/// Where a grammar starts reading: after the frontmatter region when there is
+/// one, and otherwise after the BOM, which no renderer reads as text.
+#[must_use]
+pub fn body_offset(source: &[u8]) -> usize {
+    match recognize(source) {
+        Some(region) => region.suffix_offset,
+        None if source.starts_with(&BOM) => BOM.len(),
+        None => 0,
+    }
+}
