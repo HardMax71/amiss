@@ -1,7 +1,7 @@
 - id: amiss
   name: amiss documentation check
   description: Checks staged documentation against the repository tree it describes; args choose the profile, enforce-introduced unless given.
-  entry: sh -c 'command -v amiss >/dev/null || { echo "amiss is not installed; run cargo install --locked amiss" >&2; exit 2; }; exec amiss check --repo . --object-format "$(git rev-parse --show-object-format)" --base "$(git rev-parse HEAD)" --index "$@"' amiss
+  entry: sh -c 'command -v amiss >/dev/null || { echo "amiss is not installed; run cargo install --locked amiss" >&2; exit 2; }; base="$(git rev-parse -q --verify "HEAD^{commit}")" || { echo "amiss found no commit yet to compare the staged state against, so the check starts with the second commit" >&2; exit 0; }; exec amiss check --repo . --object-format "$(git rev-parse --show-object-format)" --base "$base" --index "$@"' amiss
   args: [--profile, enforce-introduced]
   # language rust cannot install a virtual workspace root, so the hook needs a prebuilt amiss
   language: system

@@ -231,7 +231,8 @@ fn the_pre_commit_hook_takes_its_profile_from_args() {
     let hook = fs::read_to_string(root.join(".pre-commit-hooks.yaml"))
         .expect("the pre-commit hook definition is readable");
     for contract in [
-        "--base \"$(git rev-parse HEAD)\" --index \"$@\"' amiss\n",
+        "--base \"$base\" --index \"$@\"' amiss\n",
+        "base=\"$(git rev-parse -q --verify \"HEAD^{commit}\")\" || {",
         "  args: [--profile, enforce-introduced]\n",
         "run cargo install --locked amiss",
         "  always_run: true\n",

@@ -32,7 +32,8 @@ from this repository's release workflow; [Security model](security.md#verified-c
 has the CI form of that.
 
 Now run it from the repository root. The command checks the staged index against `HEAD`, so
-it works on a fresh repository and on a depth-1 clone alike:
+it works on a depth-1 clone and on any repository with a commit. Before the first commit there
+is nothing to compare against, and the published hook passes with a note until there is one.
 
 ```sh
 amiss check --repo . --object-format sha1 \
