@@ -4,7 +4,9 @@ use std::net::IpAddr;
 
 use url::Url;
 
-use super::{advance_redirect, get_retries, global, redirect_target, shown, vetted};
+use super::{
+    advance_redirect, get_retries, global, redirect_target, refresh_target, shown, vetted,
+};
 
 fn ip(text: &str) -> IpAddr {
     text.parse().unwrap()
@@ -141,6 +143,44 @@ fn a_retarget_needs_an_entirely_permanent_redirect_chain() {
     assert_eq!(
         advance_redirect(Some(advance_redirect(None, 307)), 301),
         (301, false)
+    );
+}
+
+/// A redirect stub that answers 200 names its new home in an instant
+/// refresh, the way the gh-aw site's old address does, and that target is
+/// read against the page's URL. A delayed refresh is a page a reader sees
+/// first, and an attribute that only ends in `http-equiv` is another
+/// attribute, so neither moves anything.
+#[test]
+fn an_instant_meta_refresh_names_the_page_a_browser_goes_to() {
+    let current = Url::parse("https://githubnext.github.io/gh-aw/").unwrap();
+    let target = |head: &str| refresh_target(&current, head.as_bytes()).map(|url| url.to_string());
+    assert_eq!(
+        target(
+            "<head>\n<title>Redirecting</title>\n<meta http-equiv=\"refresh\" \
+             content=\"0; url=https://github.github.io/gh-aw/\" />"
+        ),
+        Some("https://github.github.io/gh-aw/".to_owned())
+    );
+    assert_eq!(
+        target("<META HTTP-EQUIV=Refresh CONTENT=\"0;URL='/moved/'\">"),
+        Some("https://githubnext.github.io/moved/".to_owned())
+    );
+    assert_eq!(
+        target("<meta content=\"0, https://other.example/\" http-equiv=\"refresh\">"),
+        Some("https://other.example/".to_owned())
+    );
+    assert_eq!(
+        target("<meta http-equiv=\"refresh\" content=\"5; url=https://other.example/\">"),
+        None
+    );
+    assert_eq!(
+        target("<meta data-http-equiv=\"refresh\" content=\"0; url=https://other.example/\">"),
+        None
+    );
+    assert_eq!(
+        target("<meta name=\"refresh\" content=\"0; url=https://other.example/\">"),
+        None
     );
 }
 

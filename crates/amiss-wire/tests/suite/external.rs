@@ -1113,32 +1113,39 @@ fn the_judgment_policy_is_conservative() {
 fn only_a_proved_permanent_redirect_becomes_a_retarget() {
     let permanent = "https://a.example/old";
     let temporary = "https://b.example/old";
+    let dead = "https://c.example/old";
     let permanent_target = "https://a.example/current";
-    let temporary_target = "https://b.example/current";
-    let plan = planned(vec![
-        row(Value::Null, external_occurrence("docs/a.md", permanent)),
-        row(Value::Null, external_occurrence("docs/a.md", temporary)),
-    ]);
+    let plan = planned(
+        [permanent, temporary, dead]
+            .iter()
+            .map(|destination| row(Value::Null, external_occurrence("docs/a.md", destination)))
+            .collect(),
+    );
+    let probed =
+        |destination: &str, ended: Option<&str>, method: &str, chain: Option<bool>, status: u16| {
+            let mut fields = vec![
+                ("checked_at", Value::from("t0")),
+                ("destination", Value::from(destination)),
+                ("kind", Value::from("http-probe")),
+                ("method", Value::from(method)),
+                ("status", Value::from(status)),
+            ];
+            fields.extend(ended.map(|ended| ("final_destination", Value::from(ended))));
+            fields.extend(chain.map(|chain| ("redirect_chain_permanent", Value::Bool(chain))));
+            Value::from_iter(fields)
+        };
     let observed = evidence(
         &plan,
         vec![
-            Value::from_iter(vec![
-                ("checked_at", Value::from("t0")),
-                ("destination", Value::from(permanent)),
-                ("final_destination", Value::from(permanent_target)),
-                ("kind", Value::from("http-probe")),
-                ("method", Value::from("head")),
-                ("redirect_chain_permanent", Value::Bool(true)),
-                ("status", Value::from(200)),
-            ]),
-            Value::from_iter(vec![
-                ("checked_at", Value::from("t0")),
-                ("destination", Value::from(temporary)),
-                ("final_destination", Value::from(temporary_target)),
-                ("kind", Value::from("http-probe")),
-                ("method", Value::from("head")),
-                ("status", Value::from(200)),
-            ]),
+            probed(permanent, Some(permanent_target), "head", Some(true), 200),
+            probed(
+                temporary,
+                Some("https://b.example/current"),
+                "head",
+                None,
+                200,
+            ),
+            probed(dead, Some("https://c.example/gone"), "get", Some(true), 404),
         ],
     );
     let assessment = assess(
@@ -1155,39 +1162,25 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
         .expect("fixture field"))
     .as_array()
     .expect("fixture array");
-    let verdict = |destination: &str| {
+    let retarget = |destination: &str| {
         verdicts
             .iter()
             .find(|row| row.get("destination").and_then(Value::as_str) == Some(destination))
             .expect("the plan destination has one verdict")
+            .get("retarget")
+            .and_then(Value::as_str)
     };
+    assert_eq!(retarget(permanent), Some(permanent_target));
+    assert_eq!(retarget(temporary), None);
     assert_eq!(
-        verdict(permanent).get("retarget").and_then(Value::as_str),
-        Some(permanent_target)
-    );
-    assert_eq!(
-        verdict(temporary).get("retarget").and_then(Value::as_str),
-        None
+        retarget(dead),
+        None,
+        "a permanent move onto a page that is gone is no edit to offer"
     );
 
     for malformed in [
-        Value::from_iter(vec![
-            ("checked_at", Value::from("t0")),
-            ("destination", Value::from(permanent)),
-            ("kind", Value::from("http-probe")),
-            ("method", Value::from("head")),
-            ("redirect_chain_permanent", Value::Bool(true)),
-            ("status", Value::from(200)),
-        ]),
-        Value::from_iter(vec![
-            ("checked_at", Value::from("t0")),
-            ("destination", Value::from(permanent)),
-            ("final_destination", Value::from(permanent_target)),
-            ("kind", Value::from("http-probe")),
-            ("method", Value::from("head")),
-            ("redirect_chain_permanent", Value::Bool(false)),
-            ("status", Value::from(200)),
-        ]),
+        probed(permanent, None, "head", Some(true), 200),
+        probed(permanent, Some(permanent_target), "head", Some(false), 200),
     ] {
         assert!(matches!(
             assess(
