@@ -207,6 +207,22 @@ page and `start.md` is not a German one. That reading holds only where both side
 under a locale directory a dotted name such as `v1.2-notes.md` is a page like any other. When one root sits inside the other the deeper one wins,
 which is what lets a locale directory live under the source root.
 
+A site that keeps its source locale at the content root, which is Starlight's `root` locale,
+holds every other locale's directory under the source root, and none of those pages is a source
+page. `excluded` names their roots, byte-sorted, and a page under one belongs to neither side:
+
+```json
+{
+  "source": { "root": "src/content/docs", "locale": "en", "suffix": null },
+  "target": { "root": "src/content/docs/de", "locale": "de-DE", "suffix": null },
+  "documents": [".md", ".mdx"],
+  "excluded": ["src/content/docs/fr", "src/content/docs/ja"]
+}
+```
+
+Without it the French and Japanese pages count as English ones, and German is short every page
+they hold.
+
 `documents` is byte-sorted, and every entry starts with a dot. A file whose name ends in none of
 them is not a page, so images, partials, and configuration never turn into missing translations.
 

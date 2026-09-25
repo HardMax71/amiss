@@ -37,6 +37,7 @@ fn directories() -> LocaleTreeContext {
         source: side("docs", "en", None),
         target: side("docs/de-DE", "de-DE", None),
         documents: vec![".md".to_owned()],
+        excluded: None,
     }
 }
 
@@ -173,6 +174,7 @@ fn a_locale_suffix_in_the_filename_keys_the_same_page() {
         source: side("docs", "en", None),
         target: side("docs", "de-DE", Some("de-DE")),
         documents: vec![".md".to_owned()],
+        excluded: None,
     };
     let plan = plan(&chain, &context, |_plan| {});
 
@@ -280,10 +282,52 @@ fn a_context_the_plan_does_not_name_refuses() {
         source: side("docs", "de-DE", None),
         target: side("docs/de-DE", "en", None),
         documents: vec![".md".to_owned()],
+        excluded: None,
     };
 
     assert_eq!(
         produce(&chain, &swapped, &plan),
+        Err(InventoryError::Context)
+    );
+}
+
+/// A site that keeps its source locale at the content root holds every other
+/// locale under it, so the roots the context excludes belong to neither side,
+/// and an excluded list out of byte order is refused.
+#[test]
+fn an_excluded_locale_root_belongs_to_neither_side() {
+    let chain = staged_repository(&[
+        ("docs/index.md", Staged::File(b"# Widget\n")),
+        ("docs/de-DE/index.md", Staged::File(b"# Widget (de)\n")),
+        ("docs/fr/index.md", Staged::File(b"# Widget (fr)\n")),
+        ("docs/fr/only.md", Staged::File(b"# Seulement\n")),
+        ("docs/ja/index.md", Staged::File(b"# Widget (ja)\n")),
+    ])
+    .unwrap();
+    let root = |path: &str| RepoPathText::try_from(path.to_owned()).unwrap();
+    let context = LocaleTreeContext {
+        excluded: Some(vec![root("docs/fr"), root("docs/ja")]),
+        ..directories()
+    };
+    let plan = plan(&chain, &context, |_plan| {});
+
+    let evidence = inventory(&chain, &context, &plan);
+
+    assert_eq!(
+        keys(&evidence),
+        (vec!["index.md".to_owned()], vec!["index.md".to_owned()])
+    );
+    assert_eq!(
+        coverage(&plan, &evidence).verdict,
+        AssessmentVerdict::Matched
+    );
+    let unsorted = LocaleTreeContext {
+        excluded: Some(vec![root("docs/ja"), root("docs/fr")]),
+        ..directories()
+    };
+    let unsorted_plan = self::plan(&chain, &unsorted, |_plan| {});
+    assert_eq!(
+        produce(&chain, &unsorted, &unsorted_plan),
         Err(InventoryError::Context)
     );
 }
@@ -318,14 +362,32 @@ fn the_documented_contexts_key_the_layouts_they_claim() {
         ("docs/guide/start.de-DE.md", Staged::File(b"# Anfang\n")),
     ])
     .unwrap();
+    let root_locale = staged_repository(&[
+        ("src/content/docs/index.mdx", Staged::File(b"# Widget\n")),
+        (
+            "src/content/docs/de/index.mdx",
+            Staged::File(b"# Widget (de)\n"),
+        ),
+        (
+            "src/content/docs/fr/index.mdx",
+            Staged::File(b"# Widget (fr)\n"),
+        ),
+        (
+            "src/content/docs/ja/guide.md",
+            Staged::File(b"# Guide (ja)\n"),
+        ),
+    ])
+    .unwrap();
     let claimed = [
         (vec!["guide/start.md", "index.mdx"], vec!["guide/start.md"]),
         (vec!["guide/start.md"], vec!["guide/start.md"]),
+        (vec!["index.mdx"], vec!["index.mdx"]),
     ];
+    assert_eq!(documented().len(), claimed.len());
 
     for ((context, chain), (source, target)) in documented()
         .into_iter()
-        .zip([directories, filenames])
+        .zip([directories, filenames, root_locale])
         .zip(claimed)
     {
         let plan = plan(&chain, &context, |_plan| {});
