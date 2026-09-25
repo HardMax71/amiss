@@ -51,11 +51,16 @@ fn two_hundred_scalars_then_a_literal_ellipsis() {
 fn byte_atoms_escape_every_nonprintable_byte_and_invent_nothing() {
     use amiss_wire::human::atom_bytes;
     assert_eq!(atom_bytes(b"docs/guide.md"), "\"docs/guide.md\"");
-    assert_eq!(atom_bytes(b"bad-\xff.md"), "\"bad-\\u00ff.md\"");
-    assert_eq!(atom_bytes(b"\x1b[31mred"), "\"\\u001b[31mred\"");
+    assert_eq!(atom_bytes(b"bad-\xff.md"), "\"bad-\\xff.md\"");
+    assert_eq!(atom_bytes(b"\x1b[31mred"), "\"\\x1b[31mred\"");
+    assert_ne!(
+        atom_bytes(b"nav\xe9.md"),
+        atom("nav\u{e9}.md"),
+        "a raw byte and the character sharing its value print apart"
+    );
     assert_eq!(atom_bytes(b"a\"b\\c"), "\"a\\\"b\\\\c\"");
     let long = vec![0xfe_u8; 205];
     let rendered = atom_bytes(&long);
     assert!(rendered.ends_with("...\""));
-    assert_eq!(rendered.matches("\\u00fe").count(), 200);
+    assert_eq!(rendered.matches("\\xfe").count(), 200);
 }

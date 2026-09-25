@@ -336,7 +336,7 @@ fn a_byte_named_invalid_document_is_unsupported_with_its_name_in_bytes() {
     assert_eq!(code, 0);
     let text = String::from_utf8(stdout).unwrap();
     assert!(
-        text.contains(r#"unsupported "bad-\u00ff-doc.md" undecodable-document"#),
+        text.contains(r#"unsupported "bad-\xff-doc.md" undecodable-document"#),
         "the human line speaks the name through the bytes atom: {text:?}"
     );
     assert!(
