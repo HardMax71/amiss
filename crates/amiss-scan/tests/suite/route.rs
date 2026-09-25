@@ -1371,30 +1371,6 @@ fn a_shared_configuration_name_is_hugo_only_where_its_bindings_say_so() {
     assert_eq!(outcomes(&chain), expected(want));
 }
 
-/// The page-URL reading answers to one name. `directory-pages` says the site
-/// publishes a page at a directory of its own name, whatever generator builds
-/// it, and the generator name that used to say it declares no rule, so the
-/// identical destination beside it stays the missing path the author wrote.
-#[test]
-fn the_page_url_reading_answers_to_the_behaviour_name_alone() {
-    let chain = amiss_fixtures::declared_page_router().expect("the fixture stages");
-    let want: Vec<Outcome> = vec![
-        row(
-            "named/setup/live.md",
-            Some("named/guide"),
-            ResolutionTag::Resolved,
-            Some("named/setup/guide/index.md"),
-        ),
-        row(
-            "retired/setup/live.md",
-            Some("retired/guide"),
-            ResolutionTag::Missing,
-            Some("retired/guide"),
-        ),
-    ];
-    assert_eq!(outcomes(&chain), expected(want));
-}
-
 /// A repository that declares its own router gets that router's resolving
 /// spellings where no configuration file names the generator. Under
 /// `directory-pages` a page is published at a directory of its own name, so a

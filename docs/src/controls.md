@@ -17,7 +17,8 @@ the directory it sits in, for a tree whose generator is configured somewhere els
 on route spellings that resolve a destination against files the tree already holds. Its `base`
 line says the URL path that directory is served at, which reads a slash-rooted route as a path
 under it. It reaches no rule that withholds an answer, so it can move a destination onto a file
-the tree already holds and can never clear one the tree lacks.
+the tree already holds and can never clear one the tree lacks. Like the policy, a candidate file
+that says anything else makes the run incomplete with `CONFIGURATION_INVALID` at that file.
 [What a documentation router serves](route-spellings.md) holds the rules it selects.
 
 Both sides of a comparison are read under the declarations the candidate holds, since the file

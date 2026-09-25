@@ -2794,6 +2794,60 @@ fn adopting_a_router_declaration_introduces_nothing() {
     }
 }
 
+/// A declaration file that declares nothing refuses the candidate side and
+/// names the file, rather than reading as no declaration: a name no rule
+/// carries, a miscased one, a base without its router or its slash, a
+/// repeated key or another one. The base side holding such a file is what the
+/// repairing commit replaces, so that run completes, and a byte-order mark,
+/// comments, a document marker and CRLF endings are YAML's own spelling.
+#[test]
+fn a_router_declaration_that_declares_nothing_refuses_the_candidate() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs/.amiss")).unwrap();
+    fs::write(root.join("docs/live.md"), "# Live\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let mut previous = oid(git(root, &["rev-parse", "HEAD"]).trim());
+    for (declaration, refused) in [
+        ("router: hugo-pages\n", true),
+        ("router: Directory-Pages\n", true),
+        ("base: /docs/\n", true),
+        ("router: directory-pages\nbase: docs\n", true),
+        ("router: directory-pages\nrouter: astro\n", true),
+        ("router: directory-pages\ntheme: dark\n", true),
+        (
+            "\u{feff}# served by Hugo\n---\nrouter: directory-pages\r\nbase: /docs/\r\n",
+            false,
+        ),
+    ] {
+        fs::write(root.join("docs/.amiss/router.yml"), declaration).unwrap();
+        git(root, &["add", "-A"]);
+        let staged = payload(&staged_index(&repo, &engine(), None, &shell(), &previous).unwrap());
+        git(root, &["commit", "-qm", "declaration"]);
+        let candidate = oid(git(root, &["rev-parse", "HEAD"]).trim());
+        let committed =
+            payload(&commit_pair(&repo, &engine(), None, &shell(), &previous, &candidate).unwrap());
+        for report in [&staged, &committed] {
+            let errors: Vec<(&str, &str)> = report["errors"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|row| Some((row["code"].as_str()?, row["path"].as_str()?)))
+                .collect();
+            let expected: &[(&str, &str)] = if refused {
+                &[("CONFIGURATION_INVALID", "docs/.amiss/router.yml")]
+            } else {
+                &[]
+            };
+            assert_eq!(errors, expected, "{declaration:?}: {}", report["errors"]);
+        }
+        previous = candidate;
+    }
+}
+
 /// A Hugo configuration is the same declaration written where the generator
 /// reads it. A candidate that newly binds one lends it to the base, so the
 /// anchor it makes readable on an untouched page is pre-existing. A candidate

@@ -460,19 +460,34 @@ configuration is in a Docker image and a sibling repository, and Babel's site is
 So the repository says it, since nothing in such a tree can. `.amiss/router.yml` names one
 router on a line of its own, `router: directory-pages`, and the directory holding that file
 is the root the rule anchors at, where the configuration file would have been. The nearest
-declaration above the document answers and nothing else in the file is read, the way a
-component descriptor is read for its `name`.
+declaration above the document answers. The table below is every name the line accepts.
 
 <!-- amiss-doc-contract:declarable-routers:start -->
 | Declared router | Turns on |
 | --- | --- |
+| `mdbook` | nothing |
+| `vitepress` | nothing |
+| `vitepress-readme` | nothing |
+| `antora` | nothing |
 | `docusaurus` | `site-alias`, `content-root`, `document-id` |
 | `mkdocs` | `directory-url` |
 | `sphinx` | `source-root` |
+| `mdbook-pages` | nothing |
 | `zola` | `content-root` |
+| `astro` | nothing |
 | `nextjs-app` | `page-directory` |
+| `eleventy` | nothing |
+| `hugo` | nothing |
 | `directory-pages` | `page-url` |
+| `jekyll` | nothing |
 <!-- amiss-doc-contract:declarable-routers:end -->
+
+The file holds the declaration and nothing else. Comments, blank lines, a `---` marker, CRLF
+endings and a byte-order mark are YAML's own and read as nothing. Any other line refuses the
+run as `CONFIGURATION_INVALID` at the file: a name outside the table, a name in the wrong case,
+a `base` without its leading slash or with no `router` line beside it, a repeated key, or a key
+this page does not define. A typo therefore never passes as a declaration that does nothing.
+Only the candidate's files are held to this, so the commit that repairs one completes.
 
 A declaration turns on the spellings that resolve a destination and no others. `built-route`
 and `built-page` are not in that table and cannot be reached from a file a repository writes,
