@@ -759,40 +759,32 @@ fn nested_group_owners_match_segment_by_segment() {
     );
 }
 
-/// A terminal slash is a directory hint exactly where the form tolerates it.
+/// GitLab serves either form with a terminal slash, naming a directory or a
+/// file, so the slash promises no kind.
 #[test]
-fn a_terminal_slash_is_tolerated_only_as_a_directory_hint() {
+fn a_terminal_slash_promises_no_kind_on_gitlab() {
     let mut bed = bed();
     let context = forge_context(ForgeDialect::Gitlab);
-    let (tree, tree_row) = bed
-        .run_as(
-            Adapter::Markdown,
-            Some(&context),
-            "docs/guide.md",
-            false,
-            "https://gitlab.com/acme/widgets/-/tree/feature/x/docs/",
-        )
-        .unwrap();
-    assert_eq!(tree.kind, IntentKind::SameRepositoryGitlab);
-    assert_eq!(tree.target_kind, Some(TargetKind::Tree));
-    assert!(
-        matches!(tree_row, Resolution::Resolved { .. }),
-        "a tree with a directory-hint slash resolves: {tree_row:?}"
-    );
-
-    let (_blob, blob_row) = bed
-        .run_as(
-            Adapter::Markdown,
-            Some(&context),
-            "docs/guide.md",
-            false,
-            "https://gitlab.com/acme/widgets/-/blob/feature/x/docs/guide.md/",
-        )
-        .unwrap();
-    assert!(
-        !matches!(blob_row, Resolution::Resolved { .. }),
-        "a blob does not tolerate the hint: {blob_row:?}"
-    );
+    for destination in [
+        "https://gitlab.com/acme/widgets/-/tree/feature/x/docs/",
+        "https://gitlab.com/acme/widgets/-/blob/feature/x/docs/guide.md/",
+    ] {
+        let (intent, row) = bed
+            .run_as(
+                Adapter::Markdown,
+                Some(&context),
+                "docs/guide.md",
+                false,
+                destination,
+            )
+            .unwrap();
+        assert_eq!(intent.kind, IntentKind::SameRepositoryGitlab);
+        assert_eq!(intent.target_kind, Some(TargetKind::Either));
+        assert!(
+            matches!(row, Resolution::Resolved { .. }),
+            "{destination} resolves: {row:?}"
+        );
+    }
 }
 
 /// The gitea directory hint needs at least one real segment before the

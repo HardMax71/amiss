@@ -21,14 +21,14 @@
       "operation": "target-kind",
       "construct": "markdown-autolink",
       "github_form": "blob",
-      "expected": "blob"
+      "expected": "either"
     },
     {
       "id": "RI-004-github-tree-kind",
       "operation": "target-kind",
       "construct": "markdown-inline-link",
       "github_form": "tree",
-      "expected": "tree"
+      "expected": "either"
     },
     {
       "id": "RI-005-line-single",
@@ -334,15 +334,15 @@
       }
     },
     {
-      "id": "RI-038-github-blob-terminal-slash-invalid",
+      "id": "RI-038-github-blob-terminal-slash-directory",
       "operation": "github-ref-split",
       "github_form": "blob",
-      "encoded_suffix": "main/docs/file.md/",
+      "encoded_suffix": "main/docs/",
       "candidate_ref": "refs/heads/main",
       "default_ref": "refs/heads/main",
       "expected": {
-        "status": "invalid",
-        "path": null
+        "status": "candidate",
+        "path": "docs"
       }
     },
     {

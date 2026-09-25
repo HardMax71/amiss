@@ -2233,50 +2233,6 @@
           "if": {
             "properties": {
               "kind": {
-                "const": "same-repository-github"
-              }
-            },
-            "required": [
-              "kind"
-            ]
-          },
-          "then": {
-            "properties": {
-              "target_kind": {
-                "enum": [
-                  "blob",
-                  "tree"
-                ]
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "kind": {
-                "const": "same-repository-gitlab"
-              }
-            },
-            "required": [
-              "kind"
-            ]
-          },
-          "then": {
-            "properties": {
-              "target_kind": {
-                "enum": [
-                  "blob",
-                  "tree"
-                ]
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "kind": {
                 "const": "same-repository-gitea"
               }
             },
