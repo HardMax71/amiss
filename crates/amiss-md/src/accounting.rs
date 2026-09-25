@@ -76,7 +76,7 @@ pub(crate) fn parsed(
         Adapter::AsciiDoc | Adapter::Rst | Adapter::PlainAdvisory => return Ok(None),
     }
     let text = str::from_utf8(source).map_err(|_invalid| Fault::DocumentInvalid)?;
-    let suffix_offset = frontmatter::recognize(source).map_or(0, |region| region.suffix_offset);
+    let suffix_offset = frontmatter::body_offset(source);
     let suffix = text.get(suffix_offset..).ok_or(Fault::DocumentInvalid)?;
     let (tree, spent) = match adapter {
         Adapter::Mdx => {
@@ -109,7 +109,7 @@ pub(crate) fn parsed(
 /// reading or the source still does not parse once its comments are read.
 #[must_use]
 pub fn comments_read(source: &[u8]) -> Option<Vec<u8>> {
-    let suffix_offset = frontmatter::recognize(source).map_or(0, |region| region.suffix_offset);
+    let suffix_offset = frontmatter::body_offset(source);
     let mut read = source.to_vec();
     let mut blanked = false;
     loop {
