@@ -381,7 +381,9 @@ the other 21 stay the dangling theme files they are.
 A `config.toml` may be Zola's or Hugo's, and a `config.yaml` or `config.json` may be Hugo's or
 any other tool's, so the name says nothing and the file's own bindings decide. Zola requires
 `base_url` and Hugo reads `baseURL` in any case, so a file binding the first is Zola's and one
-binding the second is Hugo's. A Rust workspace's `.cargo/config.toml` binds neither, so it
+binding the second is Hugo's. Hugo lets `baseURL` go unset, so a file binding neither is Hugo's
+too when it binds a camel-case key only Hugo reads, `languageCode`, `defaultContentLanguage`,
+`contentDir`, `publishDir`, `enableRobotsTXT` or `enableGitInfo`, where Zola writes snake case. A Rust workspace's `.cargo/config.toml` binds neither, so it
 configures nothing and ripgrep, bat and helix keep every claim they had. Hugo's rule withholds
 answers rather than adding them, so under a shared name it also needs the content directory
 the file names, `content` where it names none, to sit beside it, the way the Zola reading
