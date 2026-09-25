@@ -88,15 +88,7 @@ fn reference_counts(comparisons: &[Comparison]) -> ReferenceCounts {
             IntentKind::ExternalUrl => {
                 counts.external_out_of_scope = counts.external_out_of_scope.saturating_add(1);
             }
-            IntentKind::SiteRoute | IntentKind::Label
-                if matches!(&observation.resolution, Resolution::UnsupportedSemantics(_)) =>
-            {
-                counts.unsupported = counts.unsupported.saturating_add(1);
-            }
-            IntentKind::SiteRoute | IntentKind::Label => {}
-            IntentKind::Unsupported => {
-                counts.unsupported = counts.unsupported.saturating_add(1);
-            }
+            IntentKind::SiteRoute | IntentKind::Label | IntentKind::Unsupported => {}
         }
         match &observation.resolution {
             Resolution::Resolved { .. }
@@ -110,11 +102,13 @@ fn reference_counts(comparisons: &[Comparison]) -> ReferenceCounts {
             Resolution::Missing(_) => {
                 counts.missing = counts.missing.saturating_add(1);
             }
+            Resolution::UnsupportedTarget(_)
+            | Resolution::UnsupportedSemantics(_)
+            | Resolution::UnsupportedVersion { .. } => {
+                counts.unsupported = counts.unsupported.saturating_add(1);
+            }
             Resolution::TypeMismatch { .. }
             | Resolution::DeclaredUntracked(_)
-            | Resolution::UnsupportedTarget(_)
-            | Resolution::UnsupportedSemantics(_)
-            | Resolution::UnsupportedVersion { .. }
             | Resolution::Invalid { .. }
             | Resolution::External {
                 reason:

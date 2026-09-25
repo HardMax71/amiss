@@ -5355,6 +5355,7 @@
           "$ref": "#/$defs/SafeUInt"
         },
         "unsupported": {
+          "description": "References the run declined to judge, whatever they name: an unsupported-semantics, unsupported-target or unsupported-version resolution. Like resolved and missing it counts outcomes, while explicit_local, same_repository and external_out_of_scope count what a reference names.",
           "$ref": "#/$defs/SafeUInt"
         },
         "resolved": {
