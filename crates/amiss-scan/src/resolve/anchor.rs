@@ -12,7 +12,7 @@ use crate::discovery::{SnapshotDiscovery, declared_root};
 use crate::document::{classify, native_adapter};
 use crate::published::{antora_fragment, unrouted};
 use crate::resources::{Aggregate, ScanResources};
-use crate::route::ZOLA;
+use crate::route::{SPHINX, ZOLA};
 
 use super::content::{Content, content_cache};
 use super::line::{line_fragment, line_resolution};
@@ -304,6 +304,7 @@ impl Resolver<'_> {
     /// declare, delegating a unique declaration to ordinary target lookup.
     pub(crate) fn resolve_label(
         &mut self,
+        document: &RepoPath,
         label: &str,
         semantic: crate::semantic::View<'_>,
     ) -> Result<(Intent, Resolution<RepoPath>, Option<String>), Error> {
@@ -333,7 +334,8 @@ impl Resolver<'_> {
                     Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
                 }
                 None if SPHINX_BUILT_IN_LABELS
-                    .contains(&amiss_rst::normalized_label(label).as_str()) =>
+                    .contains(&amiss_rst::normalized_label(label).as_str())
+                    || docstring_labels(self.snapshot, document) =>
                 {
                     Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
                 }
@@ -343,6 +345,21 @@ impl Resolver<'_> {
         Ok((intent, resolution, external_destination))
     }
 }
+
+/// Whether the Sphinx configuration above a document loads an extension that
+/// declares labels out of Python docstrings, which no document of the tree
+/// holds, so a name nothing here declares may still be one of those.
+fn docstring_labels(snapshot: &SnapshotDiscovery, document: &RepoPath) -> bool {
+    declared_root(snapshot, document.as_bytes(), SPHINX.declared_by)
+        .and_then(|root| snapshot.sphinx_configs.get(&root))
+        .is_some_and(|config| {
+            DOCSTRING_EXTENSIONS
+                .iter()
+                .any(|extension| config.extensions.contains(*extension))
+        })
+}
+
+const DOCSTRING_EXTENSIONS: [&str; 2] = ["sphinx.ext.autodoc", "sphinx.ext.autosummary"];
 
 /// The labels Sphinx itself declares for the pages every build writes, which
 /// its own inventory lists and no document of the tree declares.

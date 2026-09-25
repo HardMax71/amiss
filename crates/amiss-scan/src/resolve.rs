@@ -182,7 +182,11 @@ impl<'a> Resolver<'a> {
         occurrence: &crate::scanned::ScannedOccurrence,
     ) -> Result<(Intent, Resolution<RepoPath>, Option<String>), Error> {
         if occurrence.occurrence.construct == SourceConstruct::RstRefRole {
-            return self.resolve_label(&occurrence.occurrence.semantic_destination, semantic);
+            return self.resolve_label(
+                document_path,
+                &occurrence.occurrence.semantic_destination,
+                semantic,
+            );
         }
         let is_image = occurrence.occurrence.construct.is_image();
         let (intent, mut resolution) = resolve_destination(
