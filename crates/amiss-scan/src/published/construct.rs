@@ -1,20 +1,34 @@
+use std::collections::BTreeSet;
+
 use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{Adapter, RepoPath};
+use amiss_wire::uri::scheme;
 
 use crate::discovery::{SnapshotDiscovery, site_root, snippet_root};
-use crate::route::{HUGO, JEKYLL, directory, join, within};
+use crate::route::{HUGO, JEKYLL, directory, join, normalized_path_under, within};
 
-/// The rules a construct selects whatever else the tree declares: a Sphinx
-/// docname in either format, an mkdocs snippet under the directory declaring
-/// mkdocs, and a Jekyll or Hugo template under the site of its own generator.
-/// None where the construct selects none.
+/// The rules the document or its construct selects whatever else the tree
+/// declares: a file a Sphinx page includes reads a relative path from that
+/// page, and then a Sphinx docname in either format, an mkdocs snippet under
+/// the directory declaring mkdocs, and a Jekyll or Hugo template under the
+/// site of its own generator. None where nothing selects one.
 pub(super) fn anchors(
     snapshot: &SnapshotDiscovery,
     adapter: Adapter,
     document: &RepoPath,
     construct: Option<SourceConstruct>,
+    is_image: bool,
     path_part: &str,
 ) -> Option<Vec<(Vec<u8>, String)>> {
+    if let Some(pages) = snapshot.fragment_pages.get(document)
+        && !path_part.is_empty()
+        && !path_part.starts_with('/')
+        && scheme(path_part).is_none()
+    {
+        return Some(fragment_anchors(
+            snapshot, adapter, pages, construct, is_image, path_part,
+        ));
+    }
     if construct == Some(SourceConstruct::RstDocRole) {
         return Some(super::sphinx::anchors(
             snapshot, adapter, document, construct, path_part,
@@ -35,6 +49,44 @@ pub(super) fn anchors(
     }
     (construct == Some(SourceConstruct::MarkdownHugoRef))
         .then(|| hugo_anchors(snapshot, document, path_part))
+}
+
+/// A relative reference in a file some pages render is read from each of
+/// those pages, and every one of them has to reach its target: the first
+/// page whose reading reaches no file answers, so its own target is the one
+/// reported missing, and otherwise every reading stands.
+fn fragment_anchors(
+    snapshot: &SnapshotDiscovery,
+    adapter: Adapter,
+    pages: &BTreeSet<RepoPath>,
+    construct: Option<SourceConstruct>,
+    is_image: bool,
+    path_part: &str,
+) -> Vec<(Vec<u8>, String)> {
+    let readings: Vec<Vec<(Vec<u8>, String)>> = pages
+        .iter()
+        .map(|page| {
+            let read = super::anchors(snapshot, adapter, page, construct, is_image, path_part);
+            if read.is_empty() {
+                vec![(directory(page.as_bytes()).to_vec(), path_part.to_owned())]
+            } else {
+                read
+            }
+        })
+        .collect();
+    let reaches = |reading: &&Vec<(Vec<u8>, String)>| {
+        reading.iter().any(|(parent, relative)| {
+            normalized_path_under(parent, is_image, relative).is_ok_and(|(path, kind)| {
+                snapshot
+                    .locate(&super::routed(snapshot, &path, kind))
+                    .is_some()
+            })
+        })
+    };
+    match readings.iter().find(|reading| !reaches(reading)) {
+        Some(unreached) => unreached.clone(),
+        None => readings.concat(),
+    }
 }
 
 /// Where a Liquid `link` or `post_url` tag names a file: under the source of
