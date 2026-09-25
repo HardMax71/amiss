@@ -90,6 +90,8 @@ pub enum SourceConstruct {
     MarkdownUndefinedReference,
     #[strum(serialize = "markdown-undefined-image-reference")]
     MarkdownUndefinedImageReference,
+    #[strum(serialize = "markdown-agent-import")]
+    MarkdownAgentImport,
     #[strum(serialize = "html-anchor")]
     HtmlAnchor,
     #[strum(serialize = "html-image")]

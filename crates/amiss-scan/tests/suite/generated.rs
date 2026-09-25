@@ -1090,3 +1090,31 @@ fn an_undefined_reference_label_is_missing() {
         Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
     ));
 }
+
+/// An agent instruction file's `@path` line imports that file, so renaming
+/// the file breaks the import; the same line in any other page is prose, and
+/// a package scope names no file.
+#[test]
+fn an_agent_file_import_is_a_reference() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("AGENTS.md", "# Agents\n"),
+            ("CLAUDE.md", "@AGENTS.md\n\n@docs/gone.md\n\n@babel/core\n"),
+            ("docs/README.md", "# Readme\n\n@../AGENTS.md\n"),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    assert_eq!(blob(answer(&rows, "CLAUDE.md", 1)), Some("AGENTS.md"));
+    assert!(matches!(
+        answer(&rows, "CLAUDE.md", 3),
+        Resolution::Missing(Missing::PathNotFound { .. })
+    ));
+    assert!(!rows.contains_key(&("CLAUDE.md".to_owned(), 5)));
+    assert!(
+        !rows
+            .keys()
+            .any(|(document, _)| document == "docs/README.md")
+    );
+}
