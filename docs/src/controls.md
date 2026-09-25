@@ -10,7 +10,10 @@ projections, and raise the disposition of
 only: repository policy combines with the built-in profile by maximum, so it can promote an
 observe warning to `fail` and can never downgrade or suppress it. An unknown
 field makes the whole file invalid and the run incomplete, which is what keeps the policy
-from growing into a plugin system one field at a time.
+from growing into a plugin system one field at a time. That holds for the candidate. A base
+policy that does not parse was never in force, since every run over that tree ended
+incomplete, so the change repairing it reads the base as holding none and its
+`base_repository_policy_digest` is null.
 
 The other tree-read input is weaker still. `.amiss/router.yml` names the router that publishes
 the directory it sits in, for a tree whose generator is configured somewhere else, and it turns

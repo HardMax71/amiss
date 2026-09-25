@@ -318,6 +318,45 @@ fn an_invalid_policy_is_fatal_with_unavailable_controls() {
         payload["errors"][0]["path"] == ".amiss/scanner-policy.json"
             || payload["errors"][1]["path"] == ".amiss/scanner-policy.json"
     );
+
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        r#"{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":[],"finding_dispositions":[]}"#,
+    )
+    .unwrap_or_default();
+    git(root, &["add", "."]);
+    let repair = |candidate: &[&str]| {
+        let mut args = vec![
+            "check",
+            "--repo",
+            &fx.repo,
+            "--object-format",
+            "sha1",
+            "--base",
+            &later,
+            "--profile",
+            "observe",
+            "--format",
+            "json",
+        ];
+        args.extend_from_slice(candidate);
+        let (code, stdout, stderr) = amiss(&args);
+        (code, crate::support::payload(&stdout), stderr)
+    };
+    let (code, staged, stderr) = repair(&["--index"]);
+    git(root, &["commit", "-qm", "repaired"]);
+    let repaired = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let (_, committed, _) = repair(&["--candidate", &repaired]);
+    for payload in [&staged, &committed] {
+        assert_eq!(code, 0, "{stderr}");
+        assert_eq!(
+            payload["result"]["complete"], true,
+            "the base's broken policy was never in force, so the repair completes: {}",
+            payload["errors"]
+        );
+        assert!(payload["controls"]["base_repository_policy_digest"].is_null());
+        assert!(payload["controls"]["candidate_repository_policy_digest"].is_string());
+    }
 }
 
 #[test]

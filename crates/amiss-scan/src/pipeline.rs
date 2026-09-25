@@ -442,6 +442,22 @@ fn conclude(
     }
 }
 
+/// A base policy that does not parse was never in force, since every run
+/// over that tree ended incomplete, so the change repairing it reads the base
+/// as holding none. Any other acquisition failure stands.
+fn base_policy(
+    acquired: Result<crate::policy::PolicySide, Vec<ErrorDetail>>,
+) -> Result<crate::policy::PolicySide, Vec<ErrorDetail>> {
+    acquired.or_else(|details| {
+        if policy_unavailable_reason(&details) == ControlsUnavailableReason::InvalidRepositoryPolicy
+        {
+            Ok(crate::policy::PolicySide::default())
+        } else {
+            Err(details)
+        }
+    })
+}
+
 /// `invalid-repository-policy` requires its `CONFIGURATION_INVALID` anchor;
 /// any other acquisition failure leaves the controls merely not parsed.
 fn policy_unavailable_reason(details: &[ErrorDetail]) -> ControlsUnavailableReason {
