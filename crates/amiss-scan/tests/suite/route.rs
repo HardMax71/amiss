@@ -1317,6 +1317,68 @@ fn a_module_mount_names_the_content_root_a_directory_key_would_have() {
     assert_eq!(outcomes(&chain), expected(want));
 }
 
+/// Hugo serves every page URL in lowercase, so a route written that way
+/// reaches a source file whose name carries capitals, and a section's route
+/// reaches the `_index.md` that writes it, anchors and all. A page naming a
+/// `layout` and publishing no identity of its own is that template's output,
+/// so an anchor into it stays undecided. A site binding `disablePathToLower` serves each name as
+/// written, so there the lowercase route stays the build's to answer.
+#[test]
+fn a_hugo_site_serves_its_routes_in_lowercase() -> std::io::Result<()> {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("site/hugo.toml", "baseURL = 'https://example.org/'\n"),
+            (
+                "site/content/page.md",
+                "[cast](/functions/cast/tofloat/#usage)\n\n[section](/functions/#list)\n\n\
+                 [term](/glossary/#term-pod)\n",
+            ),
+            ("site/content/functions/_index.md", "## List\n"),
+            (
+                "site/content/glossary/_index.md",
+                "---\nlayout: glossary\n---\n",
+            ),
+            ("site/content/functions/cast/ToFloat.md", "## Usage\n"),
+            (
+                "kept/hugo.toml",
+                "baseURL = 'https://example.org/'\ndisablePathToLower = true\n",
+            ),
+            ("kept/content/page.md", "[cast](/functions/cast/tofloat/)\n"),
+            ("kept/content/functions/cast/ToFloat.md", "## Usage\n"),
+        ],
+    )])?;
+    let page = "site/content/page.md";
+    let want: Vec<Outcome> = vec![
+        row(
+            page,
+            Some("site/content/functions/cast/tofloat"),
+            ResolutionTag::Resolved,
+            Some("site/content/functions/cast/ToFloat.md"),
+        ),
+        row(
+            page,
+            Some("site/content/functions"),
+            ResolutionTag::Resolved,
+            Some("site/content/functions/_index.md"),
+        ),
+        row(
+            page,
+            Some("site/content/glossary"),
+            ResolutionTag::UnsupportedSemantics,
+            None,
+        ),
+        row(
+            "kept/content/page.md",
+            None,
+            ResolutionTag::UnsupportedSemantics,
+            None,
+        ),
+    ];
+    assert_eq!(outcomes(&chain), expected(want));
+    Ok(())
+}
+
 /// A Docusaurus site reads an HTML comment the MDX grammar refuses, so the
 /// page it holds is read and a link inside the comment is not. The same page
 /// in a tree no site holds stays refused and contributes nothing.

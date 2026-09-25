@@ -555,6 +555,7 @@ fn bound_adapter_answers_only_policy_included_rows() {
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),
         starlight_roots: BTreeSet::new(),
+        folded_roots: BTreeSet::new(),
     };
     assert_eq!(
         snapshot.bound_adapter(&path("man/g.txt")),
