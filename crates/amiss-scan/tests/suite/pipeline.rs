@@ -622,6 +622,59 @@ fn equal_broken_anchors_are_two_observations_in_one_finding() {
     );
 }
 
+/// A broken claim's fix follows its words when a line above them moved them:
+/// to the one other line holding them, keeping the value; to no line when
+/// several do; and to the changed value only when the words are gone.
+#[test]
+fn a_claim_fix_follows_the_line_its_words_moved_to() {
+    for (target, want) in [
+        (
+            "# header\nversion 1.0\n",
+            Some("[amiss:v]: <amiss:value?path=VERSION&line=L2> \"version 1.0\""),
+        ),
+        ("# h\nversion 1.0\nversion 1.0\n", None),
+        (
+            "version 2.0\n",
+            Some("[amiss:v]: <amiss:value?path=VERSION&line=L1> \"version 2.0\""),
+        ),
+    ] {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        git(root, &["init", "-q"]);
+        fs::write(root.join("VERSION"), "version 1.0\n").unwrap();
+        fs::write(
+            root.join("README.md"),
+            "[amiss:v]: <amiss:value?path=VERSION&line=L1> \"version 1.0\"\n\n# Readme\n",
+        )
+        .unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "base"]);
+        let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        fs::write(root.join("VERSION"), target).unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "moved"]);
+        let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+        let built = commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        )
+        .unwrap();
+        let payload = payload(&built);
+        let row = payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["kind"] == "claim-broken")
+            .unwrap();
+        assert_eq!(row["fix"]["replacement"].as_str(), want, "{target:?}");
+    }
+}
+
 /// A well-formed value claim whose target agrees is attested: no finding,
 /// no boundary, and the summary counts it.
 #[test]
