@@ -102,6 +102,7 @@ pub fn evaluate_with_policy(
             governed,
             claims,
             projections: &[],
+            translations: &[],
         },
     )
 }
@@ -112,6 +113,7 @@ pub(crate) struct GovernedInputs<'a> {
     pub(crate) governed: &'a [GovernedSeed],
     pub(crate) claims: &'a [ClaimGroup],
     pub(crate) projections: &'a [crate::projection::Outcome],
+    pub(crate) translations: &'a [(RepoPath, LocationSide)],
 }
 
 pub(crate) fn evaluate_with_site(
@@ -130,6 +132,23 @@ pub(crate) fn evaluate_with_site(
     }
     for outcome in inputs.projections {
         findings.extend(projection_finding(outcome, profile)?);
+    }
+    for (document, side) in inputs.translations {
+        findings.push(simple(
+            FindingKind::TranslationDrift,
+            super::FindingKeyScope::Document {
+                document: document.clone(),
+            },
+            Attribution::NotApplicable,
+            Vec::new(),
+            Location {
+                side: *side,
+                path: Some(document.clone()),
+                span: None,
+                display: None,
+            },
+            profile,
+        )?);
     }
     for finding in &mut findings {
         if finding.attribution == Attribution::Resolved || finding.candidate_fact.is_none() {

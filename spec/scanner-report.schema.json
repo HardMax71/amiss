@@ -3481,6 +3481,7 @@
         "dependency-changed-subject-unchanged",
         "dependency-and-subject-cochanged",
         "subject-changed",
+        "translation-drift",
         "explicit-reference-removed",
         "document-removed",
         "opaque-mdx-region",

@@ -6,7 +6,7 @@ use amiss_wire::report::model::{
     Attribution, Evaluation, Feedback, FeedbackAction, FeedbackItem, FindingFactEvidence, Impact,
     LocationSide, ObservedOccurrence, ReportPayload, SourceSpan, occurrences,
 };
-use amiss_wire::report::{Disposition, FindingKind};
+use amiss_wire::report::{Disposition, EvidenceClass, FindingKind, FindingScope};
 use amiss_wire::resolution::{
     Missing, MissingTag, Resolution, ResolutionTag, UnsupportedSemanticsTag, UnsupportedTargetTag,
     VersionScopeTag,
@@ -267,8 +267,13 @@ where
             let invalid = candidate.is_some_and(|(occurrence, _check)| {
                 resolution(&occurrence.resolution).0 == ResolutionTag::Invalid
             });
+            let metadata = finding.kind.metadata();
+            let nudge = metadata.scope == FindingScope::Document
+                && metadata.evidence_class == EvidenceClass::ImpactObservation;
             let target = if invalid {
                 None
+            } else if nudge {
+                finding.location.path.as_ref()
             } else {
                 match finding.location.side {
                     LocationSide::Control => finding.location.path.as_ref(),
@@ -284,7 +289,7 @@ where
                     }
                 }
             };
-            let action = if candidate.is_some_and(|(_occurrence, check)| check) {
+            let action = if nudge || candidate.is_some_and(|(_occurrence, check)| check) {
                 Some(FeedbackAction::Check)
             } else {
                 attributed(finding.attribution, finding.location.side)

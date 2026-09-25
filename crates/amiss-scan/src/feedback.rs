@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
-use amiss_wire::report::{Disposition, FindingKind};
+use amiss_wire::report::{Disposition, EvidenceClass, FindingKind, FindingScope};
 use amiss_wire::resolution::Resolution;
 
 use crate::correlate::{Comparison, Observation};
@@ -152,6 +152,20 @@ fn candidate_index(comparisons: &[Comparison]) -> BTreeMap<Digest, Candidate<'_>
 }
 
 fn classify(finding: &Finding, candidates: &BTreeMap<Digest, Candidate<'_>>) -> Decision {
+    let metadata = finding.key_input.finding_kind.metadata();
+    // A document-scoped impact warning asks someone to look at that document.
+    if metadata.scope == FindingScope::Document
+        && metadata.evidence_class == EvidenceClass::ImpactObservation
+    {
+        let target = finding.location.path.clone();
+        return Decision::Item {
+            action: FeedbackAction::Check,
+            subject: target
+                .clone()
+                .map_or(Subject::Untargeted, Subject::RepositoryPath),
+            target,
+        };
+    }
     let candidate = finding
         .observation_ids
         .iter()

@@ -57,7 +57,8 @@ with policies written before projections existed and the file valid only whole:
   "protected_inventory": ["docs/install.md"],
   "finding_dispositions": [
     { "finding_kind": "explicit-target-missing", "disposition": "fail" }
-  ]
+  ],
+  "translations": [{ "source": "docs", "target": "docs/de" }]
 }
 ```
 
@@ -65,12 +66,22 @@ The first tree include readmits a subtree the built-in skip list would drop, whi
 [Discovery](discovery.md)'s monorepo lever. The second admits only `.txt` descendants of
 `docs` and reads them as reStructuredText. The document include reads one extensionless file
 under the markdown grammar. The protected path makes its removal a finding, and the disposition
-row promotes one kind to `fail`. The
+row promotes one kind to `fail`, and the translation pair says `docs/de` translates `docs`. The
 [scanner-policy schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-policy.schema.json)
 closes the grammar, and each array keeps the sort order the schema states. The strictness
 also sets the upgrade order: an engine that predates a policy field refuses the whole file
 and leaves the run incomplete, so a repository grows its policy only after every engine
 reading it has learned the field.
+
+`translations` is optional and names translated trees beside their sources, at most 64 pairs
+sorted by source and then target. A page at a path under `source` is translated at the same path
+under `target`, and a page inside any declared target is never read as a source of its own, so a
+locale can live under its source's root. A change then warns with `translation-drift` at the
+translation when the source page's blob changed and the translation's did not, or when the
+translation left while its source stayed. The finding is `warn` in every profile and never blocks.
+It says a translator has something to look at, not that the translation is wrong. A source page
+that is new, or a pair removed together, is not drift, and neither is a translation edited alone.
+Dropping a pair loosens nothing that blocks, so it is not `policy-weakened`.
 
 A projection assertion is owned by the policy, under the stable identity `(document, name)`.
 The `code-text-v1` sources select either an inclusive one-based line interval from a tracked regular

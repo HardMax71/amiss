@@ -18,6 +18,8 @@ pub const TREE_PATHS_SOURCE: &str = "tree-paths";
 pub const RECORD_VALUE_SOURCE: &str = "record-value";
 pub const RECORD_SET_SOURCE: &str = "record-set";
 pub const SOURCE_MARKER_BYTES: usize = 256;
+/// Maximum translation pairs one policy may declare.
+pub const TRANSLATION_PAIRS: usize = 64;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
@@ -133,6 +135,15 @@ pub struct ProjectionAssertion {
     pub source: ProjectionSource,
 }
 
+/// One translated tree beside its source: a page at a path under `source`
+/// is translated at the same path under `target`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TranslationPair {
+    pub source: RepoPathText,
+    pub target: RepoPathText,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScannerPolicy {
@@ -142,6 +153,8 @@ pub struct ScannerPolicy {
     pub projection_assertions: Option<Vec<ProjectionAssertion>>,
     pub protected_inventory: Vec<RepoPathText>,
     pub finding_dispositions: Vec<FindingDisposition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub translations: Option<Vec<TranslationPair>>,
 }
 
 /// Checks a directly constructed source through the same closed grammar and
@@ -315,6 +328,21 @@ impl Document for ScannerPolicy {
             "$.finding_dispositions",
             &self.finding_dispositions,
             |left, right| left.finding_kind.as_ref().cmp(right.finding_kind.as_ref()),
-        )
+        )?;
+
+        let translations = self.translations.as_deref().unwrap_or_default();
+        if translations.len() > TRANSLATION_PAIRS {
+            return fail("$.translations", ErrorKind::LimitExceeded);
+        }
+        if let Some(index) = translations
+            .iter()
+            .position(|pair| pair.source == pair.target)
+        {
+            return fail(&format!("$.translations[{index}]"), ErrorKind::Inconsistent);
+        }
+        sorted_set("$.translations", translations, |left, right| {
+            (left.source.as_str(), left.target.as_str())
+                .cmp(&(right.source.as_str(), right.target.as_str()))
+        })
     }
 }

@@ -112,6 +112,7 @@ fn policy(count: usize, reverse: bool) -> PolicySide {
         projection_assertions: Some(Vec::new()),
         protected_inventory: Vec::new(),
         finding_dispositions: Vec::new(),
+        translations: None,
     };
     policy.validate().expect("benchmark policy is valid");
     let mut writer = digest_io::IoWrapper(

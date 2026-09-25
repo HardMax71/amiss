@@ -6,6 +6,7 @@ use amiss_wire::report::model::{
 
 use crate::discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind};
 use crate::document::DocumentClassification;
+use crate::evaluate::LocationSide;
 
 /// A blob's raw digest exists exactly when the run held its bytes, which is
 /// what content availability states for a document no ceiling let it scan.
@@ -228,4 +229,62 @@ pub(super) fn document_result(
         candidate,
         change,
     }
+}
+
+/// Every declared translation that fell behind its source in this change: a
+/// source page whose blob changed while its translation's did not, located on
+/// the candidate, and a translation that left while its source stayed,
+/// located on the base. A page inside a declared translation tree is no
+/// source page, which is what lets a locale live under its source's root.
+pub(super) fn translation_drift(
+    paired: &[PairedDocument<'_>],
+    pairs: &[(RepoPath, RepoPath)],
+) -> Vec<(RepoPath, LocationSide)> {
+    let under = |path: &'_ [u8], root: &RepoPath| {
+        path.strip_prefix(root.as_bytes())
+            .and_then(|rest| rest.strip_prefix(b"/"))
+            .map(<[u8]>::to_vec)
+    };
+    let mut drift: Vec<(RepoPath, LocationSide)> = Vec::new();
+    for (source, target) in pairs {
+        for page in paired {
+            let raw = page.path.as_bytes();
+            let Some(key) = under(raw, source) else {
+                continue;
+            };
+            if pairs.iter().any(|(_, root)| under(raw, root).is_some()) {
+                continue;
+            }
+            let Some(translated) = RepoPath::from_bytes([target.as_bytes(), b"/", &key].concat())
+            else {
+                continue;
+            };
+            let Some(translation) = paired
+                .binary_search_by(|document| document.path.cmp(&translated))
+                .ok()
+                .and_then(|at| paired.get(at))
+            else {
+                continue;
+            };
+            let moved = page
+                .base
+                .zip(page.candidate)
+                .is_some_and(|(base, candidate)| base.oid != candidate.oid);
+            let held = translation
+                .base
+                .zip(translation.candidate)
+                .is_some_and(|(base, candidate)| base.oid == candidate.oid);
+            if moved && held {
+                drift.push((translated, LocationSide::Candidate));
+            } else if page.candidate.is_some()
+                && translation.base.is_some()
+                && translation.candidate.is_none()
+            {
+                drift.push((translated, LocationSide::Base));
+            }
+        }
+    }
+    drift.sort_by(|left, right| left.0.cmp(&right.0));
+    drift.dedup_by(|left, right| left.0 == right.0);
+    drift
 }

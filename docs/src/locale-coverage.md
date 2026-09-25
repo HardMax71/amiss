@@ -46,6 +46,11 @@ identifies the resource and its SHA-256 digest identifies the exact bytes. Null 
 alignment policy. Amiss does not derive this value from the channel, scope version, tag, timestamp,
 or similarly spelled URL.
 
+A locale audit reads one snapshot. The pull request that edits a source page and not its
+translation is caught earlier, by the `translations` pairs in the repository policy, which make
+the scan warn with `translation-drift` at the page left behind; [Controls and
+policy](controls.md) has the key.
+
 The contract intentionally contains no translation verdict or timestamp. A target page with the
 same key can prove structural coverage only. Exact lineage can prove which normalized source
 resource a target was based on; it cannot prove that the page was translated correctly, remains

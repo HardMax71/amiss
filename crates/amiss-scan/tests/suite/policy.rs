@@ -147,6 +147,7 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
         projection_assertions: Some(Vec::new()),
         protected_inventory,
         finding_dispositions: Vec::new(),
+        translations: None,
     })
 }
 
@@ -169,6 +170,7 @@ fn a_projection_selector_change_keeps_identity_and_removal_weakens() {
             }]),
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
+            translations: None,
         })
     };
     let base = side(1);
@@ -221,6 +223,7 @@ fn the_union_carries_both_suffixes_but_the_candidate_binding() {
             projection_assertions: Some(Vec::new()),
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
+            translations: None,
         })
     };
     let base = side(".txt", amiss_wire::model::Adapter::Rst);
@@ -251,6 +254,7 @@ fn disposition_side(rows: &[(PromotableFindingKind, PolicyDisposition)]) -> Poli
         projection_assertions: Some(Vec::new()),
         protected_inventory: Vec::new(),
         finding_dispositions,
+        translations: None,
     })
 }
 
@@ -580,6 +584,7 @@ fn a_binding_drop_or_change_weakens_and_an_addition_does_not() {
             projection_assertions: Some(Vec::new()),
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
+            translations: None,
         })
     };
     let removed = |got: &amiss_scan::policy::Effects| {
@@ -623,6 +628,7 @@ fn suffix_selector_changes_keep_their_stable_root_identity() {
             projection_assertions: Some(Vec::new()),
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
+            translations: None,
         })
     };
     let absent = PolicySide::default();

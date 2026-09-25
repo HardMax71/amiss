@@ -1,7 +1,7 @@
 use amiss_wire::controls::ScannerPolicy;
 use amiss_wire::controls::{
     BlobLineSelection, DOCUMENT_SUFFIX_BYTES, ProjectionKind, ProjectionSource,
-    SOURCE_MARKER_BYTES, check_projection_source,
+    SOURCE_MARKER_BYTES, TRANSLATION_PAIRS, check_projection_source,
 };
 use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
@@ -452,4 +452,49 @@ fn a_tree_suffix_is_one_bounded_exact_selector() {
         ErrorKind::DuplicateMember,
         "suffix does not mint a second selector identity at one root"
     );
+}
+
+/// Translation pairs are a sorted, unique, bounded set, and a tree cannot be
+/// its own translation.
+#[test]
+fn translation_pairs_are_a_bounded_sorted_set_of_distinct_trees() {
+    let kind = |pairs: &str| {
+        let text = format!(
+            r#"{{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":[],"finding_dispositions":[],"translations":[{pairs}]}}"#
+        );
+        ScannerPolicy::parse(text.as_bytes())
+            .err()
+            .map(|defect| defect.kind)
+    };
+    let pair =
+        |source: &str, target: &str| format!(r#"{{"source":"{source}","target":"{target}"}}"#);
+    assert_eq!(
+        kind(&format!(
+            "{},{}",
+            pair("docs", "docs/de"),
+            pair("docs", "docs/fr")
+        )),
+        None
+    );
+    assert_eq!(
+        kind(&format!(
+            "{},{}",
+            pair("docs", "docs/fr"),
+            pair("docs", "docs/de")
+        )),
+        Some(ErrorKind::UnsortedSet)
+    );
+    assert_eq!(
+        kind(&format!(
+            "{},{}",
+            pair("docs", "docs/de"),
+            pair("docs", "docs/de")
+        )),
+        Some(ErrorKind::DuplicateMember)
+    );
+    assert_eq!(kind(&pair("docs", "docs")), Some(ErrorKind::Inconsistent));
+    let many: Vec<String> = (0..=TRANSLATION_PAIRS)
+        .map(|index| pair("docs", &format!("i18n/{index:03}")))
+        .collect();
+    assert_eq!(kind(&many.join(",")), Some(ErrorKind::LimitExceeded));
 }

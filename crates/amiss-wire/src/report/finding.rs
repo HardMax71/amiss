@@ -178,6 +178,13 @@ static IMPACT_WARNING: FindingMetadata = FindingMetadata {
     observe_disposition: Disposition::Warn,
     enforce_disposition: Disposition::Warn,
 };
+static IMPACT_DOCUMENT: FindingMetadata = FindingMetadata {
+    scope: FindingScope::Document,
+    evidence_class: EvidenceClass::ImpactObservation,
+    invariant_class: InvariantClass::Advisory,
+    observe_disposition: Disposition::Warn,
+    enforce_disposition: Disposition::Warn,
+};
 static IMPACT_RECORD: FindingMetadata = FindingMetadata {
     scope: FindingScope::Observation,
     evidence_class: EvidenceClass::ImpactObservation,
@@ -245,6 +252,10 @@ declare_taxonomy! {
         SubjectChanged => {
             meaning: "the block holding the reference changed while its target did not; recorded so prose moving over an unchanged dependency stays visible",
             metadata: &IMPACT_RECORD,
+        },
+        TranslationDrift => {
+            meaning: "a declared translation fell behind its source: the source page changed while the translation stayed byte for byte, or the translation left while its source stayed; a reason for a translator to look, never a verdict that the translation is wrong",
+            metadata: &IMPACT_DOCUMENT,
         },
         ExplicitReferenceRemoved => {
             meaning: "a reference that existed in the base is gone from the candidate; the removal is recorded as a fact, never treated as evidence that the edit was wrong",
