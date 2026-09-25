@@ -331,7 +331,7 @@ fn resolve_destination(
         }
         anchors.push((beside.to_vec(), path_part.to_owned()));
     }
-    if adapter == Adapter::AsciiDoc && names_a_page_identity(path_part) {
+    if adapter == Adapter::AsciiDoc && names_a_page_identity(construct, path_part) {
         return Ok((
             unsupported_intent(query, fragment),
             Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
@@ -484,8 +484,8 @@ fn repository_intent(
 /// Why a destination is declined before any tree is asked: an Antora
 /// coordinate naming a catalogue the tree does not hold, or a value that
 /// arrives at build time, which is a template expression anywhere, and in
-/// `AsciiDoc` an attribute reference or an image no generator anchors, since
-/// `imagesdir` is an attribute too.
+/// `AsciiDoc` an attribute reference or an image path no generator anchors,
+/// since `imagesdir` is an attribute too and an image at a URL needs none.
 fn declined(
     adapter: Adapter,
     unanchored_image: bool,
@@ -495,7 +495,8 @@ fn declined(
     if elsewhere {
         Some(UnsupportedSemantics::ExternalInventory)
     } else if template_expression(semantic)
-        || (adapter == Adapter::AsciiDoc && (unanchored_image || awaits_attribute(semantic)))
+        || (adapter == Adapter::AsciiDoc
+            && ((unanchored_image && scheme(semantic).is_none()) || awaits_attribute(semantic)))
     {
         Some(UnsupportedSemantics::AttributeDependent)
     } else {
@@ -504,8 +505,18 @@ fn declined(
 }
 
 /// A page identity is answered by a site catalogue this engine does not build.
-fn names_a_page_identity(path_part: &str) -> bool {
-    path_part
+/// Only a cross reference names one, and a destination whose construct is not
+/// known is read as one; a link, an image or an include without an extension
+/// names a file, `LICENSE` or `NOTICE`, and a climb out of the tree is still a
+/// traversal.
+fn names_a_page_identity(construct: Option<SourceConstruct>, path_part: &str) -> bool {
+    matches!(
+        construct,
+        None | Some(
+            SourceConstruct::AsciidocCrossReference
+                | SourceConstruct::AsciidocInternalCrossReference
+        )
+    ) && path_part
         .rsplit('/')
         .next()
         .is_some_and(|segment| !segment.is_empty() && !segment.contains('.'))

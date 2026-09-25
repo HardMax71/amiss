@@ -1,5 +1,5 @@
 repository	status	scanned	unsupported	resolved	declined	missing
-asciidoctor	pass	148	1	251	94	5
+asciidoctor	pass	148	1	251	79	5
 astro-docs	pass	2618	2	3471	10327	0
 awesome-go	pass	7	2	270	0	0
 awesome	pass	7	0	38	0	0
