@@ -152,9 +152,10 @@ root or the site directory, a Sphinx `:doc:` target with a leading slash at the 
 holding `conf.py`, a raw HTML destination under a `mkdocs.yml` at the directory the page is
 published at, a Zola `@/` destination at the `content` directory beside `config.toml`, and an
 mdBook destination climbing past its book's root under the `src` of the book that holds the
-page it names. The file's presence selects the rule, and three of them are read further for
-what they bind: an Antora descriptor for its name, a `conf.py` for the suffixes it reads, and
-a Hugo configuration for the content root and base a site route is answered under. The
+page it names. The file's presence selects the rule, and four of them are read further for
+what they bind: an Antora descriptor for its name, a `conf.py` for the suffixes it reads, a
+Hugo configuration for the content root and base a site route is answered under, and an Astro
+configuration for whether it loads Starlight, whose content root and base answer the same way. The
 nearest such file above the document selects it, and where none is above it and the tree
 holds exactly one, that one does, since a site in `website/` reads pages that sit outside it.
 An alias in a tree holding several sites and none above the document is

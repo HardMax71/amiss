@@ -68,7 +68,8 @@ pub struct Scanned {
     pub opaque: Opaque,
     pub governed: Vec<GovernedSource>,
     pub declared_anchors: Vec<String>,
-    pub declared_name: Option<String>,
+    pub declared_slug: Option<String>,
+    pub declared_id: Option<String>,
     pub declared_redirects: Vec<String>,
     pub anchor_source: Option<AnchorSource>,
     /// Read only once the HTML comments the MDX grammar refused were read as

@@ -431,7 +431,7 @@ fn the_myst_rows_name_the_file_the_route_table_reads() {
 /// fragment resolves on any page of a project whose configuration loads it,
 /// and nowhere else.
 #[test]
-fn a_starlight_page_publishes_its_top() {
+fn a_starlight_page_publishes_its_top() -> std::io::Result<()> {
     let chain = amiss_fixtures::commit_chain(&[(
         "base",
         &[
@@ -445,8 +445,7 @@ fn a_starlight_page_publishes_its_top() {
             ),
             ("plain/guide.md", "# Guide\n\n[top](#_top)\n"),
         ],
-    )])
-    .expect("the fixture stages");
+    )])?;
     let rows = answers(&chain);
     assert!(matches!(
         answer(&rows, "site/src/content/docs/guide.md", 3),
@@ -456,4 +455,49 @@ fn a_starlight_page_publishes_its_top() {
         answer(&rows, "plain/guide.md", 3),
         Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
     ));
+    Ok(())
+}
+
+/// Starlight serves its content directory under the base its configuration
+/// binds, a page at the `slug` its frontmatter declares and a directory's
+/// index at the directory. A route to where a slugged page's file would have
+/// put it names no page the tree shows, so it stays the build's to answer.
+#[test]
+fn a_starlight_site_serves_its_pages_at_their_routes() -> std::io::Result<()> {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            (
+                "site/astro.config.mjs",
+                "import starlight from '@astrojs/starlight';\nexport default {\n  base: '/docs/',\n};\n",
+            ),
+            (
+                "site/src/content/docs/guides/index.mdx",
+                "# Guides\n\n[moved](/docs/elsewhere/#setup)\n\n[index](/docs/guides/#guides)\n\n[stale](/docs/guides/moved/)\n\n[gone](/docs/elsewhere/#nothing)\n",
+            ),
+            (
+                "site/src/content/docs/guides/moved.md",
+                "---\nslug: elsewhere\n---\n\n## Setup\n",
+            ),
+        ],
+    )])?;
+    let rows = answers(&chain);
+    let page = "site/src/content/docs/guides/index.mdx";
+    assert!(matches!(
+        answer(&rows, page, 3),
+        Resolution::Resolved { .. }
+    ));
+    assert!(matches!(
+        answer(&rows, page, 5),
+        Resolution::Resolved { .. }
+    ));
+    assert!(matches!(
+        answer(&rows, page, 7),
+        Resolution::UnsupportedSemantics { .. }
+    ));
+    assert!(matches!(
+        answer(&rows, page, 9),
+        Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+    ));
+    Ok(())
 }
