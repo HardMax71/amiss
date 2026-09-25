@@ -257,22 +257,25 @@ runs:
               end;
             def told($text): ($text // "") as $d
               | if $d == "" then "" else ": " + $d end;
+            def window($rows):
+              ($rows[:10][]
+               | "- **\((.action[0:1] | ascii_upcase) + .action[1:])** "
+                 + (.target | target)
+                 + " \(.finding_kinds | join(", "))"
+                 + where
+                 + ", \(.location_count) affected place\(if .location_count == 1 then "" else "s" end)"),
+              (($rows | length) - 10
+               | if . > 0 then
+                   "- \(.) more item\(if . == 1 then "" else "s" end) in report."
+                 else empty end);
             (.payload as $p
              | if $p.feedback.status == "available" then
                  ($p.feedback.items | map(select(.action == "fix")) | length) as $fixes
                  | ($p.feedback.items | map(select(.action == "check")) | length) as $checks
                  | ["amiss \($p.result.status): \($fixes) Fix, \($checks) Check, \($p.feedback.existing_count) Existing, exit class \($p.result.exit_code)",
                     (if ($p.feedback.items | length) > 0 then "" else empty end),
-                    ($p.feedback.items[:10][]
-                     | "- **\((.action[0:1] | ascii_upcase) + .action[1:])** "
-                       + (.target | target)
-                       + " \(.finding_kinds | join(", "))"
-                       + where
-                       + ", \(.location_count) affected place\(if .location_count == 1 then "" else "s" end)"),
-                    (($p.feedback.items | length) - 10
-                     | if . > 0 then
-                         "- \(.) more item\(if . == 1 then "" else "s" end) in report."
-                       else empty end)][]
+                    window($p.feedback.items | map(select(.action != "existing"))),
+                    window($p.feedback.items | map(select(.action == "existing")))][]
                else
                  ($p.errors | group_by(.code)) as $errors
                  | ["amiss \($p.result.status): scan failed, \($p.result.error_count) errors, exit class \($p.result.exit_code)",
@@ -303,7 +306,8 @@ runs:
           exit 0
         fi
         jq -r '
-          def d: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
+          def d: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A")
+            | gsub("(?<c>[[:cntrl:]])"; .c | tojson | .[1:-1]);
           def p: d | gsub(":"; "%3A") | gsub(","; "%2C");
           def hex: map((. / 16 | floor) as $h | (. % 16) as $l
             | "0123456789abcdef"[$h:$h + 1] + "0123456789abcdef"[$l:$l + 1]) | join("");

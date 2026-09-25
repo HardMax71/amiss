@@ -12,8 +12,13 @@ use crate::support::repository_root;
 fn assert_action_feedback_contract(dispatcher: &str, runtime: &str) {
     assert_eq!(
         runtime.matches("$p.feedback.items[:10][]").count(),
-        2,
-        "both the summary and annotations must share the combined ten-item display window"
+        1,
+        "annotations read the first ten items, where the Fixes lead"
+    );
+    assert!(
+        runtime.contains("window($p.feedback.items | map(select(.action != \"existing\")))")
+            && runtime.contains("window($p.feedback.items | map(select(.action == \"existing\")))"),
+        "the summary keeps the backlog in a window of its own, as the human view does"
     );
     assert!(
         runtime.contains("select(.action == \"fix\" and .annotation != null)"),
@@ -36,7 +41,7 @@ fn assert_action_feedback_contract(dispatcher: &str, runtime: &str) {
     for presentation_contract in [
         "$p.feedback.existing_count",
         "amiss \\($p.result.status): scan failed",
-        "(($p.feedback.items | length) - 10",
+        "(($rows | length) - 10",
         "tojson | .[1:-1] | html",
         "<code>bytes ",
         ":\\(.annotation.span.start_line)</code>",
@@ -160,7 +165,7 @@ fn available_action_payload() -> serde_json::Value {
             _ => serde_json::json!(format!("docs/target-{index}.md")),
         };
         let path = if index == 0 {
-            "docs/a%:,\r\n.md".to_owned()
+            "docs/a%:,\r\n\u{1b}[31m.md".to_owned()
         } else {
             format!("docs/fix-{index}.md")
         };
@@ -253,7 +258,7 @@ fn action_feedback_filters_execute_the_combined_window_safely() {
     assert!(summary.contains("- 1 more item in report."));
     assert!(
         summary.contains(
-            "- **Fix** <code>docs/&lt;/code&gt;`x&amp;%\\n::error::forged.md</code> explicit-target-missing at <code>docs/a%:,\\r\\n.md:1</code>, 2 affected places"
+            "- **Fix** <code>docs/&lt;/code&gt;`x&amp;%\\n::error::forged.md</code> explicit-target-missing at <code>docs/a%:,\\r\\n\\u001b[31m.md:1</code>, 2 affected places"
         ),
         "{summary}"
     );
@@ -277,7 +282,7 @@ fn action_feedback_filters_execute_the_combined_window_safely() {
     assert_eq!(annotations.lines().count(), 8, "{annotations}");
     assert!(
         annotations.contains(
-            "::error file=docs/a%25%3A%2C%0D%0A.md,line=1,endLine=1,col=1,endColumn=3,title=amiss Fix::Fix explicit-target-missing: target docs/</code>`x&%25%0A::error::forged.md; heading-anchor-not-found, near near%0Aheading; 2 affected places"
+            "::error file=docs/a%25%3A%2C%0D%0A\\u001b[31m.md,line=1,endLine=1,col=1,endColumn=3,title=amiss Fix::Fix explicit-target-missing: target docs/</code>`x&%25%0A::error::forged.md; heading-anchor-not-found, near near%0Aheading; 2 affected places"
         ),
         "{annotations}"
     );
@@ -301,6 +306,7 @@ fn action_feedback_filters_execute_the_combined_window_safely() {
         "overflow-must-not-display.md",
         "INVALID_JSON",
         "\r",
+        "\u{1b}",
     ] {
         assert!(
             !annotations.contains(forbidden),
@@ -350,6 +356,47 @@ fn action_summary_labels_the_existing_backlog() {
             "- **Existing** <code>docs/old.md</code> dependency-changed-subject-unchanged, 2 affected places"
         ),
         "the backlog item is labeled as existing, not check: {summary}"
+    );
+}
+
+/// Ten Fixes do not push the backlog out of view: the existing items keep a
+/// window of their own, as the human view keeps them, so a blocking
+/// pre-existing item under enforce is still named.
+#[test]
+fn action_summary_keeps_the_backlog_past_ten_fixes() {
+    let runtime = fs::read_to_string(repository_root().join("crates/amiss/action/runtime.yml"))
+        .expect("packaged Action runtime is readable");
+    let (summary_filter, _annotation_filter) = action_filters(&runtime);
+    let mut items: Vec<serde_json::Value> = (0..12)
+        .map(|index| {
+            action_feedback_item(
+                "fix",
+                &serde_json::json!(format!("docs/new-{index}.md")),
+                1,
+                "warn",
+                &serde_json::Value::Null,
+            )
+        })
+        .collect();
+    items.push(action_feedback_item(
+        "existing",
+        &serde_json::json!("docs/blocking-backlog.md"),
+        1,
+        "fail",
+        &serde_json::Value::Null,
+    ));
+    let payload = serde_json::json!({
+        "payload": {
+            "result": { "status": "fail", "error_count": 0, "exit_code": 1 },
+            "feedback": { "status": "available", "items": items, "existing_count": 1 },
+            "errors": []
+        }
+    });
+    let summary = run_action_jq(summary_filter, &payload);
+    assert!(summary.contains("- 2 more items in report."), "{summary}");
+    assert!(
+        summary.contains("- **Existing** <code>docs/blocking-backlog.md</code>"),
+        "{summary}"
     );
 }
 
