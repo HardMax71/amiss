@@ -12,7 +12,7 @@ cncf-glossary	pass	963	0	2239	419	4
 comprehensive-rust	pass	584	0	700	0	7
 containerd.io	pass	9	0	7	3	1
 content	pass	14649	0	1951	54863	2659
-django	pass	686	0	3833	22	38
+django	pass	686	0	3835	20	38
 docsify	pass	29	0	105	5	10
 docusaurus	pass	1545	0	5914	852	33
 eleventy-site	pass	231	0	185	922	18
@@ -34,7 +34,7 @@ mkdocs	pass	21	0	331	0	1
 mkdocs-material	pass	103	0	1039	5	4
 myst-parser	pass	32	0	196	29	3
 nextra	pass	243	2	20	224	5
-numpy	pass	627	0	1114	7	26
+numpy	pass	627	0	1114	11	22
 ohmyzsh	pass	387	7	155	0	7
 opentelemetry.io	pass	2019	5	3095	7274	16
 prettier	pass	147	0	180	18	1
@@ -45,7 +45,7 @@ redux	pass	113	0	636	52	8
 ripgrep	pass	24	0	69	0	0
 rust-book	pass	478	0	831	0	32
 rust-by-example	pass	204	0	407	0	0
-scrapy	pass	90	0	1282	10	45
+scrapy	pass	90	0	1282	35	20
 sphinx	pass	170	0	524	17	2
 spring-boot	pass	229	0	2897	0	1
 starlight	pass	380	1	656	1491	1

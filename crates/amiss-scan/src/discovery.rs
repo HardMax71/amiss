@@ -91,10 +91,15 @@ fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> 
             record.adapter == Some(Adapter::Markdown) && sphinx_governed(discovery, &record.path)
         })
         .collect();
+    let sections: Vec<Vec<String>> = discovery
+        .documents
+        .iter()
+        .map(|record| section_labels(discovery, record))
+        .collect();
     let SnapshotDiscovery {
         documents, labels, ..
     } = discovery;
-    for (record, governed) in documents.iter_mut().zip(governed) {
+    for ((record, governed), sections) in documents.iter_mut().zip(governed).zip(sections) {
         let DocumentStatus::Scanned(scanned) = &mut record.status else {
             continue;
         };
@@ -111,7 +116,7 @@ fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> 
             }
             continue;
         }
-        for label in &scanned.declared_anchors {
+        for label in scanned.declared_anchors.iter().chain(&sections) {
             scan.charge_label()?;
             labels
                 .entry(amiss_rst::normalized_label(label))
@@ -121,6 +126,53 @@ fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> 
     }
     Ok(())
 }
+
+/// The labels `sphinx.ext.autosectionlabel` gives a document's section titles:
+/// each title as written, prefixed with the document's name and a colon where
+/// the configuration sets `autosectionlabel_prefix_document`. A document
+/// under no configuration loading the extension gives none.
+fn section_labels(discovery: &SnapshotDiscovery, record: &DocumentRecord) -> Vec<String> {
+    let DocumentStatus::Scanned(scanned) = &record.status else {
+        return Vec::new();
+    };
+    let raw = record.path.as_bytes();
+    let Some((root, config)) = declared_root(discovery, raw, SPHINX.declared_by)
+        .and_then(|root| {
+            discovery
+                .sphinx_configs
+                .get(&root)
+                .map(|config| (root, config))
+        })
+        .filter(|(_, config)| config.extensions.contains(AUTOSECTIONLABEL))
+    else {
+        return Vec::new();
+    };
+    let within = raw
+        .get(root.len()..)
+        .map(|rest| rest.strip_prefix(b"/").unwrap_or(rest))
+        .unwrap_or_default();
+    let docname = String::from_utf8_lossy(
+        within
+            .iter()
+            .rposition(|byte| *byte == b'.')
+            .and_then(|dot| within.get(..dot))
+            .unwrap_or(within),
+    );
+    scanned
+        .anchor_source
+        .iter()
+        .flat_map(|source| &source.headings)
+        .map(|heading| {
+            if config.prefix_document {
+                format!("{docname}:{}", heading.text)
+            } else {
+                heading.text.clone()
+            }
+        })
+        .collect()
+}
+
+const AUTOSECTIONLABEL: &str = "sphinx.ext.autosectionlabel";
 
 /// What every descriptor in the snapshot declares out of its own contents: an
 /// Antora component descriptor names the component its root contributes to,
@@ -247,6 +299,10 @@ fn record_declaration(
                 .source_suffixes
                 .insert(directory(path.as_bytes()).to_vec(), suffixes);
         }
+        declared.sphinx_configs.insert(
+            directory(path.as_bytes()).to_vec(),
+            crate::route::sphinx_config(body),
+        );
     } else if publishes(&path) {
         record_publication(discovery, declared, path, body);
     } else if binds_book(&path) {
@@ -323,6 +379,7 @@ fn record_publication(
 struct Declared {
     antora_components: BTreeMap<RepoPath, (String, bool)>,
     source_suffixes: BTreeMap<Vec<u8>, BTreeSet<String>>,
+    sphinx_configs: BTreeMap<Vec<u8>, crate::route::SphinxConfig>,
     routers: BTreeMap<RepoPath, (String, Option<String>)>,
     published_roots: BTreeMap<Vec<u8>, Vec<(Vec<u8>, String)>>,
     bound_configs: BTreeMap<RepoPath, &'static [&'static str]>,
@@ -400,6 +457,8 @@ pub struct SnapshotDiscovery {
     /// Each Sphinx root whose `conf.py` names the suffixes it reads, by the
     /// directory holding that file.
     pub source_suffixes: BTreeMap<Vec<u8>, BTreeSet<String>>,
+    /// What each Sphinx configuration turns on, by the directory holding it.
+    pub sphinx_configs: BTreeMap<Vec<u8>, crate::route::SphinxConfig>,
     /// Each router declaration the tree holds, by its own path, against the
     /// router it names for the directory it sits in.
     pub declared_routers: BTreeMap<RepoPath, (String, Option<String>)>,
@@ -512,6 +571,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         sphinx_included: BTreeSet::new(),
         antora_components: BTreeMap::new(),
         source_suffixes: BTreeMap::new(),
+        sphinx_configs: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
@@ -832,6 +892,7 @@ pub(crate) fn discover_walk(
         let declared = descriptors(repo, git, scan, &discovery)?;
         discovery.antora_components = declared.antora_components;
         discovery.source_suffixes = declared.source_suffixes;
+        discovery.sphinx_configs = declared.sphinx_configs;
         discovery.declared_routers = declared.routers;
         discovery.published_roots = declared.published_roots;
         discovery.bound_configs = declared.bound_configs;
@@ -901,6 +962,7 @@ pub fn discover_index(
     let declared = descriptors(repo, git, scan, &discovery)?;
     discovery.antora_components = declared.antora_components;
     discovery.source_suffixes = declared.source_suffixes;
+    discovery.sphinx_configs = declared.sphinx_configs;
     discovery.declared_routers = declared.routers;
     discovery.published_roots = declared.published_roots;
     discovery.bound_configs = declared.bound_configs;

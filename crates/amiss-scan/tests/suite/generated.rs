@@ -456,3 +456,42 @@ fn a_sphinx_built_in_label_is_not_missing() {
         &Resolution::Missing(Missing::LabelNotDeclared)
     );
 }
+
+/// `autosectionlabel` declares every section title as a label, prefixed with
+/// the docname where the configuration asks, and `autodoc` declares labels in
+/// Python docstrings no document holds, so a name nothing here declares is
+/// declined under it. The same name under a configuration loading neither
+/// stays missing.
+#[test]
+fn a_sphinx_extension_declares_the_labels_it_builds() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            (
+                "a/conf.py",
+                "extensions = [\n    \"sphinx.ext.autodoc\",\n    'sphinx.ext.autosectionlabel',\n]\nautosectionlabel_prefix_document = True\n",
+            ),
+            ("a/guide.rst", "Guide\n=====\n\nInstall Steps\n-------------\n"),
+            (
+                "a/index.rst",
+                ":ref:`guide:Install Steps`\n\n:ref:`docstring-label`\n",
+            ),
+            ("b/conf.py", "extensions = ['sphinx.ext.intersphinx']\n"),
+            ("b/index.rst", ":ref:`docstring-label`\n"),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    assert!(matches!(
+        answer(&rows, "a/index.rst", 1),
+        Resolution::Resolved { .. }
+    ));
+    assert_eq!(
+        answer(&rows, "a/index.rst", 3),
+        &Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
+    );
+    assert_eq!(
+        answer(&rows, "b/index.rst", 1),
+        &Resolution::Missing(Missing::LabelNotDeclared)
+    );
+}

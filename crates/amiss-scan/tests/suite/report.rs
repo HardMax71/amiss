@@ -673,6 +673,7 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
         sphinx_included: std::collections::BTreeSet::new(),
         antora_components: std::collections::BTreeMap::new(),
         source_suffixes: std::collections::BTreeMap::new(),
+        sphinx_configs: std::collections::BTreeMap::new(),
         declared_routers: std::collections::BTreeMap::new(),
         published_roots: std::collections::BTreeMap::new(),
         bound_configs: std::collections::BTreeMap::new(),

@@ -157,6 +157,7 @@ fn late_policy_bound_adapter(bencher: Bencher<'_, '_>) {
         sphinx_included: std::collections::BTreeSet::new(),
         antora_components: BTreeMap::new(),
         source_suffixes: BTreeMap::new(),
+        sphinx_configs: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
