@@ -104,6 +104,17 @@ fn anchor_resolution(
     adapter: Adapter,
     fragment: &str,
 ) -> Result<Resolution<RepoPath>, Error> {
+    // Starlight writes `_top` on the title of every page it builds.
+    let starlight = resolver
+        .snapshot
+        .starlight_roots
+        .iter()
+        .any(|root| crate::route::within(path.as_bytes(), root));
+    if starlight && fragment == "_top" {
+        return Ok(Resolution::Resolved {
+            target: Target::Blob(blob),
+        });
+    }
     let unsupported = Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(
         TaggedBlobTarget::Blob(blob.clone()),
     ));

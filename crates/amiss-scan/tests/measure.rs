@@ -130,6 +130,7 @@ fn late_case_neighbor_latency_and_memory() {
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),
+        starlight_roots: std::collections::BTreeSet::new(),
     };
     let document =
         RepoPath::new("README.md".to_owned()).unwrap_or_else(|| panic!("fixture document"));

@@ -161,6 +161,7 @@ fn late_policy_bound_adapter(bencher: Bencher<'_, '_>) {
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),
+        starlight_roots: std::collections::BTreeSet::new(),
     };
     let path = RepoPath::new("generated/099999.page".to_owned())
         .unwrap_or_else(|| panic!("benchmark lookup path"));

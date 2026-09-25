@@ -4,7 +4,9 @@ A heading anchor is not a property of Markdown. `## Setup & Config` has no ident
 something renders it, and the renderers disagree: github.com publishes `setup--config`,
 VitePress publishes `setup-config`, and Gitea publishes neither if the heading is empty
 after its filter. Checking `guide.md#setup` therefore means knowing whose rule applies, and
-guessing one would report live anchors as missing.
+guessing one would report live anchors as missing. Starlight writes `_top` on the title of every
+page it builds, so on a page of an Astro project whose configuration imports `@astrojs/starlight`,
+`#_top` resolves whatever the page's headings are.
 
 [Resolution](resolution.md) describes what the resolver does with that. This page retains
 what the rules are, where each came from, and what each was checked against, because a
