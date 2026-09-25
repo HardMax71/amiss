@@ -12,16 +12,18 @@ use super::{
 /// Every identity the known renderers would publish for one document, plus the
 /// anchors the document declares itself, in raw HTML or in an attribute block,
 /// plus the definition-list terms one renderer publishes beside its headings,
-/// plus the footnotes every renderer publishes under its own spelling.
+/// plus the footnotes every renderer publishes under its own spelling. `read`
+/// says which heading rules the target's tree turns on.
 #[must_use]
 pub fn anchor_set(
     headings: &[Heading],
     html_anchors: &[String],
     declared_anchors: &[String],
+    read: impl Fn(&AnchorRule) -> bool,
 ) -> BTreeSet<String> {
     let mut set: BTreeSet<String> = html_anchors.iter().cloned().collect();
     set.extend(declared_anchors.iter().cloned());
-    for rule in &RULES {
+    for rule in RULES.iter().filter(|rule| read(rule)) {
         set.extend(identities(rule, headings));
     }
     set.extend(identities(&DEFINITION_TERMS, headings));
@@ -81,14 +83,25 @@ pub fn identities(rule: &AnchorRule, headings: &[Heading]) -> Vec<String> {
         ..OccupiedIdentities::default()
     };
     let mut out = Vec::with_capacity(headings.len());
+    let later = rule.terms == Terms::AfterHeadings;
+    let mut deferred = Vec::new();
     for heading in headings {
         let read = match heading.source {
             HeadingSource::RawHtml => rule.raw_html == RawHtml::Anchored,
-            HeadingSource::DefinitionTerm => rule.terms == Terms::Anchored,
+            HeadingSource::DefinitionTerm => rule.terms != Terms::Ignored,
             HeadingSource::FootnoteReference | HeadingSource::FootnoteDefinition => false,
             HeadingSource::Markdown | HeadingSource::AsciiDoc | HeadingSource::Rst => true,
         };
         if !read {
+            continue;
+        }
+        if later
+            && matches!(
+                heading.source,
+                HeadingSource::RawHtml | HeadingSource::DefinitionTerm
+            )
+        {
+            deferred.push(slug(rule, &heading.text));
             continue;
         }
         let base = match (&heading.attribute, rule.attribute) {
@@ -103,7 +116,30 @@ pub fn identities(rule: &AnchorRule, headings: &[Heading]) -> Vec<String> {
         };
         out.push(unique);
     }
+    out.extend(later_identities(rule, deferred, &mut occupied));
     out
+}
+
+/// What a rule naming its terms and raw HTML headings last gives them once
+/// every Markdown heading holds its identity: an empty one filled, and each
+/// numbered from `_2` against everything taken before it.
+fn later_identities(
+    rule: &AnchorRule,
+    deferred: Vec<String>,
+    occupied: &mut OccupiedIdentities,
+) -> Vec<String> {
+    deferred
+        .into_iter()
+        .map(|base| {
+            let base = match (base.is_empty(), rule.empty) {
+                (true, Empty::Fill(text)) => text.to_owned(),
+                (true, Empty::Drop | Empty::Keep) | (false, _) => base,
+            };
+            let unique = numbered_identity(base, '_', 2, occupied);
+            occupied.taken.insert(unique.clone());
+            unique
+        })
+        .collect()
 }
 
 #[derive(Default)]
@@ -228,7 +264,13 @@ fn slug(rule: &AnchorRule, text: &str) -> String {
     };
 
     let mut out = String::with_capacity(retained.len());
+    let mut previous = ' ';
     for ch in retained.chars() {
+        let repeated = ch.is_ascii_whitespace() && previous.is_ascii_whitespace();
+        previous = ch;
+        if rule.runs == Runs::CollapseWhitespace && repeated {
+            continue;
+        }
         if ch == rule.separator || is_separator(rule.separators, ch) {
             if rule.runs == Runs::Collapse && out.ends_with(rule.separator) {
                 continue;
@@ -401,5 +443,35 @@ fn is_kept(keep: Keep, ch: char) -> bool {
         Keep::AlphabeticNumericUnderscore => ch.is_alphanumeric() || ch == '_',
         Keep::AsciiAlphanumeric => ch.is_ascii_alphanumeric(),
         Keep::AnythingButC0 => !matches!(u32::from(ch), 0x0000..=0x001F),
+        Keep::MdnId => !matches!(
+            ch,
+            '*' | '<'
+                | '>'
+                | '"'
+                | '$'
+                | '#'
+                | '%'
+                | '&'
+                | '+'
+                | ','
+                | '/'
+                | ':'
+                | ';'
+                | '='
+                | '?'
+                | '@'
+                | '['
+                | ']'
+                | '^'
+                | '`'
+                | '{'
+                | '|'
+                | '}'
+                | '~'
+                | '\''
+                | ')'
+                | '('
+                | '\\'
+        ),
     }
 }

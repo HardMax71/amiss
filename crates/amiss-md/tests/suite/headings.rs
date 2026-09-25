@@ -46,6 +46,33 @@ fn a_footnote_call_in_a_heading_contributes_nothing() {
     );
 }
 
+/// MDN's own definition list, tight or loose, names each term from the
+/// element it opens with, from the whole term when it opens with text, and
+/// from what an opening macro displays. A nested list that defines nothing
+/// makes no term.
+#[test]
+fn mdn_list_terms_are_recorded_the_way_mdn_names_them() {
+    let source = "- `accept` (optional)\n  - : One.\n- Plain term\n  - : Two.\n- [`bar`](/x) more\n  - : Three.\n- {{cssxref(\"&lt;string&gt;\")}}\n  - : Four.\n- {{domxref(\"Element.id\", \"id\")}}\n  - : Five.\n\n- `loose`\n\n  - : Six.\n\n- Not a term\n  - A nested item.\n";
+    let got = extraction(Adapter::Markdown, source);
+    let terms: Vec<&str> = got
+        .headings
+        .iter()
+        .filter(|heading| heading.source == HeadingSource::DefinitionTerm)
+        .map(|heading| heading.text.as_str())
+        .collect();
+    assert_eq!(
+        terms,
+        ["accept", "Plain term", "bar", "<string>", "id", "loose"]
+    );
+}
+
+#[test]
+fn an_interactive_example_declares_its_try_it_heading() {
+    let source = "# Title\n\n{{InteractiveExample(\"CSS Demo: x\")}}\n\n{{interactiveexample(\"y\", \"taller\")}}\n";
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(got.declared_anchors, ["try_it", "try_it"]);
+}
+
 /// A footnote's calls and notes are recorded under the label as written, in
 /// document order, and a call naming no note is only text.
 #[test]

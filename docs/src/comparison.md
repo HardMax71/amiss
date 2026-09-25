@@ -11,7 +11,7 @@ that broke the agreement.
 comparing against honestly. It is fast, async, and reads Markdown, HTML, and
 reStructuredText; it checks external URLs, which Amiss never fetches by design; it
 checks local file links, and with `--include-fragments` it verifies heading anchors, which
-Amiss also does, against twelve pinned renderer rules. If your failure mode is dead links on a
+Amiss also does, against thirteen pinned renderer rules. If your failure mode is dead links on a
 published site, lychee alone is the right tool, and nothing here argues otherwise.
 
 The composition is literal rather than aspirational. Every external destination is recorded
@@ -39,7 +39,7 @@ are where Amiss lives:
 | | Amiss | lychee |
 | --- | --- | --- |
 | Checks external URLs | never fetches, lists them for you | yes |
-| Checks heading anchors | against twelve pinned renderer rules | with `--include-fragments` |
+| Checks heading anchors | against thirteen pinned renderer rules | with `--include-fragments` |
 | Compares two snapshots | always | no |
 | Attributes a finding to the change | introduced, pre-existing, resolved | no |
 | Reports changed content under unchanged prose | yes, as advisory | no |

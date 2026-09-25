@@ -7,7 +7,7 @@ use amiss_wire::resolution::{BlobTarget, Missing, TaggedBlobTarget, Target, Unsu
 
 use crate::Error;
 use crate::anchor::anchor_set;
-use crate::discovery::SnapshotDiscovery;
+use crate::discovery::{SnapshotDiscovery, declared_root};
 use crate::document::{classify, native_adapter};
 use crate::published::unrouted;
 use crate::resources::{Aggregate, ScanResources};
@@ -21,8 +21,13 @@ use amiss_wire::resolution::Resolution;
 #[derive(Debug)]
 pub(super) struct AnchorIndex {
     identities: Vec<String>,
-    typography: Option<BTreeMap<String, Option<usize>>>,
+    typography: Option<[BTreeMap<String, Option<usize>>; 2]>,
 }
+
+/// The keys a drifted fragment is matched under, nearest first: case alone,
+/// then case and the separator character together. The nearer key goes first
+/// because one renderer's identity can be another's with `_` for `-`.
+const NEAR_KEYS: [fn(&str) -> String; 2] = [str::to_lowercase, fold_typography];
 
 impl AnchorIndex {
     fn new(identities: BTreeSet<String>) -> Self {
@@ -33,26 +38,32 @@ impl AnchorIndex {
     }
 
     fn typography_neighbor(&mut self, fragment: &str) -> Option<String> {
-        if self.typography.is_none() {
-            let mut typography = BTreeMap::new();
-            for (index, identity) in self.identities.iter().enumerate() {
-                typography
-                    .entry(fold_typography(identity))
-                    .and_modify(|matched| *matched = None)
-                    .or_insert(Some(index));
-            }
-            self.typography = Some(typography);
-        }
-        let folded = fold_typography(fragment);
-        self.typography
-            .as_ref()?
-            .get(&folded)
-            .copied()
-            .flatten()
+        let identities = &self.identities;
+        let typography = self.typography.get_or_insert_with(|| {
+            NEAR_KEYS.map(|key| {
+                let mut neighbors = BTreeMap::new();
+                for (index, identity) in identities.iter().enumerate() {
+                    neighbors
+                        .entry(key(identity))
+                        .and_modify(|matched| *matched = None)
+                        .or_insert(Some(index));
+                }
+                neighbors
+            })
+        });
+        NEAR_KEYS
+            .iter()
+            .zip(typography.iter())
+            .find_map(|(key, neighbors)| neighbors.get(&key(fragment)).copied().flatten())
             .and_then(|index| self.identities.get(index))
             .cloned()
     }
 }
+
+/// The delimiter that opens a fragment's directives, which a browser reads as
+/// text to find on the page rather than as an identity; `#:~:text=word` and
+/// `#id:~:text=word` both carry one.
+const TEXT_DIRECTIVE: &str = ":~:";
 
 /// The fragment precedence on a located target: a tree carries none, the line
 /// grammar wins where it applies, a document class is asked for the heading
@@ -75,6 +86,11 @@ pub(super) fn fragment_resolution(
     };
     if let Some(range) = line_fragment(forge, path, decoded) {
         return line_resolution(resolver, path, mode, blob, range);
+    }
+    if decoded.contains(TEXT_DIRECTIVE) {
+        return Ok(Resolution::UnsupportedSemantics(
+            UnsupportedSemantics::Fragment(TaggedBlobTarget::Blob(blob)),
+        ));
     }
     match classify(path.as_bytes()) {
         Some(classification) => match native_adapter(classification) {
@@ -196,6 +212,10 @@ fn expanded_anchors(
         expanded.headings.as_ref(),
         expanded.html_anchors.as_ref(),
         expanded.declared_anchors.as_ref(),
+        |rule| {
+            rule.declared_by.is_empty()
+                || declared_root(snapshot, path.as_bytes(), rule.declared_by).is_some()
+        },
     ));
     if expanded.complete
         && !unrouted(snapshot, adapter, path)
