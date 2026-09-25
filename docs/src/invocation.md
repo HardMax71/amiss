@@ -353,7 +353,8 @@ pairing cannot hide a candidate occurrence. Human output names every document, s
 construct, resolution, and observation ID. JSON output is an array of the unchanged candidate
 `Occurrence` objects already defined by the report schema, not a new report or wire envelope.
 `--target-bytes-hex` makes raw non-UTF-8 Git paths queryable on every platform. A valid empty
-answer exits 0 even when the source report recorded blocking findings; incomplete, malformed,
+answer exits 0 even when the source report recorded blocking findings, and an empty answer for a
+target holding `#` says on stderr that a fragment belongs to a reference and not to the path; incomplete, malformed,
 unreadable, oversized, or digest-mismatched reports exit 2. Querying writes no state and changes
 no recorded verdict.
 
