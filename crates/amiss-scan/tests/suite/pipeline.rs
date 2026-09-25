@@ -723,6 +723,53 @@ fn a_file_behind_an_unanswered_fragment_is_still_tracked() {
     );
 }
 
+/// Only an `AsciiDoc` cross reference names a page identity. A link or an
+/// include without an extension names a file, a climb out of the tree is a
+/// traversal, and an image at a URL is external rather than awaiting
+/// `imagesdir`.
+#[test]
+fn an_asciidoc_file_without_an_extension_is_a_file() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("LICENSE"), "License\n").unwrap();
+    fs::write(
+        root.join("README.adoc"),
+        "= R\n\nlink:LICENSE[a] link:GONE[b] link:../../x[c] image:https://e.com/l.png[d] xref:install[e]\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(&repo, &engine(), None, &shell(), &oid(&base), &oid(&base)).unwrap();
+    let payload = payload(&built);
+    let mut kinds: Vec<(u64, String)> = payload["observations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            let side = &row["sides"]["same"];
+            (
+                side["source_span"]["start_byte"].as_u64().unwrap(),
+                side["resolution"]["kind"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    kinds.sort();
+    let kinds: Vec<&str> = kinds.iter().map(|(_, kind)| kind.as_str()).collect();
+    assert_eq!(
+        kinds,
+        [
+            "resolved",
+            "missing",
+            "invalid",
+            "external",
+            "unsupported-semantics"
+        ]
+    );
+}
+
 /// A well-formed value claim whose target agrees is attested: no finding,
 /// no boundary, and the summary counts it.
 #[test]

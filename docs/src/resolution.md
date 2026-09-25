@@ -252,6 +252,13 @@ than absent. A heading anchor on an AsciiDoc target resolves through the Asciido
 [What thirteen renderers call a heading](anchor-rules.md), the only rule whose identities all
 carry a prefix.
 
+An AsciiDoc destination that needs the build's own state is declined as attribute-dependent
+rather than guessed: one holding an unexpanded `{attribute}`, an image path no generator
+anchors, since `imagesdir` is an attribute too, and a cross reference to an extensionless name,
+which is a page identity a site catalogue answers. A link or an include is read as written,
+so `link:LICENSE[]` names that file, `include::NOTICE[]` is missing when the tree lacks it, and
+a climb out of the tree is a traversal, and an image at a URL is external.
+
 An AsciiDoc document publishes three identities a cross reference can name. A block anchor,
 `[#install]`, `[[install]]`, `[source#install]` or `[id=install]` on a line of its own, and an
 inline anchor, `[[remove-refs]]`, `[[[bib]]]` or `anchor:remove-refs[]` in the flow of a list
