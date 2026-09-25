@@ -210,7 +210,9 @@ pub struct HeadingAttribute {
 
 /// Where a heading was written. Renderers disagree about which of these carry
 /// an identity, a raw-HTML heading and a definition-list term above all, so
-/// they are kept apart in one ordered list.
+/// they are kept apart in one ordered list. A footnote's call and its note are
+/// no headings, but renderers publish an identity for each, keyed by the label
+/// the text holds or by the order the calls come in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 pub enum HeadingSource {
@@ -220,6 +222,8 @@ pub enum HeadingSource {
     Rst,
     RawHtml,
     DefinitionTerm,
+    FootnoteReference,
+    FootnoteDefinition,
 }
 
 /// One heading's rendered text content, in document order with its siblings.

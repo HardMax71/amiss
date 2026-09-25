@@ -36,7 +36,39 @@ fn heading_text_is_the_rendered_text_content() {
 fn a_footnote_call_in_a_heading_contributes_nothing() {
     let source = "## Note[^1]\n\n[^1]: text\n";
     let got = extraction(Adapter::Markdown, source);
-    assert_eq!(texts(&got), vec!["Note".to_owned()]);
+    assert_eq!(
+        texts(&got),
+        vec!["Note".to_owned(), "1".to_owned(), "1".to_owned()]
+    );
+    assert_eq!(
+        got.headings.first().map(|heading| heading.source),
+        Some(HeadingSource::Markdown)
+    );
+}
+
+/// A footnote's calls and notes are recorded under the label as written, in
+/// document order, and a call naming no note is only text.
+#[test]
+fn footnote_calls_and_notes_are_recorded_under_their_labels() {
+    for adapter in [Adapter::Markdown, Adapter::Mdx] {
+        let source = "Text[^Note] and[^1] and[^gone].\n\n[^1]: One.\n[^Note]: Named.\n";
+        let got = extraction(adapter, source);
+        let rows: Vec<(&str, HeadingSource)> = got
+            .headings
+            .iter()
+            .map(|heading| (heading.text.as_str(), heading.source))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("Note", HeadingSource::FootnoteReference),
+                ("1", HeadingSource::FootnoteReference),
+                ("1", HeadingSource::FootnoteDefinition),
+                ("Note", HeadingSource::FootnoteDefinition),
+            ],
+            "{adapter}"
+        );
+    }
 }
 
 #[test]

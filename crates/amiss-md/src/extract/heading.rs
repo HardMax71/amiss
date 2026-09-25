@@ -206,6 +206,7 @@ fn text_content(node: &Node) -> String {
             | Kind::TableCell
             | Kind::Link { .. }
             | Kind::LinkReference(_)
+            | Kind::Footnote { .. }
             | Kind::Other => stack.extend(current.children.iter().rev()),
         }
     }

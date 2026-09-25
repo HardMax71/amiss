@@ -166,6 +166,66 @@ fn the_union_holds_every_rule_and_every_html_anchor() {
     }
 }
 
+/// The first-call and note identities each renderer published for these
+/// documents: Python-Markdown 3.10.3, kramdown 2.5.2, goldmark 1.8.6,
+/// markdown-it-footnote 4.0.0, remark-gfm 4.0.1 through remark-rehype 11.1.2,
+/// and mdBook 0.5.4. A second call to one note publishes more, and those are
+/// not read.
+#[test]
+fn the_footnote_rules_reproduce_what_their_renderers_published() {
+    for (source, published) in [
+        (
+            "Text[^note] and[^1] again[^note].\n\n[^1]: One.\n[^note]: Named.\n[^unused]: None.\n",
+            vec![
+                "fn:note",
+                "fnref:note",
+                "fn:1",
+                "fnref:1",
+                "fn:unused",
+                "fn:2",
+                "fnref:2",
+                "fn1",
+                "fnref1",
+                "fn2",
+                "fnref2",
+                "user-content-fn-note",
+                "user-content-fnref-note",
+                "user-content-fn-1",
+                "user-content-fnref-1",
+                "footnote-note",
+                "fr-note-1",
+                "footnote-1",
+                "fr-1-1",
+            ],
+        ),
+        (
+            "A[^Big].\n\n[^Big]: n.\n",
+            vec![
+                "fn:Big",
+                "fnref:Big",
+                "fn:1",
+                "fnref:1",
+                "fn1",
+                "fnref1",
+                "user-content-fn-big",
+                "user-content-fnref-big",
+                "footnote-Big",
+                "fr-Big-1",
+            ],
+        ),
+    ] {
+        for adapter in [Adapter::Markdown, Adapter::Mdx] {
+            let (headings, anchors, declared) = parsed(adapter, source);
+            let want: BTreeSet<String> = published.iter().map(|id| (*id).to_owned()).collect();
+            assert_eq!(
+                anchor_set(&headings, &anchors, &declared),
+                want,
+                "{adapter}: {source:?}"
+            );
+        }
+    }
+}
+
 #[test]
 fn an_attribute_identity_replaces_the_slug_only_where_the_renderer_honours_it() {
     let (headings, _anchors, _declared) = headings("## Explicit {#custom-id}\n");

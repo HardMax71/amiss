@@ -43,6 +43,31 @@ Two of the rows are configurations rather than renderers. mdBook ships with smar
 punctuation on and MkDocs takes its slug function from `mkdocs.yml`, so both spellings are
 carried rather than one being chosen for the reader.
 
+## Footnotes
+
+A footnote is no heading, but most renderers give its note and its first call an
+identity, and a page links `#fn:1` to reach the note. Six rules carry those spellings,
+each checked against its renderer's output. They key the identity three ways: by the label
+as the document writes it, by the label lowercased, or by the place the note's first call
+takes among the notes called. So `[^note]`, called first, is `fn:note` under
+Python-Markdown and `fn:1` under goldmark.
+
+<!-- amiss-doc-contract:footnote-identities:start -->
+| Rule | Serves | Note | First call |
+| --- | --- | --- | --- |
+| `python-markdown` | MkDocs | `fn:<label>`, also for a note nothing calls | `fnref:<label>` |
+| `kramdown` | Jekyll, GitHub Pages | `fn:<label>` | `fnref:<label>` |
+| `goldmark` | Hugo | `fn:<order>` | `fnref:<order>` |
+| `markdown-it` | VitePress, VuePress | `fn<order>` | `fnref<order>` |
+| `remark` | Docusaurus, Starlight | `user-content-fn-<lowercased label>` | `user-content-fnref-<lowercased label>` |
+| `mdbook` | mdBook | `footnote-<label>` | `fr-<label>-1` |
+<!-- amiss-doc-contract:footnote-identities:end -->
+
+Only the first call is read. A second call to the same note publishes `fnref2:note` under
+Python-Markdown and `fnref:note:1` under kramdown, and each renderer numbers repeats its
+own way. github.com is not in the table: it suffixes every footnote identity with a digest
+of the render, so no spelling a document writes can name one.
+
 ## What a document declares
 
 An identity can also be written down rather than left to a heading's slug, and then it

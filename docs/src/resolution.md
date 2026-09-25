@@ -383,7 +383,8 @@ written `_1` folds together with `-1`; a lone reference over a verbatim-located 
 turns that neighbor into the finding's `fix`. The union is deliberate: adding a rule can only grow what an anchor may match, and no
 repository policy narrows it. A document can add to it, by declaring an identity the way it
 would add a heading, which is an edit to the target that a reviewer reads rather than a
-setting that clears a finding.
+setting that clears a finding. A footnote joins the union too, under the spellings six
+renderers publish for a note and its first call, `fn:1` and `fnref:1` among them.
 [What twelve renderers call a heading](anchor-rules.md) holds the rules, what each was checked
 against, and how far apart they are.
 

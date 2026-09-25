@@ -270,23 +270,7 @@ impl Sweep<'_> {
                 mdx_declarations(self, node);
                 return Ok(false);
             }
-            Kind::Html => {
-                self.html.push(span);
-                self.snippets
-                    .extend(shortcode(self.suffix.get(span.0..span.1), span));
-                for destination in html::collect_regions(self.suffix, &[span], html::destinations) {
-                    let mut tag_path = path.to_vec();
-                    tag_path.push(destination.within);
-                    self.push(
-                        destination.construct,
-                        destination.raw_destination,
-                        destination.semantic_destination,
-                        destination.span,
-                        &tag_path,
-                        *owners,
-                    );
-                }
-            }
+            Kind::Html => self.html_entry(span, path, *owners),
             Kind::Heading => heading_entry(self, node),
             Kind::ListItem => owners.list_item = Some(span),
             Kind::TableCell => owners.cell = Some(span),
@@ -355,9 +339,35 @@ impl Sweep<'_> {
                 }
             }
             Kind::CodeBlock(_) => directive_declarations(self, span),
+            Kind::Footnote { label, source } => self.headings.push(Heading {
+                text: label.clone(),
+                attribute: None,
+                source: *source,
+                span,
+            }),
             Kind::Root | Kind::Other => {}
         }
         Ok(true)
+    }
+
+    /// A raw HTML region: opaque to the grammar, read for the shortcode it
+    /// may call and for the destinations its tags carry.
+    fn html_entry(&mut self, span: (usize, usize), path: &[usize], owners: Owners) {
+        self.html.push(span);
+        self.snippets
+            .extend(shortcode(self.suffix.get(span.0..span.1), span));
+        for destination in html::collect_regions(self.suffix, &[span], html::destinations) {
+            let mut tag_path = path.to_vec();
+            tag_path.push(destination.within);
+            self.push(
+                destination.construct,
+                destination.raw_destination,
+                destination.semantic_destination,
+                destination.span,
+                &tag_path,
+                owners,
+            );
+        }
     }
 
     fn orphan(&mut self, node: &Node, path: &[usize], owners: Owners) {
@@ -455,6 +465,7 @@ fn mdx_declaration(sweep: &mut Sweep<'_>, node: &Node) -> bool {
         | Kind::LinkReference(_)
         | Kind::ImageReference(_)
         | Kind::Definition(_)
+        | Kind::Footnote { .. }
         | Kind::Other => {}
     }
     true

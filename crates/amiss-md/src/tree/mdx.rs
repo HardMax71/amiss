@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use amiss_wire::extraction::Fault;
+use amiss_wire::extraction::{Fault, HeadingSource};
 use markdown::mdast;
 
 use super::{Definition, Kind, Node, Reference, ReferenceForm};
@@ -133,6 +133,20 @@ fn convert(node: &mdast::Node, winners: &HashMap<String, usize>) -> Result<Node,
             url: definition.url.clone(),
             title: definition.title.clone(),
         }),
+        mdast::Node::FootnoteDefinition(footnote) => Kind::Footnote {
+            label: footnote
+                .label
+                .clone()
+                .unwrap_or_else(|| footnote.identifier.clone()),
+            source: HeadingSource::FootnoteDefinition,
+        },
+        mdast::Node::FootnoteReference(footnote) => Kind::Footnote {
+            label: footnote
+                .label
+                .clone()
+                .unwrap_or_else(|| footnote.identifier.clone()),
+            source: HeadingSource::FootnoteReference,
+        },
         mdast::Node::Blockquote(_)
         | mdast::Node::List(_)
         | mdast::Node::Table(_)
@@ -140,8 +154,6 @@ fn convert(node: &mdast::Node, winners: &HashMap<String, usize>) -> Result<Node,
         | mdast::Node::Delete(_)
         | mdast::Node::Emphasis(_)
         | mdast::Node::Strong(_)
-        | mdast::Node::FootnoteDefinition(_)
-        | mdast::Node::FootnoteReference(_)
         | mdast::Node::Break(_)
         | mdast::Node::ThematicBreak(_)
         | mdast::Node::Toml(_)
