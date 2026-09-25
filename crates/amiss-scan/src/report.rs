@@ -13,14 +13,12 @@ pub use index::{INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, synthetic_candidate};
 use amiss_wire::controls::{GitMode, Profile, ProjectionSource};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, RepoPath};
+use amiss_wire::report::EngineProvenance;
 use amiss_wire::report::model;
 use amiss_wire::report::model::{ControlsUnavailableReason, SnapshotUnavailableReason};
-use amiss_wire::report::{EngineProvenance, ErrorDetail};
 pub use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 pub use amiss_wire::requests::GitSnapshotIdentity;
 use amiss_wire::resolution::Resolution;
-
-use crate::Error;
 
 pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
 
@@ -93,23 +91,6 @@ pub struct Built<
     pub canonical_payload: Vec<u8>,
     pub status: model::ReportStatus,
     pub exit_code: u8,
-}
-
-pub(crate) fn detail(error: &Error, path: Option<&RepoPath>) -> ErrorDetail {
-    let resource = match error {
-        Error::ResourceLimit {
-            resource,
-            configured_limit,
-            observed_lower_bound,
-        } => Some((*resource, *configured_limit, *observed_lower_bound)),
-        Error::Parse(_) | Error::Git(_) | Error::UnrepresentablePath | Error::Internal => None,
-    };
-    ErrorDetail {
-        code: error.code(),
-        path: path.cloned(),
-        path_bytes: None,
-        resource,
-    }
 }
 
 /// The exact canonical report bytes, including the trailing newline.

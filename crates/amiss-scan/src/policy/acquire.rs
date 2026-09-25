@@ -233,14 +233,8 @@ pub fn acquire(
     scan: &mut ScanResources,
     root_tree: &Oid,
 ) -> Result<PolicySide, Vec<ErrorDetail>> {
-    let located = locate(repo, git, root_tree).map_err(|defect| {
-        vec![ErrorDetail {
-            code: defect.code(),
-            path: None,
-            path_bytes: None,
-            resource: None,
-        }]
-    })?;
+    let located =
+        locate(repo, git, root_tree).map_err(|defect| vec![crate::detail(&defect, None)])?;
     let Some((mode, oid)) = located else {
         return Ok(PolicySide::default());
     };

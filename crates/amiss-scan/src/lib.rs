@@ -24,6 +24,8 @@ pub mod semantic;
 
 use amiss_md::Fault;
 use amiss_wire::controls::ResourceName;
+use amiss_wire::model::RepoPath;
+use amiss_wire::report::ErrorDetail;
 use amiss_wire::report::model::AnalysisErrorCode;
 
 pub use correlate::{Comparison, Impact, Observation, Outcome, Side, correlate};
@@ -146,5 +148,22 @@ impl Error {
                     | ResourceName::ReferencesPerDocument
             ),
         }
+    }
+}
+
+pub(crate) fn detail(error: &Error, path: Option<&RepoPath>) -> ErrorDetail {
+    let resource = match error {
+        Error::ResourceLimit {
+            resource,
+            configured_limit,
+            observed_lower_bound,
+        } => Some((*resource, *configured_limit, *observed_lower_bound)),
+        Error::Parse(_) | Error::Git(_) | Error::UnrepresentablePath | Error::Internal => None,
+    };
+    ErrorDetail {
+        code: error.code(),
+        path: path.cloned(),
+        path_bytes: None,
+        resource,
     }
 }
