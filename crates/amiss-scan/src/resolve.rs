@@ -98,6 +98,7 @@ pub struct TargetCache {
     historical_read: BTreeMap<Oid, BTreeMap<RepoPath, CachedContent>>,
     declarations: BTreeMap<RepoPath, Declarations>,
     historical_commits: BTreeMap<Oid, Option<Oid>>,
+    case_folded: Option<BTreeMap<Vec<u8>, Option<RepoPath>>>,
 }
 
 impl TargetCache {
@@ -113,6 +114,7 @@ impl TargetCache {
         self.historical_read.clear();
         self.declarations.clear();
         self.historical_commits.clear();
+        self.case_folded = None;
         self.scope = Some(Arc::clone(scope));
     }
 }
@@ -549,22 +551,38 @@ fn declared_untracked(
     }
     Ok(Resolution::Missing(Missing::PathNotFound {
         path: path.clone(),
-        near: case_neighbor(resolver.snapshot, path),
+        near: case_neighbor(resolver, path),
         same_object_at: None,
     }))
 }
 
 /// The one tracked path equal to the missed one apart from case, when exactly
 /// one exists. A repository holding both spellings names a real ambiguity and
-/// stays bare, and so does a path nothing in the tree comes close to.
-fn case_neighbor(snapshot: &SnapshotDiscovery, path: &RepoPath) -> Option<RepoPath> {
-    let raw = path.as_bytes();
-    let mut matches = snapshot
-        .entries
-        .keys()
-        .filter(|entry| entry.as_bytes().eq_ignore_ascii_case(raw));
-    let candidate = matches.next()?;
-    matches.next().is_none().then(|| candidate.clone())
+/// stays bare, and so does a path nothing in the tree comes close to. The
+/// folded index is built once per snapshot, on its first miss, so a miss costs
+/// a lookup rather than a walk of every entry.
+fn case_neighbor(resolver: &mut Resolver<'_>, path: &RepoPath) -> Option<RepoPath> {
+    let snapshot = resolver.snapshot;
+    resolver
+        .cache
+        .case_folded
+        .get_or_insert_with(|| folded_entries(snapshot))
+        .get(&path.as_bytes().to_ascii_lowercase())
+        .cloned()
+        .flatten()
+}
+
+/// Every tracked path under its ASCII-lowercased spelling, or none where two
+/// spellings fold together.
+fn folded_entries(snapshot: &SnapshotDiscovery) -> BTreeMap<Vec<u8>, Option<RepoPath>> {
+    let mut folded: BTreeMap<Vec<u8>, Option<RepoPath>> = BTreeMap::new();
+    for entry in snapshot.entries.keys() {
+        folded
+            .entry(entry.as_bytes().to_ascii_lowercase())
+            .and_modify(|unique| *unique = None)
+            .or_insert_with(|| Some(entry.clone()));
+    }
+    folded
 }
 
 fn declares(
