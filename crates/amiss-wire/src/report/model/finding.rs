@@ -141,6 +141,7 @@ pub enum BrokenRedirectReason {
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum ProjectionObserved {
+    ContentAbsent,
     ContentDiffers,
     SinkAbsent,
     SinkAmbiguous,
@@ -149,6 +150,8 @@ pub enum ProjectionObserved {
     SourceAbsent,
     SourceEndMarkerAbsent,
     SourceEndMarkerAmbiguous,
+    SourceKeyAbsent,
+    SourceKeyNotScalar,
     SourceLfsPointer,
     SourceLinesOutOfRange,
     SourceNotABlob,
@@ -164,6 +167,7 @@ pub enum ProjectionObserved {
     SourceTreePathNotUtf8,
     SourceTreeRootAbsent,
     SourceTreeRootNotATree,
+    SourceUnparsable,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

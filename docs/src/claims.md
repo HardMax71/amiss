@@ -160,6 +160,41 @@ refuses duplicate, missing, reversed, same-line, or non-UTF-8 regions as typed p
 Edits outside the region do not affect its projected digest. Both selectors use the existing
 bounded target cache and line-fragment meter; source bytes are never executed or fetched.
 
+A whole file is a source too, which is how a committed `--help` snapshot stays equal to the block
+that shows it, and so is one value from a configuration file, named by the keys that lead to it:
+
+```json
+{ "kind": "blob", "path": "docs/help.txt" }
+```
+
+```json
+{
+  "kind": "key-value",
+  "path": "Cargo.toml",
+  "format": "toml",
+  "key": ["workspace", "package", "version"]
+}
+```
+
+The file is parsed as TOML or JSON, and the keys walk tables or objects from the root to a string,
+number, boolean, or TOML date. The value is projected the way the file's own grammar prints it: a
+string as its text, anything else as written. A missing key is `source-key-absent`, a key naming a
+table, array, or null is `source-key-not-scalar`, and a file its format cannot parse is
+`source-unparsable`. Both sources read the target through the same budgets a line selection does.
+
+`contains-v1` pairs with any of these text sources and asks only that the visible block hold the
+value somewhere, byte for byte after the same line-ending rule. That keeps an install line honest:
+
+````markdown
+```sh
+cargo install --locked amiss --version 0.35.0
+```
+[amiss:install-version]: <amiss:projection>
+````
+
+With `"projection": "contains-v1"` and the key source above, the block fails as `content-absent`
+the day the package version moves and the line does not. An empty value sits inside every block.
+
 A complete tracked-path inventory uses the same visible sink without reading another source blob:
 
 ```json

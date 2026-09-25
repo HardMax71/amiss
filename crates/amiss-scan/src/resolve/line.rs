@@ -1,5 +1,5 @@
 use amiss_md::lines::scan;
-use amiss_wire::controls::{GitMode, NamedRegionSelection, ProjectionSource};
+use amiss_wire::controls::{GitMode, NamedRegionSelection, ProjectionKind, ProjectionSource};
 use amiss_wire::model::{ForgeDialect, RepoPath};
 use amiss_wire::report::model::ProjectionObserved;
 use amiss_wire::resolution::{BlobContent, BlobTarget, Missing, Target, UnsupportedSemantics};
@@ -105,16 +105,20 @@ impl Resolver<'_> {
     pub(crate) fn resolve_code_projection(
         &mut self,
         selection: &ProjectionSource,
+        projection: ProjectionKind,
         sink: &SemanticCodeSink,
     ) -> Result<Verdict, Error> {
-        use ProjectionSource::{BlobLines, NamedRegion, RecordSet, RecordValue, TreePaths};
+        use ProjectionSource::{
+            Blob, BlobLines, KeyValue, NamedRegion, RecordSet, RecordValue, TreePaths,
+        };
 
         let path = match selection {
             BlobLines(source) => RepoPath::from(&source.path),
             NamedRegion(source) => RepoPath::from(&source.path),
+            Blob(source) => RepoPath::from(&source.path),
+            KeyValue(source) => RepoPath::from(&source.path),
             TreePaths(_) | RecordValue(_) | RecordSet(_) => return Err(Error::Internal),
         };
-        let observed_bytes = u64::try_from(sink.value.len()).unwrap_or(u64::MAX);
         let Some((mode, oid)) = self
             .snapshot
             .entries
@@ -172,6 +176,7 @@ impl Resolver<'_> {
                 )?;
                 named_region_bytes(body, selection)
             }
+            Blob(_) | KeyValue(_) => Ok(body.as_ref()),
             TreePaths(_) | RecordValue(_) | RecordSet(_) => return Err(Error::Internal),
         };
         let selected = match selected {
@@ -182,7 +187,15 @@ impl Resolver<'_> {
             Aggregate::ProjectionSelectedBytes,
             u64::try_from(selected.len()).unwrap_or(u64::MAX),
         )?;
-        let normalized = normalized_line_endings(selected);
+        let keyed = match selection {
+            KeyValue(key) => match crate::scanned::key_value(selected, key) {
+                Ok(value) => Some(value),
+                Err(reason) => return Ok(unavailable(reason, sink)),
+            },
+            BlobLines(_) | NamedRegion(_) | Blob(_) | TreePaths(_) | RecordValue(_)
+            | RecordSet(_) => None,
+        };
+        let normalized = normalized_line_endings(keyed.as_ref().map_or(selected, String::as_bytes));
         let expected = normalized
             .as_ref()
             .strip_suffix(b"\n")
@@ -191,23 +204,7 @@ impl Resolver<'_> {
             Aggregate::ProjectionProjectedBytes,
             u64::try_from(expected.len()).unwrap_or(u64::MAX),
         )?;
-        if expected == sink.value.as_bytes() {
-            return Ok(Verdict::Attested);
-        }
-        Ok(Verdict::Drift {
-            reason: ProjectionObserved::ContentDiffers,
-            expected_digest: Some(amiss_wire::model::Digest::from(
-                sha2::Sha256::new_with_prefix(crate::scanned::CODE_TEXT_SOURCE_DOMAIN)
-                    .chain_update([0_u8])
-                    .chain_update(expected)
-                    .finalize()
-                    .0,
-            )),
-            observed_digest: Some(sink.digest),
-            expected_bytes: Some(u64::try_from(expected.len()).unwrap_or(u64::MAX)),
-            observed_bytes: Some(observed_bytes),
-            difference: None,
-        })
+        Ok(crate::scanned::code_verdict(expected, projection, sink))
     }
 }
 

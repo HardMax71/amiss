@@ -140,6 +140,10 @@ fn validate_plan(plan: &RelationPlan) -> Result<(), Error> {
         if let Err(error) = check_projection_source(plan.projection, &subject.source) {
             return fail(&format!("$.payload.subjects[{index}].source"), error.kind);
         }
+        // A relation compares the two sides' digests, which says nothing about containment.
+        if plan.projection == ProjectionKind::ContainsV1 {
+            return fail("$.payload.projection", ErrorKind::InvalidValue);
+        }
         for (snapshot_name, snapshot) in
             [("base", &subject.base), ("candidate", &subject.candidate)]
         {
