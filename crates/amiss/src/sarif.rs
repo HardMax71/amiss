@@ -3,7 +3,9 @@ mod tests;
 
 use std::collections::BTreeSet;
 
-use amiss_wire::report::model::{Finding, FindingFix, FindingLocation, ReportPayload};
+use amiss_wire::report::model::{
+    Finding, FindingFix, FindingLocation, LocationSide, ReportPayload,
+};
 use amiss_wire::report::{Disposition, FindingKind};
 
 use model::{
@@ -15,13 +17,21 @@ use model::{
 /// The SARIF projection: a non-wire convenience over the same payload that
 /// cannot change facts, ordering, totals, or exit. Findings become results
 /// under their kind's rule, retained analysis errors become tool execution
-/// notifications, and the finding key rides as the stable fingerprint.
+/// notifications, and the finding key rides as the stable fingerprint. A row
+/// located in the base names a line the candidate no longer has, and code
+/// scanning closes an alert only when its row stops appearing, so it is left
+/// out.
 pub(crate) fn log<P, R, M, E>(
     payload: &ReportPayload<P, R, M, E>,
     path_text: impl Fn(&P) -> Option<&str> + Copy,
 ) -> Log<'_> {
-    let present_names: BTreeSet<FindingKind> =
-        payload.findings.iter().map(|row| row.kind).collect();
+    let exported = || {
+        payload
+            .findings
+            .iter()
+            .filter(|row| row.location.side != LocationSide::Base)
+    };
+    let present_names: BTreeSet<FindingKind> = exported().map(|row| row.kind).collect();
     let present: Vec<FindingKind> = FindingKind::all()
         .filter(|kind| present_names.contains(kind))
         .collect();
@@ -44,9 +54,7 @@ pub(crate) fn log<P, R, M, E>(
                     })
                     .collect(),
             }],
-            results: payload
-                .findings
-                .iter()
+            results: exported()
                 .map(|row| finding_result(row, &present, path_text))
                 .collect(),
             tool: Tool {
