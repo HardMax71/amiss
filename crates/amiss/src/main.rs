@@ -524,6 +524,7 @@ fn semantic_input(
             path: None,
             path_bytes: None,
             resource: None,
+            json_path: None,
         },
     )?;
     let template = amiss_wire::semantic::SemanticEvidenceTemplate::parse(&bytes)
@@ -539,6 +540,7 @@ fn open_repository(invocation: &Invocation) -> Result<amiss_git::Repository, Err
         path: None,
         path_bytes: None,
         resource: None,
+        json_path: None,
     };
     let mut repo = amiss_git::Repository::open(&invocation.repo, invocation.object_format)
         .map_err(|_defect| unavailable(AnalysisErrorCode::GitRepositoryUnavailable))?;

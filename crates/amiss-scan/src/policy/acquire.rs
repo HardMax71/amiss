@@ -152,39 +152,25 @@ fn covered(roots: &BTreeSet<RepoPath>, path: &[u8]) -> bool {
     ancestors(path).any(|ancestor| roots.contains(ancestor))
 }
 
-fn specific_code(kind: &ErrorKind) -> AnalysisErrorCode {
-    match kind {
-        ErrorKind::Json(_) => AnalysisErrorCode::InvalidJson,
-        ErrorKind::UnknownField => AnalysisErrorCode::UnknownField,
-        ErrorKind::DigestMismatch => AnalysisErrorCode::DigestMismatch,
-        ErrorKind::UnsortedSet | ErrorKind::DuplicateMember => AnalysisErrorCode::NoncanonicalArray,
-        ErrorKind::MissingField
-        | ErrorKind::WrongType
-        | ErrorKind::InvalidValue
-        | ErrorKind::LimitExceeded
-        | ErrorKind::Inconsistent
-        | ErrorKind::Noncanonical => AnalysisErrorCode::ConfigurationInvalid,
-    }
-}
-
-fn invalid(details: Vec<AnalysisErrorCode>) -> Vec<ErrorDetail> {
-    let mut rows = vec![ErrorDetail {
-        code: AnalysisErrorCode::ConfigurationInvalid,
+/// The rows an invalid policy answers with: `CONFIGURATION_INVALID` and the
+/// more specific code where there is one, each naming the member the defect
+/// sits at below the document root.
+fn invalid(specific: Option<AnalysisErrorCode>, member: Option<&str>) -> Vec<ErrorDetail> {
+    let json_path = member.filter(|member| *member != "$").map(str::to_owned);
+    [
+        Some(AnalysisErrorCode::ConfigurationInvalid),
+        specific.filter(|code| *code != AnalysisErrorCode::ConfigurationInvalid),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|code| ErrorDetail {
+        code,
         path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
         path_bytes: None,
         resource: None,
-    }];
-    for code in details {
-        if code != AnalysisErrorCode::ConfigurationInvalid {
-            rows.push(ErrorDetail {
-                code,
-                path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
-                path_bytes: None,
-                resource: None,
-            });
-        }
-    }
-    rows
+        json_path: json_path.clone(),
+    })
+    .collect()
 }
 
 /// Finds the exact policy path in a snapshot tree without discovering the
@@ -256,7 +242,7 @@ pub fn acquire_entry(
     oid: &Oid,
 ) -> Result<PolicySide, Vec<ErrorDetail>> {
     if mode != GitMode::RegularFile {
-        return Err(invalid(Vec::new()));
+        return Err(invalid(None, None));
     }
     let cap = ValueCap {
         resource: ResourceName::ControlInputBytes,
@@ -276,6 +262,7 @@ pub fn acquire_entry(
                     path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
                     path_bytes: None,
                     resource: Some((resource, configured_limit, observed_lower_bound)),
+                    json_path: None,
                 },
                 Error::Parse(_) | Error::Git(_) | Error::UnrepresentablePath | Error::Internal => {
                     ErrorDetail {
@@ -283,12 +270,13 @@ pub fn acquire_entry(
                         path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
                         path_bytes: None,
                         resource: None,
+                        json_path: None,
                     }
                 }
             }]
         })?;
     if lfs::is_pointer(&object.body) {
-        return Err(invalid(Vec::new()));
+        return Err(invalid(None, None));
     }
     match ScannerPolicy::parse(&object.body).and_then(|policy| {
         let digest = document_digest(amiss_wire::controls::SCANNER_POLICY_SCHEMA, &policy)
@@ -316,6 +304,7 @@ pub fn acquire_entry(
                         limit,
                         limit.saturating_add(1),
                     )),
+                    json_path: None,
                 }]);
             }
             Ok(PolicySide {
@@ -323,6 +312,9 @@ pub fn acquire_entry(
                 policy: Some(policy),
             })
         }
-        Err(defect) => Err(invalid(vec![specific_code(&defect.kind)])),
+        Err(defect) => Err(invalid(
+            Some(crate::semantic::configuration_detail(&defect).code),
+            Some(&defect.path),
+        )),
     }
 }

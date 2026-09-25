@@ -149,6 +149,7 @@ pub(crate) fn bind(input: &Input, candidate: Digest) -> Result<Context, ErrorDet
             path: None,
             path_bytes: None,
             resource: None,
+            json_path: None,
         });
     }
     Ok(Context {
@@ -169,11 +170,10 @@ pub fn configuration_detail(error: &Error) -> ErrorDetail {
         {
             AnalysisErrorCode::InvalidUtf8
         }
-        ErrorKind::Json(message) if message.starts_with("duplicate JSON key") => {
-            AnalysisErrorCode::DuplicateJsonKey
-        }
         ErrorKind::Json(_) => AnalysisErrorCode::InvalidJson,
+        ErrorKind::InvalidValue if error.path == "$.schema" => AnalysisErrorCode::UnknownSchema,
         ErrorKind::UnknownField => AnalysisErrorCode::UnknownField,
+        ErrorKind::DuplicateKey => AnalysisErrorCode::DuplicateJsonKey,
         ErrorKind::DigestMismatch => AnalysisErrorCode::DigestMismatch,
         ErrorKind::UnsortedSet | ErrorKind::DuplicateMember => AnalysisErrorCode::NoncanonicalArray,
         ErrorKind::MissingField
@@ -183,7 +183,10 @@ pub fn configuration_detail(error: &Error) -> ErrorDetail {
         | ErrorKind::Inconsistent
         | ErrorKind::Noncanonical => AnalysisErrorCode::ConfigurationInvalid,
     };
-    code(analysis)
+    ErrorDetail {
+        json_path: Some(error.path.clone()).filter(|member| member != "$"),
+        ..code(analysis)
+    }
 }
 
 pub(crate) const fn code(code: AnalysisErrorCode) -> ErrorDetail {
@@ -192,5 +195,6 @@ pub(crate) const fn code(code: AnalysisErrorCode) -> ErrorDetail {
         path: None,
         path_bytes: None,
         resource: None,
+        json_path: None,
     }
 }

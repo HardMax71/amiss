@@ -306,6 +306,7 @@ fn prove_binary_error_paths(engine: &EngineProvenance) {
                 path: Some(path),
                 path_bytes: None,
                 resource: None,
+                json_path: None,
             })
         })
         .collect();

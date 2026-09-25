@@ -137,6 +137,7 @@ impl From<crate::de::Error> for ReportDefect {
             crate::de::ErrorKind::Json(_)
             | crate::de::ErrorKind::MissingField
             | crate::de::ErrorKind::UnknownField
+            | crate::de::ErrorKind::DuplicateKey
             | crate::de::ErrorKind::WrongType
             | crate::de::ErrorKind::InvalidValue
             | crate::de::ErrorKind::UnsortedSet

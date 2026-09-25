@@ -385,6 +385,7 @@ fn conclude(
         path: Some(path.clone()),
         path_bytes: None,
         resource: None,
+        json_path: None,
     });
     let failures: Vec<ErrorDetail> = failures.iter().cloned().chain(refused).collect();
     if !failures.is_empty() {
@@ -484,6 +485,7 @@ fn control_read_detail(defect: &Error, path: &str) -> ErrorDetail {
                 .flatten(),
             path_bytes: None,
             resource: Some((*resource, *configured_limit, *observed_lower_bound)),
+            json_path: None,
         },
         Error::Parse(_) | Error::Git(_) | Error::UnrepresentablePath | Error::Internal => {
             ErrorDetail {
@@ -491,6 +493,7 @@ fn control_read_detail(defect: &Error, path: &str) -> ErrorDetail {
                 path: None,
                 path_bytes: None,
                 resource: None,
+                json_path: None,
             }
         }
     }

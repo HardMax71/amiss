@@ -196,6 +196,7 @@ fn index_candidate_block(
                 path: None,
                 path_bytes: fits.then(|| entry.path.clone()),
                 resource: None,
+                json_path: None,
             });
             continue;
         };

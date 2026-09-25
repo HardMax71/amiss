@@ -13,6 +13,7 @@ pub struct ErrorDetail {
     pub path: Option<crate::model::RepoPath>,
     pub path_bytes: Option<Vec<u8>>,
     pub resource: Option<(crate::controls::ResourceName, u64, u64)>,
+    pub json_path: Option<String>,
 }
 
 /// One wire error row with its partition phase.
@@ -31,6 +32,7 @@ pub fn error_row(detail: &ErrorDetail) -> AnalysisError<crate::model::RepoPath> 
         phase,
         code: detail.code,
         description: detail.code.meaning().to_owned(),
+        json_path: detail.json_path.clone(),
         path: detail.path.clone(),
         path_bytes: detail.path_bytes.clone(),
         resource: detail.resource.map(|(name, _, _)| name),

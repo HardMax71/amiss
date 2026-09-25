@@ -13,6 +13,8 @@ pub enum ErrorKind {
     MissingField,
     #[error("field is unknown")]
     UnknownField,
+    #[error("key is repeated")]
+    DuplicateKey,
     #[error("value has the wrong type")]
     WrongType,
     #[error("value is invalid")]
@@ -66,6 +68,11 @@ pub(crate) fn deserialize_error(
         .and_then(|rest| rest.split_once('`').map(|(member, _rest)| member))
     {
         (ErrorKind::UnknownField, Some(member))
+    } else if let Some(member) = message
+        .strip_prefix("duplicate field `")
+        .and_then(|rest| rest.split_once('`').map(|(member, _rest)| member))
+    {
+        (ErrorKind::DuplicateKey, Some(member))
     } else if message.starts_with("invalid type:") {
         (ErrorKind::WrongType, None)
     } else {
