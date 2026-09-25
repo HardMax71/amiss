@@ -769,8 +769,8 @@ fn a_sphinx_source_directory_anchors_absolute_doc_roles_at_its_conf() {
 /// rather than the default: `/testing` is `docs/testing.txt`. A docname
 /// carrying a dot of its own is still a docname, a trailing slash is
 /// normalized away before the name is looked up, and a path into a text file
-/// outside the root reaches the file it names. A relative docname keeps the
-/// `.rst` the adapter spelled it with, which is the stated boundary.
+/// outside the root reaches the file it names. A relative docname takes the
+/// declared suffix too.
 #[test]
 fn a_declared_source_suffix_spells_the_docname_a_doc_role_names() {
     let chain = amiss_fixtures::sphinx_declared_suffix().expect("the fixture stages");
@@ -791,12 +791,7 @@ fn a_declared_source_suffix_spells_the_docname_a_doc_role_names() {
             ResolutionTag::Missing,
             Some("docs/absent.txt"),
         ),
-        row(
-            index,
-            Some("docs/testing.rst"),
-            ResolutionTag::Missing,
-            Some("docs/testing.rst"),
-        ),
+        row(index, Some(testing), ResolutionTag::Resolved, Some(testing)),
         row(
             index,
             Some("notes/plan.txt"),

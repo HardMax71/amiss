@@ -2984,6 +2984,7 @@
         "rst-file-option",
         "rst-doc-role",
         "rst-ref-role",
+        "rst-toctree-entry",
         "markdown-link-reference-definition",
         "html-anchor",
         "html-image"
@@ -3013,6 +3014,7 @@
         "rst-file-option",
         "rst-doc-role",
         "rst-ref-role",
+        "rst-toctree-entry",
         "markdown-link-reference-definition",
         "html-anchor",
         "html-image"

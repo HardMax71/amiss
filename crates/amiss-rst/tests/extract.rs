@@ -336,9 +336,9 @@ fn an_extraction_reports_its_block_count_and_deepest_nesting() {
     assert_eq!(nested.nesting, 6, "the deepest indent, not the last one");
 }
 
-/// The `:doc:` suffix rule leg by leg: an extensionless relative target gains
-/// the source suffix, a source-root-absolute target keeps its slash untouched,
-/// and a dotted final segment already names a file.
+/// A `:doc:` destination is the docname as written: resolution adds the suffix
+/// its root reads, a source-root-absolute target keeps its slash, and a dotted
+/// final segment already names a file.
 #[test]
 fn a_doc_role_destination_answers_by_the_suffix_rule() {
     let analysis = amiss_rst::analyze(
@@ -359,7 +359,7 @@ fn a_doc_role_destination_answers_by_the_suffix_rule() {
     assert_eq!(
         pairs,
         vec![
-            ("guide", "guide.rst"),
+            ("guide", "guide"),
             ("/abs/guide", "/abs/guide"),
             ("pages/note.txt", "pages/note.txt"),
         ],
@@ -597,5 +597,52 @@ fn literal_text_is_shown_not_read() -> Result<(), Refusal> {
     assert_eq!(targets, ["real", "after-note", "kept.rst"]);
     assert!(extraction.anchors.contains(&"listing".to_owned()));
     assert!(!extraction.anchors.contains(&"in-code-label".to_owned()));
+    Ok(())
+}
+
+/// A `toctree` body lists docnames, bare or titled; options, `self`, URLs and
+/// glob patterns name no single document.
+#[test]
+fn toctree_entries_are_docname_references() -> Result<(), Refusal> {
+    let source = ".. toctree::\n   :maxdepth: 2\n   :caption: Contents\n\n   install\n   Guide <user/guide>\n   self\n   https://example.com\n   api/*\n\nAfter the tree.\n";
+    let found: Vec<(ReferenceKind, String)> = extract(source.as_bytes())?
+        .references
+        .into_iter()
+        .map(|reference| (reference.kind, reference.target))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (ReferenceKind::TocTreeEntry, "install".to_owned()),
+            (ReferenceKind::TocTreeEntry, "user/guide".to_owned()),
+        ]
+    );
+    Ok(())
+}
+
+/// Docutils reads inline markup across line breaks, so a role or an embedded
+/// URI wrapped onto the next line is read whole, its target folded the way
+/// Docutils folds it, and read once.
+#[test]
+fn a_role_or_link_wrapped_across_lines_is_read_once() -> Result<(), Refusal> {
+    let source = "See :ref:`the install\n   section` and :doc:`guide` for `the long\nlink <https://example.com/a/\n   b>`_ today.\n";
+    let found: Vec<(ReferenceKind, String, (usize, usize))> = extract(source.as_bytes())?
+        .references
+        .into_iter()
+        .map(|reference| (reference.kind, reference.target, reference.span))
+        .collect();
+    let targets: Vec<&str> = found
+        .iter()
+        .map(|(_kind, target, _span)| target.as_str())
+        .collect();
+    assert_eq!(
+        targets,
+        ["the install section", "guide", "https://example.com/a/b"]
+    );
+    let (_kind, _target, (start, end)) = &found[0];
+    assert_eq!(
+        source.get(*start..*end),
+        Some(":ref:`the install\n   section`")
+    );
     Ok(())
 }

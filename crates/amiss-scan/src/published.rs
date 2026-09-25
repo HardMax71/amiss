@@ -668,26 +668,39 @@ fn sphinx_anchor(
     path_part: &str,
 ) -> Vec<(Vec<u8>, String)> {
     let docname = path_part.strip_suffix('/').unwrap_or(path_part);
-    let Some((root, suffix)) = docname_root(snapshot, document, construct) else {
-        return Vec::new();
-    };
-    match docname.strip_prefix('/') {
-        Some(absolute) => rooted_docname(root, absolute, suffix),
-        None => docname_beside(document, docname, suffix),
+    match docname_root(snapshot, document, construct) {
+        DocnameRoot::Rooted(root, suffix) => match docname.strip_prefix('/') {
+            Some(absolute) => rooted_docname(root, absolute, suffix),
+            None => docname_beside(document, docname, suffix),
+        },
+        DocnameRoot::Unrooted => docname_beside(document, docname, DEFAULT_SOURCE_SUFFIX),
+        DocnameRoot::NotDocname => Vec::new(),
     }
 }
 
-/// The source root a `:doc:` target is read under and the suffix that root
-/// reads, where the construct is the role that names a docname at all.
+/// Where a construct's docname is read: nowhere when the construct names no
+/// docname, beside its document under the default suffix when no `conf.py`
+/// sits above it, and otherwise under the directory holding the nearest
+/// `conf.py`, with the suffix that file declares.
+enum DocnameRoot<'a> {
+    NotDocname,
+    Unrooted,
+    Rooted(Vec<u8>, &'a str),
+}
+
 fn docname_root<'a>(
     snapshot: &'a SnapshotDiscovery,
     document: &RepoPath,
     construct: Option<SourceConstruct>,
-) -> Option<(Vec<u8>, &'a str)> {
-    if construct != Some(SourceConstruct::RstDocRole) {
-        return None;
+) -> DocnameRoot<'a> {
+    if !matches!(
+        construct,
+        Some(SourceConstruct::RstDocRole | SourceConstruct::RstTocTreeEntry)
+    ) {
+        return DocnameRoot::NotDocname;
     }
-    let root = site_root(snapshot, document.as_bytes(), &SPHINX)?;
-    let suffix = docname_suffix(snapshot, &root);
-    Some((root, suffix))
+    site_root(snapshot, document.as_bytes(), &SPHINX).map_or(DocnameRoot::Unrooted, |root| {
+        let suffix = docname_suffix(snapshot, &root);
+        DocnameRoot::Rooted(root, suffix)
+    })
 }

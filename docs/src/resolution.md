@@ -277,7 +277,9 @@ takes the suffix of. One already spelled with a suffix keeps it, since that spel
 adapter's and the adapter runs before any root is known. A
 source-root-absolute one resolves under the directory holding `conf.py` when that file sits
 above the document in the tree, under the suffix that `conf.py` declares, and stays a declared
-site route when nothing names the Sphinx root. A `:ref:` resolves against the snapshot's label table, built after
+site route when nothing names the Sphinx root. An entry of a `toctree` body is a docname the
+same way and resolves the same way, bare or as `Title <docname>`; its options, `self`, URLs,
+and glob patterns name no single document and are passed over. A `:ref:` resolves against the snapshot's label table, built after
 discovery from every name a document whose profile reads roles declares and
 bounded by `declared-labels-per-snapshot`: a unique declaration resolves to its
 declaring document, a name nobody declares is a missing target, and a name declared

@@ -64,6 +64,7 @@ pub enum ReferenceKind {
     FileOption,
     DocRole,
     RefRole,
+    TocTreeEntry,
 }
 
 impl ReferenceKind {
@@ -77,6 +78,7 @@ impl ReferenceKind {
             Self::FileOption => "rst-file-option",
             Self::DocRole => "rst-doc-role",
             Self::RefRole => "rst-ref-role",
+            Self::TocTreeEntry => "rst-toctree-entry",
         }
     }
 
@@ -203,6 +205,8 @@ fn read_block(
     let mut offset = 0_usize;
     let mut previous: Option<(usize, &str)> = None;
     let mut literal: Option<(usize, bool)> = None;
+    let mut toctree: Option<usize> = None;
+    let mut read_until = 0_usize;
     for raw in body.split_inclusive('\n') {
         let text_at = offset;
         let at = block.span.0.saturating_add(offset);
@@ -220,6 +224,17 @@ fn read_block(
             } else {
                 literal = None;
             }
+        }
+        if let Some(opened) = toctree {
+            if line.trim().is_empty() || indent > opened {
+                if let Some(mut entry) = directive::toctree_entry(line, at) {
+                    entry.block = index;
+                    entry.block_span = block.span;
+                    extraction.references.push(entry);
+                }
+                continue;
+            }
+            toctree = None;
         }
         if let Some(order) = title_order.as_deref_mut() {
             let title = previous.and_then(|(start, text)| {
@@ -257,7 +272,14 @@ fn read_block(
         {
             extraction.anchors.push(name);
         }
-        for mut reference in references(line, at) {
+        let chunk = if text_at >= read_until {
+            let joined = wrapped(body, text_at, line);
+            read_until = text_at.saturating_add(joined.len());
+            joined
+        } else {
+            ""
+        };
+        for mut reference in references(chunk, at) {
             reference.block = index;
             reference.block_span = block.span;
             if let Some(mode) = reference.transclusion {
@@ -274,6 +296,31 @@ fn read_block(
         if literal.is_none() {
             literal = literal_opener(line).map(|options| (indent, options));
         }
+        if directive_name(line.trim_start()).is_some_and(|name| name == "toctree") {
+            toctree = Some(indent);
+        }
+    }
+}
+
+/// The line, or when its backticks do not balance, the line and as many of the
+/// following lines as close the role or link it opens, up to a blank line or
+/// eight lines in all. Docutils reads inline markup across line breaks.
+fn wrapped<'body>(body: &'body str, from: usize, line: &'body str) -> &'body str {
+    let rest = body.get(from..).unwrap_or_default();
+    let mut ticks = 0_usize;
+    let mut end = 0_usize;
+    for (taken, raw) in rest.split_inclusive('\n').take(8).enumerate() {
+        if taken > 0 && (ticks.is_multiple_of(2) || raw.trim().is_empty()) {
+            break;
+        }
+        ticks = ticks.saturating_add(raw.matches('`').count());
+        end = end.saturating_add(raw.len());
+    }
+    let extended = end > line.len().saturating_add(1);
+    if extended && ticks.is_multiple_of(2) {
+        rest.get(..end).unwrap_or(line)
+    } else {
+        line
     }
 }
 
