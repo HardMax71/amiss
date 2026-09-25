@@ -104,6 +104,12 @@ fn anchor_resolution(
     adapter: Adapter,
     fragment: &str,
 ) -> Result<Resolution<RepoPath>, Error> {
+    // The HTML standard scrolls `#top`, in any case, to the top of every page.
+    if fragment.eq_ignore_ascii_case("top") {
+        return Ok(Resolution::Resolved {
+            target: Target::Blob(blob),
+        });
+    }
     let unsupported = Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(
         TaggedBlobTarget::Blob(blob.clone()),
     ));

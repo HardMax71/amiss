@@ -426,3 +426,31 @@ fn the_myst_rows_name_the_file_the_route_table_reads() {
     assert_eq!(routed, declared, "the Sphinx declaration is one file");
     assert!(!routed.is_empty(), "the route table declares Sphinx");
 }
+
+/// The HTML standard answers `#top`, in any case, with the top of the page, so
+/// it names no heading and is never missing; a longer name still is.
+#[test]
+fn the_top_fragment_always_resolves() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            (
+                "doc.md",
+                "# Doc\n\n[a](#top)\n\n[b](#TOP)\n\n[c](other.md#Top)\n\n[d](#topmost)\n",
+            ),
+            ("other.md", "# Other\n"),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    for line in [3, 5, 7] {
+        assert!(
+            matches!(answer(&rows, "doc.md", line), Resolution::Resolved { .. }),
+            "line {line}"
+        );
+    }
+    assert!(matches!(
+        answer(&rows, "doc.md", 9),
+        Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+    ));
+}

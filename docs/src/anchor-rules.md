@@ -4,7 +4,9 @@ A heading anchor is not a property of Markdown. `## Setup & Config` has no ident
 something renders it, and the renderers disagree: github.com publishes `setup--config`,
 VitePress publishes `setup-config`, and Gitea publishes neither if the heading is empty
 after its filter. Checking `guide.md#setup` therefore means knowing whose rule applies, and
-guessing one would report live anchors as missing.
+guessing one would report live anchors as missing. One fragment needs no rule at all: the
+HTML standard scrolls `#top`, in any case, to the top of every page, so it resolves on any
+document whatever its headings.
 
 [Resolution](resolution.md) describes what the resolver does with that. This page retains
 what the rules are, where each came from, and what each was checked against, because a
