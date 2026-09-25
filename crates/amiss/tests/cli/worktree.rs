@@ -159,3 +159,50 @@ fn the_staged_check_reads_the_index_git_names() {
     assert_eq!(code, Some(2));
     assert_eq!(refused["errors"][0]["code"], "GIT_INDEX_OUTSIDE_REPOSITORY");
 }
+
+/// A staged check names the documents whose working copies moved past what
+/// is staged, on stderr, since it judged the staged bytes and a pass over
+/// them says nothing about the edit still in the worktree.
+#[test]
+fn a_staged_check_names_the_documents_left_unstaged() {
+    let fx = fixture();
+    let root = fx.root();
+    let staged = check_args(&fx.repo, &fx.candidate, &["--index"]);
+    let (code, _stdout, stderr) = amiss(&staged);
+    assert_eq!(code, 1, "the fixture's own broken link: {stderr}");
+    assert!(
+        !stderr.contains("note:"),
+        "a clean worktree says nothing: {stderr}"
+    );
+
+    fs::write(
+        root.join("docs/guide.md"),
+        "# Guide\r\n\r\n[home](../README) and [gone](missing.md)\r\n",
+    )
+    .unwrap();
+    let (_code, _stdout, stderr) = amiss(&staged);
+    assert!(
+        !stderr.contains("note:"),
+        "a CRLF checkout of the staged bytes is what git status calls clean: {stderr}"
+    );
+
+    fs::write(root.join("docs/guide.md"), "# Guide\n\n[gone](gone.md)\n").unwrap();
+    fs::remove_file(root.join("README")).unwrap();
+    let (code, _stdout, stderr) = amiss(&staged);
+    assert_eq!(code, 1, "the verdict is the staged bytes': {stderr}");
+    assert!(
+        stderr.contains(
+            "amiss: note: 2 staged documents differ from their working copies, which --index does not read; git add them to check them: \"README\", \"docs/guide.md\"\n"
+        ),
+        "{stderr}"
+    );
+    let (_code, _stdout, stderr) = amiss(&check_args(
+        &fx.repo,
+        &fx.base,
+        &["--candidate", &fx.candidate],
+    ));
+    assert!(
+        !stderr.contains("note:"),
+        "a commit pair reads no worktree: {stderr}"
+    );
+}

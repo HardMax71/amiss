@@ -63,7 +63,13 @@ pub(crate) fn ordinary_digest(object_format: ObjectFormat, data: &[u8]) -> Vec<u
     }
 }
 
-pub(crate) fn verify_oid(
+/// Whether `raw_header` and `body` hash to `oid` under the object format,
+/// refusing a SHA-1 collision.
+///
+/// # Errors
+///
+/// `ObjectUnreadable` when the bytes do not hash to `oid`.
+pub fn verify_oid(
     object_format: ObjectFormat,
     oid: &Oid,
     raw_header: &[u8],
