@@ -4,9 +4,10 @@ use amiss_wire::model::{Adapter, RepoPath};
 use crate::discovery::{SnapshotDiscovery, site_root, snippet_root};
 use crate::route::{HUGO, JEKYLL, directory, join, within};
 
-/// The rules a construct selects whatever else the tree declares: an mkdocs
-/// snippet under the directory declaring mkdocs, and a Jekyll or Hugo template
-/// under the site of its own generator. None where the construct selects none.
+/// The rules a construct selects whatever else the tree declares: a Sphinx
+/// docname in either format, an mkdocs snippet under the directory declaring
+/// mkdocs, and a Jekyll or Hugo template under the site of its own generator.
+/// None where the construct selects none.
 pub(super) fn anchors(
     snapshot: &SnapshotDiscovery,
     adapter: Adapter,
@@ -14,6 +15,11 @@ pub(super) fn anchors(
     construct: Option<SourceConstruct>,
     path_part: &str,
 ) -> Option<Vec<(Vec<u8>, String)>> {
+    if construct == Some(SourceConstruct::RstDocRole) {
+        return Some(super::sphinx::anchors(
+            snapshot, adapter, document, construct, path_part,
+        ));
+    }
     if construct == Some(SourceConstruct::MkdocsSnippet) {
         return Some(
             snippet_root(snapshot, adapter, document)

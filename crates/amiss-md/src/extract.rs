@@ -823,7 +823,7 @@ fn role(
         return None;
     }
     let (construct, semantic) = match name {
-        "doc" => (SourceConstruct::RstDocRole, docname(target)),
+        "doc" => (SourceConstruct::RstDocRole, target.to_owned()),
         "ref" => (SourceConstruct::RstRefRole, target.to_owned()),
         _ => (SourceConstruct::RstRefRole, format!("{name}:{target}")),
     };
@@ -859,18 +859,6 @@ fn code_body(suffix: &str, span: (usize, usize)) -> Option<&str> {
     (ticks > 0)
         .then(|| raw.get(ticks..raw.len().saturating_sub(ticks)))
         .flatten()
-}
-
-/// A docname is extensionless in Sphinx, so the profile's own suffix is
-/// appended; a source-root-absolute name keeps its slash and stays a declared
-/// site route, because the engine does not know the Sphinx root.
-fn docname(target: &str) -> String {
-    let last = target.rsplit('/').next().unwrap_or(target);
-    if target.starts_with('/') || last.contains('.') {
-        target.to_owned()
-    } else {
-        format!("{target}.md")
-    }
 }
 
 /// The body of a single- or double-quoted token, both marks the same one.

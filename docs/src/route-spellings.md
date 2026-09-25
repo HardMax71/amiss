@@ -225,7 +225,7 @@ one, so a raw destination that already reached a file beside the source still re
 
 `source-root` is Sphinx's `:doc:` role with a leading slash, in a document under the
 directory holding `conf.py`. `` :doc:`/testing` `` in `docs/tutorial/deploy.rst` is
-`docs/testing.rst`: the docname under the source directory, with the suffix that root reads.
+`docs/testing.rst`: the docname under the source directory, with a suffix that root reads.
 A docname is a file name without its suffix, so the dot in `/releases/1.1` is part of the name
 and that target is `docs/releases/1.1.rst`, while a trailing slash is normalized away before
 the name is looked up, the way `docname_join` does it, so `` :doc:`</ref/applications/>` `` is
@@ -234,7 +234,7 @@ since Sphinx emits it as written. A `:doc:` target in a document with no `conf.p
 answered by the one source directory the tree declares, and stays the declared site route it
 was where the tree declares several.
 
-Which suffix that root reads is the one thing read out of `conf.py`. A project that writes its
+Which suffixes that root reads come out of `conf.py`. A project that writes its
 pages in another suffix says so in `source_suffix`, and Django writes all 677 of its pages in
 `.txt`. Two forms are read, both on one line with the key opening it, which is where a Python
 assignment binds a name at the top level: `source_suffix = ".txt"` is one suffix, and
@@ -242,14 +242,15 @@ assignment binds a name at the top level: `source_suffix = ".txt"` is one suffix
 reStructuredText parser, since `{".md": "markdown"}` says the opposite of what this rule wants.
 A commented-out line, an `add_source_suffix` call, a mapping left open across lines, and a list
 naming no parser are all declined, and a root that declares nothing this reader spells out
-plainly reads `.rst` as before. A root naming several reStructuredText suffixes is read under
-the first, because a docname names one file. So `` :doc:`/ref/models/querysets` `` in Django's
+plainly reads `.rst` as before. A root naming several is read under each, since Sphinx finds a
+docname's file under whichever suffix it carries, and a root that loads `myst_parser` or
+`myst_nb` reads `.md` as well. So `` :doc:`/ref/models/querysets` `` in Django's
 tree is `docs/ref/models/querysets.txt`, and the same declaration is what makes those files
 documents at all, which [Discovery](discovery.md) states.
 
-A relative `:doc:` target and a `toctree` entry take the same suffix. The adapter keeps the
-docname as the author wrote it, and resolution adds the suffix of the root the document sits
-under, or `.rst` when no `conf.py` sits above it, so Django's relative `toctree` entries reach
+A relative `:doc:` target and a `toctree` entry take the same suffixes. The adapter keeps the
+docname as the author wrote it, and resolution adds each suffix of the root the document sits
+under, or its own format's suffix when no `conf.py` sits above it, so Django's relative `toctree` entries reach
 its `.txt` pages.
 
 Each of the spellings above widens what resolves and nothing else, like the three: an anchored

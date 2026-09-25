@@ -228,7 +228,7 @@ fn a_myst_role_is_read_only_where_sphinx_is_declared() {
     let chain = amiss_fixtures::sphinx_myst().expect("the fixture stages");
     let rows = answers(&chain);
     let index = "docs/index.md";
-    for line in [3, 9, 15] {
+    for line in [3, 7, 9, 15] {
         assert_eq!(
             blob(answer(&rows, index, line)),
             Some("docs/quickstart.md"),
@@ -250,14 +250,6 @@ fn a_myst_role_is_read_only_where_sphinx_is_declared() {
         ),
         "{:?}",
         answer(&rows, index, 11)
-    );
-    assert!(
-        matches!(
-            answer(&rows, index, 7),
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute)
-        ),
-        "{:?}",
-        answer(&rows, index, 7)
     );
     assert!(
         matches!(
@@ -525,6 +517,45 @@ fn a_download_names_a_file_and_a_numref_a_label() {
     }
     assert!(matches!(
         answer(&rows, "docs/guide/index.rst", 10),
+        Resolution::Missing(Missing::PathNotFound { .. })
+    ));
+}
+
+/// Sphinx finds a docname's file under any suffix its root reads, so a
+/// `:doc:` in reStructuredText reaches a `MyST` page and a `{doc}` in `MyST`
+/// reaches a reStructuredText one, relative or from the root.
+#[test]
+fn a_docname_crosses_formats_in_a_mixed_root() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            (
+                "docs/conf.py",
+                "extensions = ['myst_parser']\nsource_suffix = {'.rst': 'restructuredtext', '.md': 'markdown'}\n",
+            ),
+            ("docs/a.rst", "A\n=\n\n:doc:`b`\n\n:doc:`/sub/c`\n\n:doc:`gone`\n"),
+            ("docs/b.md", "# B\n\n{doc}`a`\n\n{doc}`sub/c`\n"),
+            ("docs/sub/c.md", "# C\n\n{doc}`../a`\n\n{doc}`/b`\n"),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    for (document, line, target) in [
+        ("docs/a.rst", 4, "docs/b.md"),
+        ("docs/a.rst", 6, "docs/sub/c.md"),
+        ("docs/b.md", 3, "docs/a.rst"),
+        ("docs/b.md", 5, "docs/sub/c.md"),
+        ("docs/sub/c.md", 3, "docs/a.rst"),
+        ("docs/sub/c.md", 5, "docs/b.md"),
+    ] {
+        assert_eq!(
+            blob(answer(&rows, document, line)),
+            Some(target),
+            "{document}:{line}"
+        );
+    }
+    assert!(matches!(
+        answer(&rows, "docs/a.rst", 8),
         Resolution::Missing(Missing::PathNotFound { .. })
     ));
 }

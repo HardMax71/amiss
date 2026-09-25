@@ -1,4 +1,5 @@
 mod construct;
+mod sphinx;
 
 use crate::discovery::Located;
 use crate::discovery::SnapshotDiscovery;
@@ -10,7 +11,6 @@ use crate::discovery::site_root;
 use crate::route::ANTORA;
 use crate::route::ANTORA_FAMILIES;
 use crate::route::BUNDLE_INDEX;
-use crate::route::DEFAULT_SOURCE_SUFFIX;
 use crate::route::DIRECTORY_PAGES;
 use crate::route::DOCUSAURUS;
 use crate::route::MDBOOK_PAGES;
@@ -18,7 +18,6 @@ use crate::route::MKDOCS;
 use crate::route::PAGE_SUFFIXES;
 use crate::route::ROUTERS;
 use crate::route::SITE_ALIAS;
-use crate::route::SPHINX;
 use crate::route::Spelling;
 use crate::route::UNROUTED_OPENING;
 use crate::route::ZOLA;
@@ -27,12 +26,10 @@ use crate::route::beside_document;
 use crate::route::candidates;
 use crate::route::content_root;
 use crate::route::directory;
-use crate::route::docname_beside;
 use crate::route::join;
 use crate::route::normalized_path_under;
 use crate::route::output_extension;
 use crate::route::page_route;
-use crate::route::rooted_docname;
 use crate::route::under_base;
 use crate::route::within;
 use amiss_wire::controls::GitMode;
@@ -42,7 +39,6 @@ use amiss_wire::model::Adapter;
 use amiss_wire::model::RepoPath;
 use amiss_wire::uri::scheme;
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 /// The path this reference is answered against. A destination the tree holds
 /// is its own answer; otherwise the first router spelling that reaches an
 /// ordinary file stands in for it, and last the document published at that
@@ -100,7 +96,7 @@ pub(crate) fn anchors(
         Adapter::Markdown | Adapter::Mdx => {
             markdown_anchors(snapshot, document, construct, is_image, path_part)
         }
-        Adapter::Rst => sphinx_anchor(snapshot, document, construct, path_part),
+        Adapter::Rst => sphinx::anchors(snapshot, adapter, document, construct, path_part),
         Adapter::PlainAdvisory => Vec::new(),
     }
 }
@@ -353,17 +349,6 @@ fn descriptor<'a>(snapshot: &'a SnapshotDiscovery, root: &[u8]) -> Option<&'a (S
         RepoPath::from_bytes(join(root, name.as_bytes()))
             .and_then(|path| snapshot.antora_components.get(&path))
     })
-}
-
-/// The suffix a docname takes under one root: the first its `conf.py`
-/// declares, or the default where it declares nothing this reader spells out.
-/// A docname names one file, so a root declaring several reads the first.
-fn docname_suffix<'a>(snapshot: &'a SnapshotDiscovery, root: &[u8]) -> &'a str {
-    snapshot
-        .source_suffixes
-        .get(root)
-        .and_then(BTreeSet::first)
-        .map_or(DEFAULT_SOURCE_SUFFIX, String::as_str)
 }
 
 /// Whether the component a path belongs to is assembled by an extension rather
@@ -661,66 +646,4 @@ fn published_anchors(
         }
     }
     out
-}
-
-/// Where a `:doc:` target is anchored: a leading slash at the directory
-/// holding `conf.py`, and anything else beside the document, which is what
-/// `docname_join` does. A trailing slash is normalized away first. A file
-/// Sphinx reads keeps its name and takes the same root for a leading slash.
-fn sphinx_anchor(
-    snapshot: &SnapshotDiscovery,
-    document: &RepoPath,
-    construct: Option<SourceConstruct>,
-    path_part: &str,
-) -> Vec<(Vec<u8>, String)> {
-    let docname = path_part.strip_suffix('/').unwrap_or(path_part);
-    match docname_root(snapshot, document, construct) {
-        DocnameRoot::Rooted(root, suffix) => match docname.strip_prefix('/') {
-            Some(absolute) => rooted_docname(root, absolute, suffix),
-            None => docname_beside(document, docname, suffix),
-        },
-        DocnameRoot::Unrooted => docname_beside(document, docname, DEFAULT_SOURCE_SUFFIX),
-        DocnameRoot::NotDocname => Vec::new(),
-    }
-}
-
-/// Where a construct's docname is read: nowhere when the construct names no
-/// docname, beside its document under the default suffix when no `conf.py`
-/// sits above it, and otherwise under the directory holding the nearest
-/// `conf.py`, with the suffix that file declares. A file Sphinx reads keeps
-/// its name, so it takes no suffix and has no reading without that root.
-enum DocnameRoot<'a> {
-    NotDocname,
-    Unrooted,
-    Rooted(Vec<u8>, &'a str),
-}
-
-fn docname_root<'a>(
-    snapshot: &'a SnapshotDiscovery,
-    document: &RepoPath,
-    construct: Option<SourceConstruct>,
-) -> DocnameRoot<'a> {
-    if matches!(
-        construct,
-        Some(
-            SourceConstruct::RstDownloadRole
-                | SourceConstruct::RstImageDirective
-                | SourceConstruct::RstIncludeDirective
-        )
-    ) {
-        return site_root(snapshot, document.as_bytes(), &SPHINX)
-            .map_or(DocnameRoot::NotDocname, |root| {
-                DocnameRoot::Rooted(root, "")
-            });
-    }
-    if !matches!(
-        construct,
-        Some(SourceConstruct::RstDocRole | SourceConstruct::RstTocTreeEntry)
-    ) {
-        return DocnameRoot::NotDocname;
-    }
-    site_root(snapshot, document.as_bytes(), &SPHINX).map_or(DocnameRoot::Unrooted, |root| {
-        let suffix = docname_suffix(snapshot, &root);
-        DocnameRoot::Rooted(root, suffix)
-    })
 }
