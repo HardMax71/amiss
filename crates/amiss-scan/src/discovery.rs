@@ -83,7 +83,14 @@ pub struct DocumentRecord {
 /// between. A document no declaration governs keeps no role, so a brace before
 /// a code span there is the prose it looks like.
 fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> Result<(), Error> {
-    discovery.sphinx_included = sphinx_included(discovery);
+    let markdown = |record: &DocumentRecord| record.adapter == Some(Adapter::Markdown);
+    let asciidoc = |record: &DocumentRecord| record.adapter == Some(Adapter::AsciiDoc);
+    discovery.sphinx_included = included_closure(
+        discovery,
+        |record| markdown(record) && sphinx_governed(discovery, &record.path),
+        markdown,
+    );
+    discovery.asciidoc_included = included_closure(discovery, asciidoc, asciidoc);
     let governed: Vec<bool> = discovery
         .documents
         .iter()
@@ -329,25 +336,30 @@ struct Declared {
     book_sources: BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
-/// Every document a page of a Sphinx tree renders in place of an include, and
-/// every document those reach in turn. Sphinx parses an included file as part
-/// of the page holding the directive, so that file writes `MyST` wherever in
-/// the tree it sits, which is how a changelog beside the repository root names
-/// labels a page under `conf.py` declares. The walk seeds on the pages a
-/// declaration governs by position, the only answer `sphinx_governed` has while
-/// the set this builds is still empty.
-fn sphinx_included(discovery: &SnapshotDiscovery) -> BTreeSet<RepoPath> {
-    let markdown = |record: &DocumentRecord| record.adapter == Some(Adapter::Markdown);
+/// Every document the seeds include through a parsed include, and every one
+/// those reach in turn, kept to the admitted grammar. Sphinx parses an included
+/// file as part of the page holding the directive, so that file writes `MyST`
+/// wherever in the tree it sits, which is how a changelog beside the
+/// repository root names labels a page under `conf.py` declares; that walk
+/// seeds on the pages a declaration governs by position, the only answer
+/// `sphinx_governed` has while its set is still empty. Asciidoctor renders an
+/// included document as part of the including page, so every `AsciiDoc`
+/// document seeds its own.
+fn included_closure(
+    discovery: &SnapshotDiscovery,
+    seed: impl Fn(&DocumentRecord) -> bool,
+    admitted: impl Fn(&DocumentRecord) -> bool,
+) -> BTreeSet<RepoPath> {
     let mut frontier: Vec<RepoPath> = discovery
         .documents
         .iter()
-        .filter(|record| markdown(record) && sphinx_governed(discovery, &record.path))
+        .filter(|record| seed(record))
         .map(|record| record.path.clone())
         .collect();
     let mut found = BTreeSet::new();
     while let Some(document) = frontier.pop() {
         for target in included_documents(discovery, &document) {
-            if discovery.document(target.as_bytes()).is_some_and(markdown)
+            if discovery.document(target.as_bytes()).is_some_and(&admitted)
                 && found.insert(target.clone())
             {
                 frontier.push(target);
@@ -394,6 +406,7 @@ pub struct SnapshotDiscovery {
     pub redirect_routes: BTreeMap<RepoPath, RepoPath>,
     pub sole_sites: BTreeMap<&'static str, Vec<u8>>,
     pub sphinx_included: BTreeSet<RepoPath>,
+    pub asciidoc_included: BTreeSet<RepoPath>,
     /// Each `antora.yml` the tree holds, by its own path, against the
     /// component name it declares and whether it reserves an `ext` block.
     pub antora_components: BTreeMap<RepoPath, (String, bool)>,
@@ -510,6 +523,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         redirect_routes: BTreeMap::new(),
         sole_sites: BTreeMap::new(),
         sphinx_included: BTreeSet::new(),
+        asciidoc_included: BTreeSet::new(),
         antora_components: BTreeMap::new(),
         source_suffixes: BTreeMap::new(),
         declared_routers: BTreeMap::new(),

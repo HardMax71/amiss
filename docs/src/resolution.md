@@ -353,7 +353,11 @@ a build-time attribute, include options, or a nested parser context leaves the i
 up to that edge partial: a published identity can still resolve, but absence stays undecided rather
 than becoming a guessed missing anchor. Expanded AsciiDoc remains partial even when every edge is
 available because its document-attribute and conditional state is not reproduced; reStructuredText
-can prove absence inside the closed option-free subset.
+can prove absence inside the closed option-free subset. The same holds in the other direction for a
+chapter: an AsciiDoc document another one includes renders inside the book that includes it, and
+so does one an Antora component keeps among its partials or examples, so a cross reference in it
+may name an identity another chapter declares. Absence there stays undecided too, while a document
+nothing includes still proves it.
 
 Resolution is exact, and the small rules matter. A trailing slash means the author
 promised a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even
