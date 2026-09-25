@@ -157,7 +157,7 @@ sharing its stem.
 The context names each side's root, the locale it claims, an optional filename suffix, and the
 file suffixes that count as pages. The plan names the object format, commit, and tree, so the
 verb walks exactly that snapshot or refuses. A resource digest names the blob a path resolves
-to, so no file content is read and equal digests mean byte-identical files at that commit.
+to, so coverage reads no file content and equal digests mean byte-identical files at that commit.
 
 That last property carries the useful case. A target page whose blob is still the source's blob
 is not a translation, it is the source sitting in a translation slot, so it goes out as a
@@ -166,8 +166,28 @@ operators to copy the whole default-locale tree and translate afterwards, so an 
 compared page keys alone would call an untranslated copy a clean pass; an empty fallback set in
 the plan refuses it instead, and a plan that authorizes the class accepts it deliberately.
 Pages the walk cannot inventory, a symlink or a name outside UTF-8, drop their side's
-completeness bit rather than disappearing. Neither side carries a product receipt or target
-lineage: a tree records neither, so a plan that requires lineage stays unproven.
+completeness bit rather than disappearing. Neither side carries a product receipt: a tree records none.
+
+Target lineage is the one thing a translated page can say about itself. MDN records the English
+commit each translation was made from in its front matter, and 21,757 of its translated pages carry
+it:
+
+```yaml
+---
+title: Array
+l10n:
+  sourceCommit: 5b20f5f4265f988f80f513db0e4b35c7e0cd70dc
+---
+```
+
+A context naming that key, `"lineage": ["l10n", "sourceCommit"]`, has the verb read it from every
+target page, look up the source page at that commit, and digest those bytes the way a current page
+is digested. So the assessment's lineage rows say which translations were made from the source as
+it stands, `current`, and which from a source that has moved on since, `stale`. The key is one
+name or a name indented under one parent, and the value is a full commit ID in the plan's object
+format. A page naming no commit, or one the object store does not hold, as in a shallow clone, is
+`unproven` rather than current. Without the key the verb reads no file content and every target
+lineage stays unproven.
 
 Two contexts cover nearly every repository. A site that gives each locale its own directory names
 both roots, and leaves the suffix null. This is the Docusaurus shape, where the German tree sits
@@ -242,7 +262,7 @@ plan. Human output ends with it:
 amiss locale-inventory: en 42 pages complete
 amiss locale-inventory: de-DE 39 pages complete
 target pages still carrying the source bytes: 7
-producer amiss-locale-tree 1.1.0 context sha256:0f3c...
+producer amiss-locale-tree 1.2.0 context sha256:0f3c...
 ```
 
 Those seven pages are the point of the audit. Either the plan authorizes `source-identical` for
