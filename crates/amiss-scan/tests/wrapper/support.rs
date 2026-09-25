@@ -147,7 +147,7 @@ pub(crate) fn time_input(fx: &Fixture) -> TimeInput {
         candidate_ref: Some(branch_ref!("refs/heads/main")),
         target_ref: Some(branch_ref!("refs/heads/main")),
         default_branch_ref: None,
-        base: identity(&fx.base, &fx.base_tree),
+        base: amiss_scan::report::BaseBlock::Commit(identity(&fx.base, &fx.base_tree)),
         candidate: CandidateBlock::Commit(identity(&fx.candidate, &fx.candidate_tree)),
         policy: Effects::default(),
         controls_unavailable: None,

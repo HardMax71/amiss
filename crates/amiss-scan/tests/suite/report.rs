@@ -175,7 +175,7 @@ fn report_retaining(
         candidate_ref: None,
         target_ref: None,
         default_branch_ref: None,
-        base: base_identity,
+        base: amiss_scan::report::BaseBlock::Commit(base_identity),
         candidate: CandidateBlock::Commit(candidate_identity),
         policy: amiss_scan::Effects {
             errors_retained,
@@ -556,7 +556,7 @@ fn bare_setup(errors_retained: u64) -> Setup {
         candidate_ref: None,
         target_ref: None,
         default_branch_ref: None,
-        base: identity.clone(),
+        base: amiss_scan::report::BaseBlock::Commit(identity.clone()),
         candidate: CandidateBlock::Commit(identity),
         policy: amiss_scan::Effects {
             errors_retained,
@@ -595,7 +595,7 @@ fn an_observation_row_hashes_the_identity_input_it_renders() {
     comparison.candidate.as_mut().unwrap().id = wrong;
 
     let mut setup = bare_setup(64);
-    setup.base = identity.clone();
+    setup.base = amiss_scan::report::BaseBlock::Commit(identity.clone());
     setup.candidate = CandidateBlock::Commit(identity);
     let built = construct(&setup, &discovery, &discovery, comparisons, &[]).unwrap();
     crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
@@ -640,7 +640,7 @@ fn an_unchanged_run_shares_every_candidate_with_its_base() {
     let (_, _, candidate) = snapshot(&repo, &mut resources, &commit);
     let comparisons = correlate(base, candidate).unwrap();
     let mut setup = bare_setup(64);
-    setup.base = identity.clone();
+    setup.base = amiss_scan::report::BaseBlock::Commit(identity.clone());
     setup.candidate = CandidateBlock::Commit(identity);
     let built = construct(&setup, &discovery, &discovery, comparisons, &[]).unwrap();
 
@@ -1071,7 +1071,7 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
         candidate_ref: None,
         target_ref: None,
         default_branch_ref: None,
-        base: base_identity.clone(),
+        base: amiss_scan::report::BaseBlock::Commit(base_identity.clone()),
         candidate: CandidateBlock::Commit(candidate_identity.clone()),
         policy: amiss_scan::Effects {
             machine_json_bytes,
@@ -1164,7 +1164,7 @@ fn a_finding_location_carries_the_real_display_positions() {
         candidate_ref: None,
         target_ref: None,
         default_branch_ref: None,
-        base: base_identity,
+        base: amiss_scan::report::BaseBlock::Commit(base_identity),
         candidate: CandidateBlock::Commit(candidate_identity),
         policy: amiss_scan::Effects::default(),
         controls_unavailable: None,

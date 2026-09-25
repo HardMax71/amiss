@@ -1842,6 +1842,35 @@ fn a_case_drifted_anchor_carries_its_fix() {
     );
 }
 
+/// A side that does not resolve says why instead of lending its commit ID to
+/// the tree, and a side that does keeps its real tree: a missing base, and a
+/// tree ID passed as the base, which is no commit.
+#[test]
+fn an_unresolved_side_is_unavailable_and_the_other_keeps_its_tree() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let tree = git(root, &["rev-parse", "HEAD^{tree}"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    for (base, reason) in [
+        ("1111111111111111111111111111111111111111", "missing-object"),
+        (tree.as_str(), "wrong-object-kind"),
+    ] {
+        let built =
+            commit_pair(&repo, &engine(), None, &shell(), &oid(base), &oid(&commit)).unwrap();
+        let payload = payload(&built);
+        let evaluation = &payload["evaluation"];
+        assert_eq!(evaluation["base"]["kind"], "unavailable", "{base}");
+        assert_eq!(evaluation["base"]["reasons"][0], reason, "{base}");
+        assert_eq!(evaluation["candidate"]["commit_oid"], commit.as_str());
+        assert_eq!(evaluation["candidate"]["tree_oid"], tree.as_str());
+    }
+}
+
 /// Separator drift is a fix too: a fragment spelled with the underscore
 /// another renderer would have used names the published identity.
 #[test]

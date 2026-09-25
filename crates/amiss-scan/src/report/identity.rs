@@ -1,4 +1,4 @@
-use super::{CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, Setup};
+use super::{BaseBlock, CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, Setup};
 use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::report::{model, sandbox_descriptor};
@@ -30,7 +30,7 @@ pub fn candidate_identity_digest(setup: &Setup) -> Result<Digest, crate::Error> 
 
 pub(super) fn evaluation(setup: &Setup) -> model::ResolvedEvaluation {
     let (mode, event_kind, finality, materialization) = match setup.candidate {
-        CandidateBlock::Commit(_) => (
+        CandidateBlock::Commit(_) | CandidateBlock::CommitUnavailable(_) => (
             RequestMode::CommitPair,
             CandidateEventKind::ExplicitCommitPair,
             CandidateFinality::ExplicitReplay,
@@ -43,24 +43,7 @@ pub(super) fn evaluation(setup: &Setup) -> model::ResolvedEvaluation {
             SnapshotMaterialization::Index,
         ),
     };
-    let (candidate, skip_worktree_paths) = match &setup.candidate {
-        CandidateBlock::Commit(snapshot) => (
-            model::Snapshot::Available(CandidateSnapshot::Git(snapshot.clone())),
-            0,
-        ),
-        CandidateBlock::Index(index) => (
-            model::Snapshot::Available(CandidateSnapshot::Index(index.snapshot.clone())),
-            index.skip_worktree_paths,
-        ),
-        CandidateBlock::Unavailable(reasons) => (
-            model::Snapshot::Unavailable(model::UnavailableSnapshot {
-                kind: model::UnavailableSnapshotKind::Unavailable,
-                request_digest: setup.requests.snapshot,
-                reasons: reasons.clone(),
-            }),
-            0,
-        ),
-    };
+    let (base, candidate, skip_worktree_paths) = snapshots(setup);
     model::ResolvedEvaluation {
         mode,
         event_kind,
@@ -69,7 +52,7 @@ pub(super) fn evaluation(setup: &Setup) -> model::ResolvedEvaluation {
         candidate_ref: setup.candidate_ref.clone(),
         target_ref: setup.target_ref.clone(),
         default_branch_ref: setup.default_branch_ref.clone(),
-        base: model::BaseSnapshot::Git(setup.base.clone()),
+        base,
         candidate,
         materialization,
         skip_worktree_paths,
@@ -81,6 +64,42 @@ pub(super) fn evaluation(setup: &Setup) -> model::ResolvedEvaluation {
             .map(|time| time.statement.evaluation_instant.clone()),
         trusted_time: setup.policy.time.is_some(),
         forge: setup.forge,
+    }
+}
+
+/// Each side as the report spells it, a side that never resolved spelled
+/// unavailable, with the index candidate's skip-worktree count.
+fn snapshots(setup: &Setup) -> (model::BaseSnapshot, model::Snapshot, u64) {
+    let (candidate, skip_worktree_paths) = match &setup.candidate {
+        CandidateBlock::Commit(snapshot) => (
+            model::Snapshot::Available(CandidateSnapshot::Git(snapshot.clone())),
+            0,
+        ),
+        CandidateBlock::Index(index) => (
+            model::Snapshot::Available(CandidateSnapshot::Index(index.snapshot.clone())),
+            index.skip_worktree_paths,
+        ),
+        CandidateBlock::Unavailable(reasons) | CandidateBlock::CommitUnavailable(reasons) => {
+            (model::Snapshot::Unavailable(unavailable(setup, reasons)), 0)
+        }
+    };
+    let base = match &setup.base {
+        BaseBlock::Commit(snapshot) => model::BaseSnapshot::Git(snapshot.clone()),
+        BaseBlock::Unavailable(reasons) => {
+            model::BaseSnapshot::Unavailable(unavailable(setup, reasons))
+        }
+    };
+    (base, candidate, skip_worktree_paths)
+}
+
+fn unavailable(
+    setup: &Setup,
+    reasons: &[model::SnapshotUnavailableReason],
+) -> model::UnavailableSnapshot {
+    model::UnavailableSnapshot {
+        kind: model::UnavailableSnapshotKind::Unavailable,
+        request_digest: setup.requests.snapshot,
+        reasons: reasons.to_vec(),
     }
 }
 
