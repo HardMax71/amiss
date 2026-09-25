@@ -9,16 +9,14 @@ use amiss_wire::report::{
 };
 use amiss_wire::resolution::{Missing, Resolution};
 
-use crate::Error;
 use crate::correlate::{Observation, Side, correlate, unique_path_pairs};
 use crate::discovery::{DocumentStatus, SnapshotDiscovery, discover};
 use crate::observe::{OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_input};
-use crate::report::{
-    Built, CandidateBlock, GitSnapshotIdentity, Setup, construct_incomplete, detail,
-};
+use crate::report::{Built, CandidateBlock, GitSnapshotIdentity, Setup, construct_incomplete};
 use crate::resolve::{ForgeContext, Resolver, TargetCache};
 use crate::resources::{ScanLimits, ScanResources};
 use crate::semantic::RecordSet;
+use crate::{Error, detail};
 
 mod adoption;
 mod commit;

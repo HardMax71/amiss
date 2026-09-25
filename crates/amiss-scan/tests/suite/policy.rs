@@ -654,3 +654,29 @@ fn suffix_selector_changes_keep_their_stable_root_identity() {
     let narrowed = effects(&side(None, Some(Adapter::Rst)), &selected, &scanned);
     assert_eq!(narrowed.controls[0].rule_id, "policy/include-tree-narrowed");
 }
+
+/// A ceiling crossed while locating the policy keeps its resource, limit and
+/// observed bound on the row, as every other crossing does.
+#[test]
+fn a_crossing_while_locating_the_policy_keeps_its_resource()
+-> Result<(), Box<dyn std::error::Error>> {
+    let chain = amiss_fixtures::commit_chain(&[("base", &[("README.md", "readme\n")])])?;
+    let commit = chain.commits.first().ok_or("one commit")?;
+    let repo = amiss_git::Repository::open(chain.root(), amiss_wire::model::ObjectFormat::Sha1)
+        .map_err(|_open| "the repository opens")?;
+    let tree =
+        amiss_wire::model::Oid::new(amiss_wire::model::ObjectFormat::Sha1, commit.tree.clone())
+            .ok_or("a tree oid")?;
+    let mut git = amiss_git::GitResources::new(amiss_git::GitLimits {
+        inflated_object_bytes: 1,
+        ..amiss_git::GitLimits::CONTRACT
+    });
+    let mut scan = amiss_scan::ScanResources::new(amiss_scan::ScanLimits::CONTRACT);
+    let rows = amiss_scan::policy::acquire(&repo, &mut git, &mut scan, &tree)
+        .err()
+        .ok_or("the one-byte ceiling is crossed")?;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].code, AnalysisErrorCode::ResourceLimitExceeded);
+    assert!(rows[0].resource.is_some(), "{:?}", rows[0]);
+    Ok(())
+}
