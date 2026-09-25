@@ -173,7 +173,8 @@ fn extract_tree(
 
 /// Every occurrence moved from the post-frontmatter suffix to the raw
 /// document, with the destination spans an edit may claim located under the
-/// wire's own certainty rules.
+/// wire's own certainty rules: inside the reference itself, or inside the
+/// definition a reference form carried here.
 fn translated_occurrences(
     occurrences: Vec<Occurrence>,
     suffix: &str,
@@ -183,26 +184,29 @@ fn translated_occurrences(
         |span: (usize, usize)| (span.0.saturating_add(offset), span.1.saturating_add(offset));
     occurrences
         .into_iter()
-        .map(|entry| Occurrence {
-            span: translate(entry.span),
-            block_span: translate(entry.block_span),
-            fragment_span: gated_span(
-                amiss_wire::extraction::fragment_span,
-                suffix.as_bytes(),
-                entry.span,
-                &entry.raw_destination,
-                entry.construct,
-            )
-            .map(translate),
-            path_span: gated_span(
-                amiss_wire::extraction::path_span,
-                suffix.as_bytes(),
-                entry.span,
-                &entry.raw_destination,
-                entry.construct,
-            )
-            .map(translate),
-            ..entry
+        .map(|entry| {
+            let within = entry.path_span.unwrap_or(entry.span);
+            Occurrence {
+                span: translate(entry.span),
+                block_span: translate(entry.block_span),
+                fragment_span: gated_span(
+                    amiss_wire::extraction::fragment_span,
+                    suffix.as_bytes(),
+                    within,
+                    &entry.raw_destination,
+                    entry.construct,
+                )
+                .map(translate),
+                path_span: gated_span(
+                    amiss_wire::extraction::path_span,
+                    suffix.as_bytes(),
+                    within,
+                    &entry.raw_destination,
+                    entry.construct,
+                )
+                .map(translate),
+                ..entry
+            }
         })
         .collect()
 }
@@ -306,22 +310,22 @@ impl Sweep<'_> {
                 );
             }
             Kind::LinkReference(reference) => {
-                let construct = reference_link(reference.form);
-                let winning = self.definitions.get(&reference.key);
-                let winning = winning.ok_or(Fault::ParserError)?;
-                if !winning.reserved {
-                    let (raw, url) = (winning.raw.clone(), winning.url.clone());
-                    self.push(construct, raw, url, span, path, *owners);
-                }
+                self.reference(
+                    reference_link(reference.form),
+                    reference.key,
+                    span,
+                    path,
+                    *owners,
+                )?;
             }
             Kind::ImageReference(reference) => {
-                let construct = reference_image(reference.form);
-                let winning = self.definitions.get(&reference.key);
-                let winning = winning.ok_or(Fault::ParserError)?;
-                if !winning.reserved {
-                    let (raw, url) = (winning.raw.clone(), winning.url.clone());
-                    self.push(construct, raw, url, span, path, *owners);
-                }
+                self.reference(
+                    reference_image(reference.form),
+                    reference.key,
+                    span,
+                    path,
+                    *owners,
+                )?;
             }
             // A definition nobody references still maintains a destination.
             Kind::Definition(_) => self.orphan(node, path, *owners),
@@ -415,6 +419,29 @@ impl Sweep<'_> {
                 owners,
             );
         }
+    }
+
+    /// A reference form, whose destination the definition that wins its label
+    /// writes; that definition's span rides in `path_span` until the edit
+    /// spans are located, since the definition is where an edit goes.
+    fn reference(
+        &mut self,
+        construct: SourceConstruct,
+        key: usize,
+        span: (usize, usize),
+        path: &[usize],
+        owners: Owners,
+    ) -> Result<(), Fault> {
+        let winning = self.definitions.get(&key).ok_or(Fault::ParserError)?;
+        if winning.reserved {
+            return Ok(());
+        }
+        let (raw, url, within) = (winning.raw.clone(), winning.url.clone(), winning.span);
+        self.push(construct, raw, url, span, path, owners);
+        if let Some(pushed) = self.occurrences.last_mut() {
+            pushed.path_span = Some(within);
+        }
+        Ok(())
     }
 
     fn orphan(&mut self, node: &Node, path: &[usize], owners: Owners) {

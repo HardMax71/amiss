@@ -1172,9 +1172,10 @@ fn a_task_checkbox_is_not_a_reference() {
 }
 
 /// The fragment span names bytes only under certainty: a plain inline
-/// destination yields the exact range, and percent spellings, entities,
-/// reference definitions out of span, duplicate destination text, and
-/// fragmentless links all yield nothing. Frontmatter still translates it.
+/// destination yields the exact range, a reference form the range inside the
+/// definition that writes its destination, and percent spellings, entities,
+/// duplicate destination text, and fragmentless links yield nothing.
+/// Frontmatter still translates it.
 #[test]
 fn a_fragment_span_names_bytes_only_under_certainty() {
     let spans = |source: &str| spans_by(source, |occurrence| occurrence.fragment_span);
@@ -1185,7 +1186,7 @@ fn a_fragment_span_names_bytes_only_under_certainty() {
     assert_eq!(spans("[a](x.md#a&amp;b)\n"), vec![None]);
     assert_eq!(spans("[a](x.md)\n"), vec![None]);
     assert_eq!(spans("[x.md#a](x.md#a)\n"), vec![None]);
-    assert_eq!(spans("[a][r]\n\n[r]: x.md#frag\n"), vec![None]);
+    assert_eq!(spans("[a][r]\n\n[r]: x.md#frag\n"), vec![Some((18, 22))]);
     assert_eq!(
         spans("<a#b@example.com>\n"),
         vec![None],

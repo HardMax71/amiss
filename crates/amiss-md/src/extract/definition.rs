@@ -14,6 +14,7 @@ pub(super) struct Definition {
     pub(super) url: String,
     pub(super) raw: String,
     pub(super) reserved: bool,
+    pub(super) span: (usize, usize),
 }
 
 pub(super) type Definitions = HashMap<usize, Definition>;
@@ -64,6 +65,7 @@ pub(super) fn definitions(tree: &Node, suffix: &str) -> Result<CollectedDefiniti
                         url: definition.url.clone(),
                         raw,
                         reserved,
+                        span: node.span,
                     },
                 ));
             }
