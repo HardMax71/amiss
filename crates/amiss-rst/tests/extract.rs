@@ -578,3 +578,24 @@ fn a_reserved_comment_becomes_governed_and_only_it() {
     );
     assert!(smuggled.opaque.is_empty());
 }
+
+/// Code, nested literal blocks and inline literals render as written, so a
+/// role, link or label inside them is shown text rather than a reference or an
+/// anchor, while a `:name:` on a code block still declares its label.
+#[test]
+fn literal_text_is_shown_not_read() -> Result<(), Refusal> {
+    let source = "Text :doc:`real`.\n\n\
+                  .. code-block:: rst\n   :name: listing\n\n   :doc:`in-code` and `link <in-code.html>`_\n\n   .. _in-code-label:\n\n\
+                  .. note::\n\n   Example::\n\n      :ref:`nested-literal`\n\n   After :doc:`after-note`.\n\n\
+                  Use ``x `link <inline.rst>`_ y`` here and `real link <kept.rst>`_.\n";
+    let extraction = extract(source.as_bytes())?;
+    let targets: Vec<&str> = extraction
+        .references
+        .iter()
+        .map(|reference| reference.target.as_str())
+        .collect();
+    assert_eq!(targets, ["real", "after-note", "kept.rst"]);
+    assert!(extraction.anchors.contains(&"listing".to_owned()));
+    assert!(!extraction.anchors.contains(&"in-code-label".to_owned()));
+    Ok(())
+}

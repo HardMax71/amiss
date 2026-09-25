@@ -202,11 +202,25 @@ fn read_block(
     let has_directive_body = body.lines().skip(1).any(|line| !line.trim().is_empty());
     let mut offset = 0_usize;
     let mut previous: Option<(usize, &str)> = None;
+    let mut literal: Option<(usize, bool)> = None;
     for raw in body.split_inclusive('\n') {
         let text_at = offset;
         let at = block.span.0.saturating_add(offset);
         offset = offset.saturating_add(raw.len());
         let line = raw.strip_suffix('\n').unwrap_or(raw);
+        let indent = line.len().saturating_sub(line.trim_start().len());
+        if let Some((opened, options)) = literal {
+            let blank = line.trim().is_empty();
+            if blank || indent > opened {
+                let option = options && !blank && line.trim_start().starts_with(':');
+                literal = Some((opened, option));
+                if !option {
+                    continue;
+                }
+            } else {
+                literal = None;
+            }
+        }
         if let Some(order) = title_order.as_deref_mut() {
             let title = previous.and_then(|(start, text)| {
                 title_underline(line, text).map(|character| (start, text, character))
@@ -257,15 +271,63 @@ fn read_block(
             }
             extraction.references.push(reference);
         }
+        if literal.is_none() {
+            literal = literal_opener(line).map(|options| (indent, options));
+        }
     }
+}
+
+/// The directives whose body is code, output, or diagram source rather than
+/// reStructuredText; Docutils and Sphinx render it as it is written.
+const LITERAL_DIRECTIVES: [&str; 17] = [
+    "code",
+    "code-block",
+    "sourcecode",
+    "doctest",
+    "testcode",
+    "testoutput",
+    "testsetup",
+    "testcleanup",
+    "ipython",
+    "jupyter-execute",
+    "math",
+    "graphviz",
+    "graph",
+    "digraph",
+    "uml",
+    "mermaid",
+    "prompt",
+];
+
+/// Whether a line opens a literal body: a literal directive, whose option
+/// lines still count, or a paragraph ending in `::`, whose indented
+/// continuation is a literal block wherever it sits.
+fn literal_opener(line: &str) -> Option<bool> {
+    let trimmed = line.trim_start();
+    if trimmed.starts_with("..") {
+        return directive_name(trimmed)
+            .is_some_and(|name| {
+                LITERAL_DIRECTIVES
+                    .iter()
+                    .any(|literal| name.eq_ignore_ascii_case(literal))
+            })
+            .then_some(true);
+    }
+    trimmed.trim_end().ends_with("::").then_some(false)
+}
+
+/// The name of the directive a line opens, `code-block` for `.. code-block::`.
+fn directive_name(trimmed: &str) -> Option<&str> {
+    trimmed
+        .strip_prefix(".. ")
+        .and_then(|rest| rest.split_once("::"))
+        .map(|(name, _argument)| name.trim())
 }
 
 /// A `raw` directive injects its body into the output verbatim: rendered
 /// content the parser cannot read, which is what opaque means. A nested
 /// directive keeps its indent in the body, so the marker is read past it.
 fn raw_directive(body: &str) -> bool {
-    let line = body.split('\n').next().unwrap_or_default().trim_start();
-    line.strip_prefix(".. ")
-        .and_then(|rest| rest.split_once("::"))
-        .is_some_and(|(name, _argument)| name.trim().eq_ignore_ascii_case("raw"))
+    directive_name(body.split('\n').next().unwrap_or_default().trim_start())
+        .is_some_and(|name| name.eq_ignore_ascii_case("raw"))
 }
