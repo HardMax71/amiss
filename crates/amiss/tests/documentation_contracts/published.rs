@@ -71,6 +71,7 @@ const SHARED_CI_WORKFLOW: &str = r"```yaml
 name: docs
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
 permissions:
