@@ -192,19 +192,21 @@ pub(crate) fn engine_resolution(
 ) -> (ResolutionTag, Option<String>) {
     let detail = match resolution {
         Resolution::Missing(missing) => {
-            let near = match missing {
+            let (near, moved) = match missing {
                 Missing::PathNotFound {
-                    near: Some(near), ..
-                } => Some(engine_path(near)),
-                Missing::HeadingAnchorNotFound {
-                    near: Some(near), ..
-                } => Some(atom(near)),
-                Missing::PathNotFound { near: None, .. }
-                | Missing::HeadingAnchorNotFound { near: None, .. }
-                | Missing::LineFragmentOutOfRange { .. }
-                | Missing::LabelNotDeclared => None,
+                    near,
+                    same_object_at,
+                    ..
+                } => (
+                    near.as_ref().map(engine_path),
+                    same_object_at.as_ref().map(engine_path),
+                ),
+                Missing::HeadingAnchorNotFound { near, .. } => {
+                    (near.as_ref().map(|near| atom(near)), None)
+                }
+                Missing::LineFragmentOutOfRange { .. } | Missing::LabelNotDeclared => (None, None),
             };
-            Some(missing_detail(MissingTag::from(missing), near))
+            Some(missing_detail(MissingTag::from(missing), near, moved))
         }
         Resolution::Invalid { reason } => Some(reason.as_ref().to_owned()),
         Resolution::UnsupportedTarget(target) => {
@@ -224,11 +226,21 @@ pub(crate) fn engine_resolution(
     (ResolutionTag::from(resolution), detail)
 }
 
-pub(crate) fn missing_detail(tag: MissingTag, near: Option<String>) -> String {
-    near.map_or_else(
-        || tag.as_ref().to_owned(),
-        |near| format!("{} near {near}", tag.as_ref()),
-    )
+/// A missing reason with its nearby spelling and, for a path, the one added
+/// path now holding the removed bytes.
+pub(crate) fn missing_detail(
+    tag: MissingTag,
+    near: Option<String>,
+    moved: Option<String>,
+) -> String {
+    let mut detail = tag.as_ref().to_owned();
+    for (lead, spelled) in [(" near ", near), (" same bytes at ", moved)] {
+        if let Some(spelled) = spelled {
+            detail.push_str(lead);
+            detail.push_str(&spelled);
+        }
+    }
+    detail
 }
 
 /// The engine groups feedback by action and target; the same grouping over

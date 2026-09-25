@@ -10,7 +10,7 @@ use amiss_wire::report::{
 use amiss_wire::resolution::{Missing, Resolution};
 
 use crate::Error;
-use crate::correlate::{Observation, Side, correlate, unique_path_pairs};
+use crate::correlate::{Observation, Side, correlate, directory_pairs, unique_path_pairs};
 use crate::discovery::{DocumentStatus, SnapshotDiscovery, discover};
 use crate::observe::{OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_input};
 use crate::report::{
@@ -384,18 +384,32 @@ fn conclude(
         return construct_incomplete(setup, failures);
     }
     let mut candidate_side = candidate.1;
-    let relocations = candidate_side
+    let missing: Vec<&RepoPath> = candidate_side
         .observations
         .iter()
-        .find(|observation| {
-            matches!(
-                &observation.resolution,
-                Resolution::Missing(Missing::PathNotFound { .. })
-            )
+        .filter_map(|observation| {
+            if observation.intent.commit_oid.is_none()
+                && let Resolution::Missing(Missing::PathNotFound { path, .. }) =
+                    &observation.resolution
+            {
+                Some(path)
+            } else {
+                None
+            }
         })
-        .map_or_else(Default::default, |_| {
-            unique_path_pairs(&base.0.entries, &candidate.0.entries)
-        });
+        .collect();
+    let mut relocations = BTreeMap::new();
+    if !missing.is_empty() {
+        relocations = unique_path_pairs(&base.0.entries, &candidate.0.entries);
+        let directories = directory_pairs(
+            &base.0.entries,
+            &candidate.0.entries,
+            missing
+                .into_iter()
+                .filter(|path| !relocations.contains_key(*path)),
+        );
+        relocations.extend(directories);
+    }
     for observation in &mut candidate_side.observations {
         if observation.intent.commit_oid.is_none()
             && let Resolution::Missing(Missing::PathNotFound {

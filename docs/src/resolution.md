@@ -208,9 +208,12 @@ while a fragment rides untouched beside them.
 When the missed path existed in the base tree and disappeared from the candidate, the same
 resolution also carries `same_object_at` if exactly one candidate-added entry has the identical
 Git mode and object ID and that identity belongs to exactly one removed path. Copies, duplicate
-content, mode changes, and edited moves leave it null. This is candidate-tree evidence that Git
+content, mode changes, and edited moves leave it null. An index holds no directory entries, so
+under `--index` a removed directory pairs with the one added directory holding exactly its files,
+and only when no other removed directory held the same tree. This is candidate-tree evidence that Git
 stores identical bytes at another path, not evidence of author intent: it never supplies a `fix`
-or replacement bytes. The case-only `near` fact remains independent.
+or replacement bytes. The human form prints it after the reason as `same bytes at` and the path.
+The case-only `near` fact remains independent.
 
 A destination no spelling reaches is asked one last question, against a declaration the
 repository already publishes for Git rather than for this engine. Only the tracked
