@@ -76,7 +76,7 @@ fn adopt_args(minted: &Minted, output: &str) -> Vec<String> {
         "--created-at",
         "2026-08-08T00:00:00Z",
         "--expires-at",
-        "2027-08-08T00:00:00Z",
+        "2099-08-08T00:00:00Z",
         "--debt-output",
         output,
     ]
@@ -302,7 +302,7 @@ fn an_ineligible_blocking_finding_is_counted_not_recorded() {
         "--created-at",
         "2026-08-08T00:00:00Z",
         "--expires-at",
-        "2027-08-08T00:00:00Z",
+        "2099-08-08T00:00:00Z",
         "--debt-output",
         &path,
     ];
@@ -315,6 +315,10 @@ fn an_ineligible_blocking_finding_is_counted_not_recorded() {
         "{shown}"
     );
     assert!(shown.contains("0 eligible rows skipped"), "{shown}");
+    assert!(
+        shown.contains("gate new drift with --profile enforce-introduced"),
+        "the summary names the next step: {shown}"
+    );
     let snapshot = DebtSnapshot::parse(&fs::read(&path).unwrap()).unwrap();
     assert!(snapshot.items.is_empty());
 }
@@ -407,5 +411,39 @@ fn malformed_adoption_values_are_refused() {
         let (code, _stdout, stderr) = amiss(&shown);
         assert_eq!(code, 2, "{stderr}");
         assert!(stderr.contains("INVALID_INVOCATION"), "{stderr}");
+    }
+}
+
+/// Debt already expired when it is minted suppresses nothing, and debt bound
+/// to the all-zero floor binds to no floor, so both are refused before
+/// anything is written.
+#[test]
+fn a_dead_binding_records_nothing() {
+    let zero = format!("sha256:{}", "0".repeat(64));
+    for (changes, refusal) in [
+        (
+            vec![
+                ("--created-at", "2020-01-01T00:00:00Z"),
+                ("--expires-at", "2021-01-01T00:00:00Z"),
+            ],
+            "--expires-at is already past",
+        ),
+        (
+            vec![("--floor-digest", zero.as_str())],
+            "not the all-zero digest",
+        ),
+    ] {
+        let (minted, path) = minted();
+        let mut args = adopt_args(&minted, &path);
+        for (flag, value) in changes {
+            let at = args.iter().position(|argument| argument == flag).unwrap();
+            args[at + 1] = value.to_owned();
+        }
+        let shown: Vec<&str> = args.iter().map(String::as_str).collect();
+        let (code, stdout, _stderr) = amiss(&shown);
+        let printed = String::from_utf8_lossy(&stdout);
+        assert_eq!(code, 2, "{printed}");
+        assert!(printed.contains(refusal), "{printed}");
+        assert!(!std::path::Path::new(&path).exists(), "nothing was written");
     }
 }
