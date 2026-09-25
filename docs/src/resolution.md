@@ -252,10 +252,13 @@ resolution also carries `same_object_at` if exactly one candidate-added entry ha
 Git mode and object ID and that identity belongs to exactly one removed path. Copies, duplicate
 content, mode changes, and edited moves leave it null. An index holds no directory entries, so
 under `--index` a removed directory pairs with the one added directory holding exactly its files,
-and only when no other removed directory held the same tree. This is candidate-tree evidence that Git
-stores identical bytes at another path, not evidence of author intent: it never supplies a `fix`
-or replacement bytes. The human form prints it after the reason as `same bytes at` and the path.
-The case-only `near` fact remains independent.
+and only when no other removed directory held the same tree. When the author wrote a plain relative
+path that reached the missed file from beside its document, that one move also supplies the
+`fix`: the path rewritten, relative the same way, to where the change put the same bytes, with
+any fragment left as written. A site route, a generator's anchoring, or a path that needs escaping
+keeps the fact without a fix, since the author's own spelling cannot be carried over. The human
+form prints it after the reason as `same bytes at` and the path. The case-only `near` fact
+remains independent and answers first.
 
 A destination no spelling reaches is asked one last question, against a declaration the
 repository already publishes for Git rather than for this engine. Only the tracked
