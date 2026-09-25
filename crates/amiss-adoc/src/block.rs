@@ -15,12 +15,16 @@ const FENCES: [(char, Delimiter); 8] = [
 /// one fence character and nothing else, and it closes on the identical line,
 /// which is what keeps a nested block from ending its parent early. A
 /// paragraph whose first line is indented and carries no list marker is a
-/// literal paragraph, which reads verbatim like a delimited literal block.
+/// literal paragraph, which reads verbatim like a delimited literal block, and
+/// one under an attribute line naming a verbatim, passthrough or comment style
+/// reads the way that style's delimited block would, blank lines between them
+/// or not.
 #[must_use]
 pub fn blocks(text: &str) -> Vec<Block> {
     let mut found: Vec<Block> = Vec::new();
     let mut open: Vec<(String, Delimiter, usize)> = Vec::new();
     let mut paragraph: Option<Block> = None;
+    let mut styled: Option<Delimiter> = None;
     let mut offset = 0_usize;
 
     for raw in text.split_inclusive('\n') {
@@ -52,6 +56,7 @@ pub fn blocks(text: &str) -> Vec<Block> {
             continue;
         }
         if let Some((fence, delimiter)) = fence_of(line) {
+            styled = None;
             flush(&mut found, &mut paragraph, start);
             open.push((fence, delimiter, offset));
             continue;
@@ -60,12 +65,25 @@ pub fn blocks(text: &str) -> Vec<Block> {
             flush(&mut found, &mut paragraph, start);
             continue;
         }
+        if paragraph.is_none()
+            && let Some(delimiter) = paragraph_style(line)
+        {
+            found.push(Block {
+                span: (start, offset),
+                delimiter: None,
+                depth: open.len(),
+                list_item: false,
+            });
+            styled = Some(delimiter);
+            continue;
+        }
         if paragraph.is_none() {
             let list_item = is_list_item(line);
             paragraph = Some(Block {
                 span: (start, start),
-                delimiter: (!list_item && line.starts_with([' ', '\t']))
-                    .then_some(Delimiter::Verbatim),
+                delimiter: styled.take().or_else(|| {
+                    (!list_item && line.starts_with([' ', '\t'])).then_some(Delimiter::Verbatim)
+                }),
                 depth: open.len(),
                 list_item,
             });
@@ -106,6 +124,25 @@ pub fn setext_level(title: &str, underline: &str) -> Option<usize> {
         && !is_list_item(title)
         && title.chars().count().abs_diff(length) < 2)
         .then_some(level)
+}
+
+/// What an attribute line standing above a paragraph makes of it, read from
+/// the style its first positional attribute names ahead of any `#id`, `.role`
+/// or `%option` shorthand: source, listing and literal read verbatim, pass
+/// and the math styles pass through, and comment drops the paragraph.
+fn paragraph_style(line: &str) -> Option<Delimiter> {
+    let inside = line.trim_end().strip_prefix('[')?.strip_suffix(']')?;
+    let style = inside
+        .split([',', '#', '.', '%'])
+        .next()
+        .unwrap_or_default()
+        .trim();
+    match style {
+        "source" | "listing" | "literal" => Some(Delimiter::Verbatim),
+        "pass" | "stem" | "latexmath" | "asciimath" => Some(Delimiter::Passthrough),
+        "comment" => Some(Delimiter::Comment),
+        _ => None,
+    }
 }
 
 fn flush(found: &mut Vec<Block>, paragraph: &mut Option<Block>, end: usize) {
