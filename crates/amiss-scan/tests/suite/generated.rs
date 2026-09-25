@@ -907,3 +907,39 @@ fn a_literalinclude_selection_is_checked_as_a_line_range() {
         Resolution::UnsupportedSemantics(UnsupportedSemantics::CodeFragment(_))
     ));
 }
+
+/// An `AsciiDoc` section named with an attribute the document defines takes
+/// the identity its value gives it, and a page whose title names one the
+/// document leaves undefined cannot prove any other identity absent, since
+/// whatever builds the site may define it.
+#[test]
+fn an_asciidoc_title_reads_its_documents_attributes() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            (
+                "defined.adoc",
+                "= Defined\n:product: Acme Cloud\n\n== Using {product}\n\nSee <<_using_acme_cloud>>.\n\nSee <<_nothing_here>>.\n",
+            ),
+            (
+                "open.adoc",
+                "= Open\n\n== About {edition}\n\nSee <<_nothing_here>>.\n",
+            ),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    assert!(matches!(
+        answer(&rows, "defined.adoc", 6),
+        Resolution::Resolved { .. }
+    ));
+    assert!(matches!(
+        answer(&rows, "defined.adoc", 8),
+        Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+    ));
+    assert!(
+        !matches!(answer(&rows, "open.adoc", 5), Resolution::Missing(_)),
+        "{:?}",
+        answer(&rows, "open.adoc", 5)
+    );
+}

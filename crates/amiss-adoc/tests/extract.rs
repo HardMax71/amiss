@@ -339,6 +339,35 @@ fn an_internal_reference_never_nests_an_opening_bracket() {
     assert_eq!(kinds("See <<a<b>> here.\n"), Vec::new());
 }
 
+/// A title reads its document's attributes the way Asciidoctor does before
+/// it names the section: a defined one by its value, an empty built-in by
+/// nothing, an escaped one as written, and one the document does not define
+/// left as written and marked, since something outside may define it.
+#[test]
+fn titles_read_the_attributes_the_document_defines() {
+    let source = "= Doc\n:product: Acme {edition}\n:edition: Cloud\n:Brand: Zed\n\n\
+                  == Using {product}\n\n== About {brand}\n\n== Plain {empty}\n\n\
+                  == Escaped \\{product}\n\n== Missing {nowhere}\n\n:product!:\n\n== After {product}\n";
+    let read = extract(source.as_bytes()).expect("utf-8 source");
+    let titles: Vec<(&str, bool)> = read
+        .titles
+        .iter()
+        .map(|title| (title.text.as_str(), title.unresolved))
+        .collect();
+    assert_eq!(
+        titles,
+        [
+            ("Doc", false),
+            ("Using Acme {edition}", true),
+            ("About Zed", false),
+            ("Plain ", false),
+            ("Escaped {product}", false),
+            ("Missing {nowhere}", true),
+            ("After {product}", true),
+        ]
+    );
+}
+
 #[test]
 fn titles_hold_one_to_six_markers_and_a_space() {
     let deep = extract(b"====== Deep\n").expect("utf-8");
