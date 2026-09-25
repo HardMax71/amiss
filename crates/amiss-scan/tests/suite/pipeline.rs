@@ -2599,6 +2599,50 @@ fn deleting_a_page_a_route_reaches_is_a_missing_target() {
     }
 }
 
+/// An Antora component an extension assembles leaves a missing page to the
+/// build, but a page the base held in the tree was no build's: deleting it
+/// is a missing target, not a record.
+#[test]
+fn deleting_a_hand_written_page_of_an_assembled_component_is_missing() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs/modules/ROOT/pages")).unwrap();
+    fs::write(
+        root.join("docs/antora.yml"),
+        "name: parts\nversion: true\next:\n  zip_contents_collector:\n    include: []\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/modules/ROOT/pages/index.adoc"),
+        "= Index\n\nSee xref:guide.adoc[the guide].\n",
+    )
+    .unwrap();
+    fs::write(root.join("docs/modules/ROOT/pages/guide.adoc"), "= Guide\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = oid(git(root, &["rev-parse", "HEAD"]).trim());
+    git(root, &["rm", "-q", "docs/modules/ROOT/pages/guide.adoc"]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = oid(git(root, &["rev-parse", "HEAD"]).trim());
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let report =
+        payload(&commit_pair(&repo, &engine(), None, &shell(), &base, &candidate).unwrap());
+    let rows: Vec<(&str, &str)> = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["location"]["path"] == "docs/modules/ROOT/pages/index.adoc")
+        .filter_map(|row| Some((row["kind"].as_str()?, row["attribution"].as_str()?)))
+        .collect();
+    assert_eq!(
+        rows,
+        [("explicit-target-missing", "introduced")],
+        "{}",
+        report["findings"]
+    );
+}
+
 /// A Hugo configuration is the same declaration written where the generator
 /// reads it. A candidate that newly binds one lends it to the base, so the
 /// anchor it makes readable on an untouched page is pre-existing. A candidate

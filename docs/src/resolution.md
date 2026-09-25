@@ -181,7 +181,10 @@ slash-rooted route opening with that base is read as a path under it. A route re
 keeps the boundary it had, so the base can resolve a destination and cannot claim one. The one
 exception runs the other way: when the base side served a route from a page the candidate no
 longer holds, the candidate reads that route under the base's anchoring, so deleting the page is
-the missing target it is rather than a reference that seems to have left.
+the missing target it is rather than a reference that seems to have left. The same holds under a
+generator whose build might supply a path, such as an Antora component an extension assembles: a
+page the base held in the tree was no build's, so deleting it is missing rather than left to the
+build.
 
 [What a documentation router serves](route-spellings.md) holds the spellings, the routers
 they were harvested from, the generator rules and what selects each, and what the union costs.
