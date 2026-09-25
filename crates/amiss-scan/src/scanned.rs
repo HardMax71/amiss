@@ -70,6 +70,8 @@ pub struct Scanned {
     pub declared_anchors: Vec<String>,
     pub declared_name: Option<String>,
     pub declared_redirects: Vec<String>,
+    /// Where an `AsciiDoc` document's image macros resolve from.
+    pub images_dir: amiss_adoc::ImagesDir,
     pub anchor_source: Option<AnchorSource>,
     /// Read only once the HTML comments the MDX grammar refused were read as
     /// comments, which a Docusaurus site does and MDX alone does not.

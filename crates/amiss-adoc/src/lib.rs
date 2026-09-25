@@ -68,6 +68,73 @@ pub enum Refusal {
     NotUtf8,
 }
 
+/// Where a document's image macros resolve from. Asciidoctor joins an image
+/// target to `imagesdir`, which is empty unless set, so an unset document
+/// reads its images beside itself.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum ImagesDir {
+    #[default]
+    Beside,
+    Under(String),
+    Unknown,
+}
+
+/// The `imagesdir` a document sets for all of itself: none, or one literal
+/// directory among the header's attribute entries. An entry anywhere else, a
+/// second one, an unset, or a value naming an attribute, a URL or an absolute
+/// path leaves every image undecided, since the value in force at an image
+/// then depends on more than this file says.
+#[must_use]
+pub fn images_dir(source: &[u8]) -> ImagesDir {
+    const SET: &str = ":imagesdir:";
+    let Ok(text) = std::str::from_utf8(source) else {
+        return ImagesDir::Unknown;
+    };
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let mut lines = text.lines().skip_while(|line| {
+        line.trim().is_empty() || (line.starts_with("//") && !line.starts_with("////"))
+    });
+    let header: Vec<&str> = lines
+        .by_ref()
+        .take_while(|line| !line.trim().is_empty())
+        .collect();
+    let opens = header
+        .first()
+        .is_some_and(|line| line.starts_with("= ") || line.starts_with(':'));
+    let entries = |line: &str| {
+        [SET, ":imagesdir!:", ":!imagesdir:"]
+            .iter()
+            .any(|entry| line.starts_with(entry))
+    };
+    let set: Vec<&str> = header
+        .iter()
+        .copied()
+        .filter(|line| entries(line))
+        .collect();
+    if lines.any(entries) || (!opens && !set.is_empty()) {
+        return ImagesDir::Unknown;
+    }
+    let [only] = set.as_slice() else {
+        return if set.is_empty() {
+            ImagesDir::Beside
+        } else {
+            ImagesDir::Unknown
+        };
+    };
+    let Some(value) = only.strip_prefix(SET).map(str::trim) else {
+        return ImagesDir::Unknown;
+    };
+    if value.contains('{') || value.contains("://") || value.starts_with('/') {
+        return ImagesDir::Unknown;
+    }
+    let value = value.trim_end_matches('/');
+    if value.is_empty() || value == "." {
+        ImagesDir::Beside
+    } else {
+        ImagesDir::Under(value.to_owned())
+    }
+}
+
 /// Scans one `AsciiDoc` document.
 ///
 /// # Errors

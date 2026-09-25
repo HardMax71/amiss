@@ -15,13 +15,15 @@ use amiss_wire::resolution::{
 use amiss_wire::uri::{absolute_valid, decode_fragment, iri_to_uri, scheme};
 use unicode_general_category::{GeneralCategory, get_general_category};
 
+use amiss_adoc::ImagesDir;
+
 use crate::Error;
 use crate::declared::Declarations;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::{DocumentClassification, classify};
 use crate::published::redirected;
 use crate::published::unplaced;
-use crate::published::{anchors, antora_elsewhere};
+use crate::published::{anchors, antora_elsewhere, image_home};
 use crate::resources::{Aggregate, ScanResources};
 use crate::route::{directory, generator_alias, template_expression};
 
@@ -322,9 +324,10 @@ fn resolve_destination(
         is_image,
         path_part,
     );
+    let home = image_home(resolver.snapshot, document_path, is_image, &anchors);
     let elsewhere = adapter == Adapter::AsciiDoc
         && antora_elsewhere(resolver.snapshot, document_path, construct, path_part);
-    if let Some(reason) = declined(adapter, is_image && anchors.is_empty(), elsewhere, semantic) {
+    if let Some(reason) = declined(adapter, home == ImagesDir::Unknown, elsewhere, semantic) {
         return Ok((
             unsupported_intent(query, fragment),
             Resolution::UnsupportedSemantics(reason),
