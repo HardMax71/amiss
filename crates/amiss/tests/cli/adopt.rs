@@ -409,3 +409,40 @@ fn malformed_adoption_values_are_refused() {
         assert!(stderr.contains("INVALID_INVOCATION"), "{stderr}");
     }
 }
+
+/// One eligible row whose fact names a path outside the text grammar is counted
+/// and left out, and the rows the debt file can hold are still recorded.
+#[test]
+fn an_unrecordable_fact_is_counted_not_fatal() -> Result<(), Box<dyn std::error::Error>> {
+    let chain = commit_chain(&[
+        ("base", &[("README.md", "start\n")]),
+        (
+            "candidate",
+            &[
+                ("README.md", "start\n"),
+                ("page.md", "[gone](missing.md) and [bytes](doc%FF.md)\n"),
+            ],
+        ),
+    ])?;
+    let output = TempDir::new()?;
+    let minted = Minted {
+        root: amiss_fixtures::path_arg(chain.root()),
+        base: chain.commits.first().ok_or("base commit")?.id.clone(),
+        candidate: chain.commits.get(1).ok_or("candidate commit")?.id.clone(),
+        chain,
+        output,
+    };
+    let path = amiss_fixtures::path_arg(&minted.output.path().join("debt.json"));
+    let args = adopt_args(&minted, &path);
+    let shown_args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let (code, stdout, _stderr) = amiss(&shown_args);
+    let shown = String::from_utf8(stdout)?;
+    assert_eq!(code, 0, "{shown}");
+    assert!(shown.contains("1 blocking findings recorded"), "{shown}");
+    assert!(
+        shown.contains("1 skipped because their facts name a path outside the text path grammar"),
+        "{shown}"
+    );
+    assert_eq!(DebtSnapshot::parse(&fs::read(&path)?)?.items.len(), 1);
+    Ok(())
+}
