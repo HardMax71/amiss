@@ -86,6 +86,10 @@ pub enum SourceConstruct {
     MarkdownLiquidUrl,
     #[strum(serialize = "markdown-hugo-ref")]
     MarkdownHugoRef,
+    #[strum(serialize = "markdown-undefined-reference")]
+    MarkdownUndefinedReference,
+    #[strum(serialize = "markdown-undefined-image-reference")]
+    MarkdownUndefinedImageReference,
     #[strum(serialize = "html-anchor")]
     HtmlAnchor,
     #[strum(serialize = "html-image")]

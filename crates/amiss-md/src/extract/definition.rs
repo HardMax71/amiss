@@ -83,6 +83,7 @@ pub(super) fn definitions(tree: &Node, suffix: &str) -> Result<CollectedDefiniti
             | Kind::Link { .. }
             | Kind::Image { .. }
             | Kind::Footnote { .. }
+            | Kind::UndefinedReference { .. }
             | Kind::Other => {}
         }
         let below = depth.saturating_add(1);

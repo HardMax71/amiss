@@ -46,6 +46,12 @@ pub(crate) enum Kind {
     },
     LinkReference(Reference),
     ImageReference(Reference),
+    /// A full or collapsed reference whose label no definition in the
+    /// document declares, which Markdown leaves as the text it spells.
+    UndefinedReference {
+        label: String,
+        image: bool,
+    },
     Definition(Definition),
     /// A footnote's call, or its note with the note's blocks as children,
     /// under the label as written.

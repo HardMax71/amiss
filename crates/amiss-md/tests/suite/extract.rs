@@ -613,6 +613,46 @@ fn site_generator_templates_are_destinations() {
     }
 }
 
+/// A full or collapsed reference, or its image form, whose label nothing
+/// defines is read as the broken link Markdown leaves as text. A pair glued
+/// to what surrounds it is an index or a pattern, and a page holding a
+/// template marker proves no label absent, since a template may write the
+/// definition.
+#[test]
+fn an_undefined_reference_label_is_read() {
+    let source = "See [the guide][guide], [Setup][] and ![logo][img].\n\n\
+                  a[i][j], [A-Z][a-z]*, [ok][def].\n\n[def]: ok.md\n";
+    let read: Vec<(SourceConstruct, String)> = extraction(Adapter::Markdown, source)
+        .occurrences
+        .iter()
+        .map(|entry| (entry.construct, entry.raw_destination.clone()))
+        .collect();
+    assert_eq!(
+        read,
+        [
+            (
+                SourceConstruct::MarkdownUndefinedReference,
+                "guide".to_owned()
+            ),
+            (
+                SourceConstruct::MarkdownUndefinedReference,
+                "Setup".to_owned()
+            ),
+            (
+                SourceConstruct::MarkdownUndefinedImageReference,
+                "img".to_owned()
+            ),
+            (SourceConstruct::FullReferenceLink, "ok.md".to_owned()),
+        ]
+    );
+    let templated = extraction(Adapter::Markdown, "See [the guide][guide] {{< ref >}}.\n");
+    assert!(
+        templated.occurrences.is_empty(),
+        "{:?}",
+        templated.occurrences
+    );
+}
+
 /// Every golden in the corpus obeys the closed span contract: bounded,
 /// ordered, non-splitting, with a disjoint opaque partition and the right
 /// empty side per profile.
@@ -895,9 +935,14 @@ fn a_blockquote_definition_continues_through_three_spaces_at_most() {
     );
 
     let broken = extraction(Adapter::Markdown, "[u][r]\n\n> [r]:\n    > /dest.md\n");
-    assert!(
-        triples(&broken).is_empty(),
-        "four spaces before the marker end the definition unresolved"
+    assert_eq!(
+        triples(&broken),
+        [(
+            SourceConstruct::MarkdownUndefinedReference,
+            "r".to_owned(),
+            "r".to_owned()
+        )],
+        "four spaces before the marker end the definition, so the reference names nothing"
     );
 }
 

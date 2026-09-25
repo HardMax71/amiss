@@ -327,6 +327,9 @@ impl Sweep<'_> {
                     *owners,
                 )?;
             }
+            Kind::UndefinedReference { label, image } => {
+                self.undefined(label, *image, span, path, *owners);
+            }
             // A definition nobody references still maintains a destination.
             Kind::Definition(_) => self.orphan(node, path, *owners),
             Kind::Text(value) => {
@@ -444,6 +447,31 @@ impl Sweep<'_> {
         Ok(())
     }
 
+    /// A reference whose label nothing defines, kept under its label so the
+    /// resolver can say which one.
+    fn undefined(
+        &mut self,
+        label: &str,
+        image: bool,
+        span: (usize, usize),
+        path: &[usize],
+        owners: Owners,
+    ) {
+        let construct = if image {
+            SourceConstruct::MarkdownUndefinedImageReference
+        } else {
+            SourceConstruct::MarkdownUndefinedReference
+        };
+        self.push(
+            construct,
+            label.to_owned(),
+            label.to_owned(),
+            span,
+            path,
+            owners,
+        );
+    }
+
     fn orphan(&mut self, node: &Node, path: &[usize], owners: Owners) {
         if let Some((raw, url)) = self.orphans.remove(&node.span) {
             // A definition is a block node holding one destination, so it takes
@@ -538,6 +566,7 @@ fn mdx_declaration(sweep: &mut Sweep<'_>, node: &Node) -> bool {
         | Kind::Image { .. }
         | Kind::LinkReference(_)
         | Kind::ImageReference(_)
+        | Kind::UndefinedReference { .. }
         | Kind::Definition(_)
         | Kind::Footnote { .. }
         | Kind::Other => {}
