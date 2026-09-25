@@ -384,6 +384,7 @@ fn forge_context(
         object_format,
         candidate_ref: candidate_ref.cloned(),
         default_ref: default_branch_ref.cloned(),
+        default_aliases: Vec::new(),
     })
 }
 

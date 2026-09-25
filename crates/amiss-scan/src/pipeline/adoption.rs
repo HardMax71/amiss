@@ -49,6 +49,9 @@ pub(super) fn reproduce(
         .collect();
 
     let mut scan = ScanResources::new(scan_limits);
+    let policy = crate::policy::acquire(repo, git, &mut scan, &tree)
+        .map_err(|details| details.into_iter().next().unwrap_or_else(mismatch))?;
+    let forge = crate::policy::aliased(forge, &policy);
     let includes = crate::policy::Includes::default();
     let discovery =
         crate::discovery::discover_scoped(repo, git, &mut scan, &includes, &tree, &documents)
@@ -60,7 +63,7 @@ pub(super) fn reproduce(
         &mut scan,
         ObservationContext {
             engine,
-            forge,
+            forge: forge.as_ref(),
             semantic: crate::semantic::View {
                 labels: semantic.labels.as_ref(),
                 routes: None,

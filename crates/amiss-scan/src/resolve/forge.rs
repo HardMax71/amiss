@@ -322,7 +322,12 @@ fn bitbucket_cloud_split(
         .map(amiss_wire::model::BranchRef::name)
         .unwrap_or_default()
         .as_bytes();
-    let candidate_matches = version.as_slice() == candidate;
+    let candidate_matches = version.as_slice() == candidate
+        || candidate == default
+            && identity
+                .default_aliases
+                .iter()
+                .any(|alias| version.as_slice() == alias.name().as_bytes());
     let default_matches = version.as_slice() == default;
     let commit_oid = decoded_oid(version);
     if commit_oid
@@ -443,6 +448,11 @@ fn bitbucket_data_center_version(
             .candidate_ref
             .as_ref()
             .is_some_and(|reference| revision == reference.as_str().as_bytes())
+            || identity.default_ref == identity.candidate_ref
+                && identity
+                    .default_aliases
+                    .iter()
+                    .any(|alias| revision == alias.as_str().as_bytes())
         {
             return Ok(ForgeVersion::Candidate);
         }
@@ -535,7 +545,12 @@ fn versioned_split(
         .map(amiss_wire::model::BranchRef::name)
         .unwrap_or_default();
     let candidate_split = split_after(&decoded, candidate);
-    let default_split = split_after(&decoded, default);
+    let default_split = split_after(&decoded, default).or_else(|| {
+        identity
+            .default_aliases
+            .iter()
+            .find_map(|alias| split_after(&decoded, alias.name()))
+    });
     let oid_length = match identity.object_format {
         ObjectFormat::Sha1 => 40,
         ObjectFormat::Sha256 => 64,
@@ -565,6 +580,9 @@ fn versioned_split(
             Ok((ForgeVersion::Candidate, contained_path(after_candidate)?))
         }
         (Some(after), None) => Ok((ForgeVersion::Candidate, contained_path(after)?)),
+        (None, Some(after)) if candidate == default => {
+            Ok((ForgeVersion::Candidate, contained_path(after)?))
+        }
         (None, Some(after)) => Ok((ForgeVersion::OtherNamedRef, contained_path(after)?)),
         (Some(_), Some(_)) | (None, None) => Err(Resolution::UnsupportedVersion {
             scope: VersionScope::UnknownPath {},

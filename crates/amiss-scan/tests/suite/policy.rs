@@ -16,7 +16,9 @@ use amiss_wire::controls::{
     ProjectionSource, PromotableFindingKind, ResourceName, ScannerPolicy, ScannerPolicySchema,
 };
 
-use amiss_wire::model::{RepoPath, RepoPathText, UtcInstant};
+use amiss_wire::branch_ref;
+use amiss_wire::model::{BranchRef, RepoPath, RepoPathText, UtcInstant};
+use amiss_wire::report::FindingKind;
 use amiss_wire::report::model::AnalysisErrorCode;
 use amiss_wire::requests::RequestTrust;
 
@@ -147,6 +149,7 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
         projection_assertions: Some(Vec::new()),
         protected_inventory,
         finding_dispositions: Vec::new(),
+        default_branch_aliases: None,
     })
 }
 
@@ -169,6 +172,7 @@ fn a_projection_selector_change_keeps_identity_and_removal_weakens() {
             }]),
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
+            default_branch_aliases: None,
         })
     };
     let base = side(1);
@@ -221,6 +225,7 @@ fn the_union_carries_both_suffixes_but_the_candidate_binding() {
             projection_assertions: Some(Vec::new()),
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
+            default_branch_aliases: None,
         })
     };
     let base = side(".txt", amiss_wire::model::Adapter::Rst);
@@ -251,6 +256,7 @@ fn disposition_side(rows: &[(PromotableFindingKind, PolicyDisposition)]) -> Poli
         projection_assertions: Some(Vec::new()),
         protected_inventory: Vec::new(),
         finding_dispositions,
+        default_branch_aliases: None,
     })
 }
 
@@ -580,6 +586,7 @@ fn a_binding_drop_or_change_weakens_and_an_addition_does_not() {
             projection_assertions: Some(Vec::new()),
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
+            default_branch_aliases: None,
         })
     };
     let removed = |got: &amiss_scan::policy::Effects| {
@@ -623,6 +630,7 @@ fn suffix_selector_changes_keep_their_stable_root_identity() {
             projection_assertions: Some(Vec::new()),
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
+            default_branch_aliases: None,
         })
     };
     let absent = PolicySide::default();
@@ -653,4 +661,60 @@ fn suffix_selector_changes_keep_their_stable_root_identity() {
 
     let narrowed = effects(&side(None, Some(Adapter::Rst)), &selected, &scanned);
     assert_eq!(narrowed.controls[0].rule_id, "policy/include-tree-narrowed");
+}
+
+/// Dropping an old default-branch name sends the links naming it back to
+/// undecided on both sides, so it weakens the policy at the policy file, while
+/// keeping or adding one does not.
+#[test]
+fn a_dropped_default_branch_alias_weakens_and_an_addition_does_not() {
+    let side = |aliases: &[BranchRef]| {
+        policy_side(ScannerPolicy {
+            schema: ScannerPolicySchema::Current,
+            document_includes: Vec::new(),
+            projection_assertions: Some(Vec::new()),
+            protected_inventory: Vec::new(),
+            finding_dispositions: Vec::new(),
+            default_branch_aliases: Some(aliases.to_vec()),
+        })
+    };
+    let removed = |got: &amiss_scan::policy::Effects| -> Vec<(String, Option<String>)> {
+        got.controls
+            .iter()
+            .filter(|row| row.kind == FindingKind::PolicyWeakened)
+            .map(|row| {
+                (
+                    row.rule_id.clone(),
+                    row.control_path
+                        .as_ref()
+                        .and_then(|path| path.as_str().map(str::to_owned)),
+                )
+            })
+            .collect()
+    };
+    let scanned: fn(&str) -> InventoryState = |_| InventoryState::Scanned;
+    let master = branch_ref!("refs/heads/master");
+    let trunk = branch_ref!("refs/heads/trunk");
+
+    let dropped = effects(
+        &side(&[master.clone(), trunk.clone()]),
+        &side(std::slice::from_ref(&trunk)),
+        &scanned,
+    );
+    assert_eq!(
+        removed(&dropped),
+        vec![(
+            "policy/default-branch-alias-removed/master".to_owned(),
+            Some(".amiss/scanner-policy.json".to_owned())
+        )]
+    );
+    let added = effects(
+        &side(std::slice::from_ref(&trunk)),
+        &side(&[master, trunk]),
+        &scanned,
+    );
+    assert!(
+        removed(&added).is_empty(),
+        "declaring another name is not weakening"
+    );
 }

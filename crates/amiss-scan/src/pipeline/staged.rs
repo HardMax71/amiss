@@ -120,16 +120,17 @@ fn not_evaluated(
 fn staged_policy(
     repo: &Repository,
     git_resources: &mut GitResources,
-    base_scan: &mut ScanResources,
-    candidate_scan: &mut ScanResources,
+    (base_scan, candidate_scan): (&mut ScanResources, &mut ScanResources),
     setup_shell: &SetupShell,
     base_placeholder: &GitSnapshotIdentity,
     base_tree: &Oid,
     index: &amiss_git::LogicalIndex,
+    forge: Option<&ForgeContext>,
 ) -> PipelineResult<(
     crate::policy::PolicySide,
     crate::policy::PolicySide,
     crate::policy::Includes,
+    Option<ForgeContext>,
 )> {
     let bail = |details: Vec<ErrorDetail>| {
         let mut setup = setup_shell.with(
@@ -156,7 +157,8 @@ fn staged_policy(
         .map_err(bail)?,
     };
     let includes = crate::policy::Includes::union(&base, &candidate);
-    Ok((base, candidate, includes))
+    let forge = crate::policy::aliased(forge, &candidate);
+    Ok((base, candidate, includes, forge))
 }
 
 /// The synthetic candidate identity claims `complete-logical-index`, so a
@@ -413,15 +415,15 @@ fn staged_index_result(
     )?;
     let mut base_scan = ScanResources::new(scan_limits);
     let mut candidate_scan = ScanResources::new(scan_limits);
-    let (base_policy, candidate_policy, includes) = staged_policy(
+    let (base_policy, candidate_policy, includes, forge) = staged_policy(
         repo,
         &mut git_resources,
-        &mut base_scan,
-        &mut candidate_scan,
+        (&mut base_scan, &mut candidate_scan),
         setup_shell,
         &base_placeholder,
         &base_tree.0,
         &index,
+        forge,
     )?;
     let mut outcomes = CandidateOutcomes::default();
     let (candidate_discovery, candidate_side, candidate_failures) = staged_candidate(
@@ -429,7 +431,7 @@ fn staged_index_result(
         &mut git_resources,
         &mut candidate_scan,
         engine,
-        forge,
+        forge.as_ref(),
         crate::semantic::View {
             labels: external.semantic.labels.as_ref(),
             routes: Some(external.semantic.routes.as_ref()),
@@ -450,7 +452,7 @@ fn staged_index_result(
         &mut git_resources,
         &mut base_scan,
         engine,
-        forge,
+        forge.as_ref(),
         crate::semantic::View {
             labels: external.semantic.labels.as_ref(),
             routes: None,

@@ -11,6 +11,7 @@ use amiss_wire::model::Digest;
 use amiss_wire::model::{Adapter, Oid, RepoPath};
 use amiss_wire::report::{ErrorDetail, model::AnalysisErrorCode};
 
+use crate::resolve::ForgeContext;
 use crate::resources::ScanResources;
 use crate::{Error, lfs};
 
@@ -20,6 +21,22 @@ use crate::{Error, lfs};
 pub struct PolicySide {
     pub digest: Option<Digest>,
     pub policy: Option<ScannerPolicy>,
+}
+
+/// The forge identity a run reads same-repository URLs under: the one the
+/// runner claims, with the old default-branch names the candidate policy
+/// declares. Both sides are read under the candidate's names, the way they
+/// are read under its router declarations, so the commit that declares one is
+/// not charged with the links it makes readable.
+#[must_use]
+pub fn aliased(forge: Option<&ForgeContext>, candidate: &PolicySide) -> Option<ForgeContext> {
+    let mut context = forge?.clone();
+    context.default_aliases = candidate
+        .policy
+        .as_ref()
+        .and_then(|policy| policy.default_branch_aliases.clone())
+        .unwrap_or_default();
+    Some(context)
 }
 
 /// The union of both sides' exact, tree, and suffix includes, which fixes

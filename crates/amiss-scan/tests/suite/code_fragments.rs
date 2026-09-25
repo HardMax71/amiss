@@ -92,6 +92,7 @@ fn run(
         .unwrap(),
         candidate_ref: Some(branch_ref!("refs/heads/main")),
         default_ref: Some(branch_ref!("refs/heads/main")),
+        default_aliases: Vec::new(),
     };
     let shell = SetupShell {
         engine: engine(),

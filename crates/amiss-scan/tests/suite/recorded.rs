@@ -58,6 +58,7 @@ fn spec_to_rest() -> ForgeContext {
         .unwrap(),
         candidate_ref: Some(branch_ref!("refs/heads/main")),
         default_ref: Some(branch_ref!("refs/heads/main")),
+        default_aliases: Vec::new(),
     }
 }
 

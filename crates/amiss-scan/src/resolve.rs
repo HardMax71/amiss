@@ -78,7 +78,8 @@ pub struct Intent {
 
 /// The trusted run context for same-repository recognition: the declared
 /// host, dialect and object format, lowercase owner and repository, the two
-/// exact full branch refs.
+/// exact full branch refs, and the old names the candidate policy declares
+/// for the default branch.
 /// Without it every absolute forge URL remains an external URL.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForgeContext {
@@ -87,6 +88,7 @@ pub struct ForgeContext {
     pub repository: RepositoryIdentity,
     pub candidate_ref: Option<BranchRef>,
     pub default_ref: Option<BranchRef>,
+    pub default_aliases: Vec<BranchRef>,
 }
 
 /// Referenced targets are read once per path and Git object within one scan

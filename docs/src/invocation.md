@@ -147,7 +147,9 @@ rather than degrading silently.
 no `--target-ref`, and the report's target stays null. No spelling of these flags turns a
 CLI run into a provider-authenticated one. A URL naming the declared default branch while
 another candidate is under test is recognized and reported as `unsupported-version-scope`,
-not resolved. Full lowercase commit IDs must match `--object-format` and resolve only through that
+not resolved. A repository whose default branch was renamed lists the old names in its policy's
+`default_branch_aliases`, and a URL naming one reads as the default branch;
+[Controls and policy](controls.md) has the key. Full lowercase commit IDs must match `--object-format` and resolve only through that
 exact commit's locally available objects. A fully walked tree may prove absence; an unavailable
 commit, tree, or target retains its exact ID and contained path as unsupported version evidence. A
 branch whose spelling is also a full ID is refused as ambiguous. Without the identity group, forge

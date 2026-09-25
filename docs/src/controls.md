@@ -57,20 +57,30 @@ with policies written before projections existed and the file valid only whole:
   "protected_inventory": ["docs/install.md"],
   "finding_dispositions": [
     { "finding_kind": "explicit-target-missing", "disposition": "fail" }
-  ]
+  ],
+  "default_branch_aliases": ["refs/heads/master"]
 }
 ```
 
 The first tree include readmits a subtree the built-in skip list would drop, which is
 [Discovery](discovery.md)'s monorepo lever. The second admits only `.txt` descendants of
 `docs` and reads them as reStructuredText. The document include reads one extensionless file
-under the markdown grammar. The protected path makes its removal a finding, and the disposition
-row promotes one kind to `fail`. The
+under the markdown grammar. The protected path makes its removal a finding, the disposition
+row promotes one kind to `fail`, and the alias says the default branch used to be called
+`master`. The
 [scanner-policy schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-policy.schema.json)
 closes the grammar, and each array keeps the sort order the schema states. The strictness
 also sets the upgrade order: an engine that predates a policy field refuses the whole file
 and leaves the run incomplete, so a repository grows its policy only after every engine
 reading it has learned the field.
+
+`default_branch_aliases` is optional and lists old names of the default branch as full refs,
+sorted, at most 16. A forge serves a renamed branch's URLs at the new name, so a same-repository
+URL naming an old name reads as the default branch: it resolves against the tree while the
+default branch is under test, and stays unread as another version while a feature branch is. The
+Kubernetes community repository is the case, where 1,102 of 1,192 self-links still say `master`.
+Both sides are read under the names the candidate declares, the way router declarations are, and
+dropping one is `policy-weakened` under `policy/default-branch-alias-removed/<name>`.
 
 A projection assertion is owned by the policy, under the stable identity `(document, name)`.
 The `code-text-v1` sources select either an inclusive one-based line interval from a tracked regular
