@@ -279,9 +279,11 @@ is stated there.
 
 When a run blocks, use the grouped feedback to orient, then read the exact JSON findings for
 repair evidence. The Action and human views show at most ten Fix and Check items combined, in
-engine order, with one overflow line; only a displayed Fix with a candidate text location
-becomes a file annotation, while Checks and pre-existing inventory stay in the summary and
-report. If the scan failed, feedback is unavailable and at most ten retained errors are
+engine order, then at most ten pre-existing items in a window of their own, each window with its
+own overflow line, so a run with many new Fixes still names the backlog item that blocks it. Only
+a displayed Fix with a candidate text location becomes a file annotation, while Checks and
+pre-existing inventory stay in the summary and report, and every control byte a path carries
+reaches the annotation escaped. If the scan failed, feedback is unavailable and at most ten retained errors are
 annotated instead. The blocking rows remain the report's `errors` and findings whose
 `effective_disposition` is `fail`, and the complete grouped and raw sets always remain in the
 report. The Action's `report` output names that JSON file, so a later step reads it in place
