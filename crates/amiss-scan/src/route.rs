@@ -73,8 +73,8 @@ pub(crate) const MKDOCS: RouteRule = RouteRule {
     serves: &[Spelling::DirectoryUrl],
 };
 use amiss_wire::controls::TargetKind;
-use amiss_wire::resolution::InvalidReference;
 use amiss_wire::resolution::Resolution;
+use amiss_wire::resolution::{InvalidReference, UnsupportedSemantics};
 use amiss_wire::uri::decode_component;
 
 pub(crate) const SPHINX: RouteRule = RouteRule {
@@ -1045,6 +1045,11 @@ pub(crate) fn normalized_path_under(
             }
             _ => {}
         }
+    }
+    if resolved.is_empty() && !is_image {
+        return Err(Resolution::UnsupportedSemantics(
+            UnsupportedSemantics::RepositoryRoot,
+        ));
     }
     let Some(joined) = RepoPath::from_bytes(resolved) else {
         return Err(Resolution::Invalid {

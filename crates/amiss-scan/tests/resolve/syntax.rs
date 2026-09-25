@@ -9,6 +9,67 @@ use amiss_wire::resolution::{
 
 use crate::support::bed;
 
+/// A destination that normalizes to nothing names the repository root, which
+/// every snapshot holds and no repository path spells, so it is declined
+/// rather than called invalid. Climbing past the root still escapes, and an
+/// image of a directory is still no image.
+#[test]
+fn a_destination_naming_the_root_is_declined_as_the_repository_root() {
+    let mut bed = bed();
+    for (document, is_image, destination, want) in [
+        (
+            "README.md",
+            false,
+            ".",
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::RepositoryRoot),
+        ),
+        (
+            "README.md",
+            false,
+            "./",
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::RepositoryRoot),
+        ),
+        (
+            "docs/guide.md",
+            false,
+            "..",
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::RepositoryRoot),
+        ),
+        (
+            "docs/guide.md",
+            false,
+            "../",
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::RepositoryRoot),
+        ),
+        (
+            "docs/guide.md",
+            false,
+            "../..",
+            Resolution::Invalid {
+                reason: InvalidReference::PathTraversal,
+            },
+        ),
+        (
+            "docs/guide.md",
+            true,
+            "..",
+            Resolution::Invalid {
+                reason: InvalidReference::Syntax,
+            },
+        ),
+    ] {
+        let (intent, row) = bed
+            .run_as(Adapter::Markdown, None, document, is_image, destination)
+            .unwrap_or_else(|_defect| panic!("resolve {destination}"));
+        assert_eq!(row, want, "{document}: {destination}");
+        assert_eq!(
+            intent.kind,
+            IntentKind::Unsupported,
+            "{document}: {destination}"
+        );
+    }
+}
+
 #[test]
 fn component_splitting_follows_rfc_order() {
     let mut bed = bed();

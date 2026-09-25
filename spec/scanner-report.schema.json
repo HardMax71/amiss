@@ -2845,7 +2845,7 @@
       }
     },
     "UnsupportedSemanticsResolution": {
-      "description": "A reference whose meaning this run did not evaluate. The reason is descriptive, so the set grows inside the major: this engine writes query, code-fragment, fragment, site-route, unmodelled-route, network-path, attribute-dependent, duplicate-label or external-inventory, and a consumer that meets another spelling keeps it and still reads the unsupported-semantics kind beside it. A reason that located a target carries it; query, code-fragment and fragment do, and fragment's target is always a blob.",
+      "description": "A reference whose meaning this run did not evaluate. The reason is descriptive, so the set grows inside the major: this engine writes query, code-fragment, fragment, site-route, unmodelled-route, network-path, attribute-dependent, duplicate-label, external-inventory or repository-root, and a consumer that meets another spelling keeps it and still reads the unsupported-semantics kind beside it. A reason that located a target carries it; query, code-fragment and fragment do, and fragment's target is always a blob.",
       "type": "object",
       "additionalProperties": false,
       "required": [

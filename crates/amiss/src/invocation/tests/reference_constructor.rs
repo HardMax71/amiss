@@ -259,6 +259,14 @@ fn assert_split_outcome(intent: &Intent, row: &Resolution<RepoPath>, expected: &
             );
             assert_eq!(expected_path, None, "{id}");
         }
+        "repository-root" => {
+            assert_eq!(
+                row,
+                &Resolution::UnsupportedSemantics(UnsupportedSemantics::RepositoryRoot),
+                "{id}"
+            );
+            assert_eq!(expected_path, None, "{id}");
+        }
         other => panic!("{id}: unknown split status {other}"),
     }
 }
