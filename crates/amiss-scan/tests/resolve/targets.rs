@@ -8,7 +8,7 @@ use amiss_wire::controls::ResourceName;
 use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::resolution::Resolution;
-use amiss_wire::resolution::{BlobContent, BlobMode, Target, UnsupportedSemantics};
+use amiss_wire::resolution::{BlobContent, BlobMode, BlobTarget, Target, UnsupportedSemantics};
 
 use crate::support::{POINTER, bed, bed_with, fixture, git};
 
@@ -218,20 +218,46 @@ fn a_reused_target_cache_tracks_object_and_scan_scope() {
     assert_eq!(bed.scan_resources.line_fragment_bytes(), changed_len);
 }
 
+/// One target past its own ceiling costs that target's bytes and nothing
+/// else: its path resolves unread, and a fragment into it stays unsupported.
+/// The snapshot total still bounds what the run reads.
 #[test]
 fn target_budgets_bound_resolution() {
     let mut bed = bed_with(ScanLimits {
         referenced_target_blob_bytes: 2,
         ..ScanLimits::CONTRACT
     });
-    let got = bed.run_as(Adapter::Markdown, None, "docs/guide.md", false, "data.json");
-    assert_eq!(
-        got,
-        Err(Error::ResourceLimit {
-            resource: ResourceName::ReferencedTargetBlobBytes,
-            configured_limit: 2,
-            observed_lower_bound: 3,
-        })
+    let (_, got) = bed
+        .run_as(Adapter::Markdown, None, "docs/guide.md", false, "data.json")
+        .unwrap_or_else(|_defect| panic!("a target past its ceiling still resolves"));
+    assert!(
+        matches!(
+            &got,
+            Resolution::Resolved {
+                target: Target::Blob(BlobTarget {
+                    content: BlobContent::Available { .. },
+                    ..
+                })
+            }
+        ),
+        "{got:?}"
+    );
+    assert_eq!(bed.scan_resources.target_bytes(), 0, "nothing was read");
+    let (_, fragment) = bed
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "data.json#L1",
+        )
+        .unwrap_or_else(|_defect| panic!("a fragment into it is declined"));
+    assert!(
+        matches!(
+            fragment,
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::CodeFragment(_))
+        ),
+        "{fragment:?}"
     );
 
     let mut bed = bed_with(ScanLimits {

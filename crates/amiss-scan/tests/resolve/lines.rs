@@ -1,6 +1,6 @@
+use amiss_scan::ScanLimits;
 use amiss_scan::resolve::TARGET_LINE_PROJECTION_DOMAIN;
-use amiss_scan::{Error, ScanLimits};
-use amiss_wire::controls::{GitMode, ResourceName};
+use amiss_wire::controls::GitMode;
 use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 use amiss_wire::model::{Adapter, ForgeDialect};
 use amiss_wire::resolution::Resolution;
@@ -450,21 +450,24 @@ fn distinct_line_selections_are_bounded_and_cached() {
         "an identical selection reuses its cached projection"
     );
 
-    let crossing = bed.run_as(
-        Adapter::Markdown,
-        None,
-        "docs/guide.md",
-        false,
-        "../src/lines.rs#L3",
+    let crossing = bed
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "../src/lines.rs#L3",
+        )
+        .unwrap_or_else(|_defect| panic!("a range past the budget is declined, not fatal"))
+        .1;
+    assert!(
+        matches!(
+            crossing,
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::CodeFragment(_))
+        ),
+        "{crossing:?}"
     );
-    assert_eq!(
-        crossing,
-        Err(Error::ResourceLimit {
-            resource: ResourceName::AggregateLineFragmentEvaluationBytesPerSnapshot,
-            configured_limit: target_bytes,
-            observed_lower_bound: target_bytes.saturating_mul(2),
-        })
-    );
+    assert_eq!(bed.scan_resources.line_fragment_bytes(), target_bytes);
 
     let mut missing_bed = bed_with(ScanLimits {
         aggregate_line_fragment_evaluation_bytes_per_snapshot: target_bytes,
