@@ -235,7 +235,9 @@ working copy hides, where `Guide.md` opens locally and resolves nowhere on the t
 forge and Linux CI read. A repository holding both spellings names a real ambiguity and
 stays bare. A lone reference whose written path part is the missed intent's exact tail
 turns that neighbor into the finding's `fix`, replacing only the bytes the author wrote
-while a fragment rides untouched beside them.
+while a fragment rides untouched beside them. A reference-style link's path is written in its
+definition, so the fix edits the definition, and references sharing one definition share that
+one edit, which is the one case where a finding over several occurrences carries a fix.
 
 When the missed path existed in the base tree and disappeared from the candidate, the same
 resolution also carries `same_object_at` if exactly one candidate-added entry has the identical

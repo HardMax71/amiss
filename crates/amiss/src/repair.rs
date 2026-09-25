@@ -237,6 +237,10 @@ fn contained(worktree: &Path, path: &Path) -> bool {
 fn splice(source: &[u8], rows: &[Fix]) -> Option<Vec<u8>> {
     let mut ordered: Vec<&Fix> = rows.iter().collect();
     ordered.sort_by_key(|fix| (fix.start, fix.end));
+    // References sharing one definition each carry the same edit to it.
+    ordered.dedup_by(|next, kept| {
+        (next.start, next.end, &next.replacement) == (kept.start, kept.end, &kept.replacement)
+    });
     for pair in ordered.windows(2) {
         let [first, second] = pair else {
             return None;
