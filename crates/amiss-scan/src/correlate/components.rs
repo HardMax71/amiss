@@ -1,7 +1,7 @@
 use sha2::Digest as _;
 use std::collections::{BTreeMap, HashMap};
 
-use amiss_wire::controls::TargetKind;
+use amiss_wire::controls::{GitMode, TargetKind};
 
 use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::Digest;
@@ -167,6 +167,91 @@ pub(crate) fn unique_path_pairs<I: Ord>(
             continue;
         };
         pairs.insert((*from).clone(), (*to).clone());
+    }
+    pairs
+}
+
+type Entries = BTreeMap<RepoPath, (GitMode, Oid)>;
+
+/// The files beneath `directory`, spelled relative to it.
+fn beneath<'a>(
+    entries: &'a Entries,
+    directory: &[u8],
+) -> impl Iterator<Item = (&'a [u8], &'a (GitMode, Oid))> {
+    let under = [directory, b"/"].concat();
+    entries
+        .range::<[u8], _>((
+            std::ops::Bound::Included(under.as_slice()),
+            std::ops::Bound::Unbounded,
+        ))
+        .map_while(move |(path, identity)| {
+            path.as_bytes()
+                .strip_prefix(under.as_slice())
+                .map(|rest| (rest, identity))
+        })
+        .filter(|(_, (mode, _))| *mode != GitMode::Tree)
+}
+
+/// A removed directory's unique counterpart when the candidate names files
+/// only, as an index does: the one added directory holding exactly its files,
+/// provided no other removed directory held the same tree.
+pub(crate) fn directory_pairs<'a>(
+    base: &Entries,
+    candidate: &Entries,
+    missing: impl Iterator<Item = &'a RepoPath>,
+) -> BTreeMap<RepoPath, RepoPath> {
+    let directories: BTreeMap<&RepoPath, &Oid> = missing
+        .filter_map(|path| {
+            base.get(path.as_bytes())
+                .filter(|(mode, _)| *mode == GitMode::Tree)
+                .map(|(_, tree)| (path, tree))
+        })
+        .collect();
+    if directories.is_empty() {
+        return BTreeMap::new();
+    }
+    let gone = |path: &RepoPath| {
+        !candidate.contains_key(path.as_bytes())
+            && beneath(candidate, path.as_bytes()).next().is_none()
+    };
+    let mut trees: BTreeMap<&Oid, Vec<&RepoPath>> = BTreeMap::new();
+    let mut holders: BTreeMap<&(GitMode, Oid), Vec<&RepoPath>> = BTreeMap::new();
+    for (path, identity) in base {
+        if identity.0 == GitMode::Tree {
+            trees.entry(&identity.1).or_default().push(path);
+        }
+    }
+    for (path, identity) in candidate {
+        holders.entry(identity).or_default().push(path);
+    }
+    let mut pairs = BTreeMap::new();
+    for (directory, tree) in directories {
+        let files: Vec<_> = beneath(base, directory.as_bytes()).collect();
+        let removed = trees
+            .get(tree)
+            .map_or(0, |held| held.iter().filter(|path| gone(path)).count());
+        let Some((first, identity)) = files.first() else {
+            continue;
+        };
+        let mut added = holders
+            .get(identity)
+            .into_iter()
+            .flatten()
+            .filter_map(|path| {
+                path.as_bytes()
+                    .strip_suffix(*first)
+                    .and_then(|stem| stem.strip_suffix(b"/"))
+            })
+            .filter(|stem| {
+                !base.contains_key(*stem)
+                    && beneath(base, stem).next().is_none()
+                    && beneath(candidate, stem).eq(files.iter().copied())
+            });
+        if let (1, Some(stem), None) = (removed, added.next(), added.next())
+            && let Some(moved) = RepoPath::from_bytes(stem.to_vec())
+        {
+            pairs.insert(directory.clone(), moved);
+        }
     }
     pairs
 }
