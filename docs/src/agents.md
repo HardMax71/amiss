@@ -70,3 +70,8 @@ This repository doubles as a Claude Code plugin marketplace. One command registe
 Installing the `amiss` plugin from that marketplace adds a skill that knows the
 invocation grammar, the exit classes, and the fix loop; its text is maintained at
 [`integrations/claude`](https://github.com/HardMax71/amiss/blob/main/integrations/claude/skills/amiss/SKILL.md).
+It also adds a hook the agent cannot skip: before any shell command that commits, the staged
+check runs under `enforce-introduced`, and a blocking or untrusted result stops the commit and
+hands the report back to the agent, which is how Claude Code's hooks refuse a tool call. A
+repository with no commit yet, or a machine without `amiss` on its path, commits unchecked, and
+the hook says so.
