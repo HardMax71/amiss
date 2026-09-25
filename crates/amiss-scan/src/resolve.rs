@@ -19,9 +19,9 @@ use crate::Error;
 use crate::declared::Declarations;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::{DocumentClassification, classify};
-use crate::published::anchors;
 use crate::published::redirected;
 use crate::published::unplaced;
+use crate::published::{anchors, antora_elsewhere};
 use crate::resources::{Aggregate, ScanResources};
 use crate::route::{directory, generator_alias, template_expression};
 
@@ -315,13 +315,12 @@ fn resolve_destination(
         is_image,
         path_part,
     );
-    if template_expression(semantic)
-        || (adapter == Adapter::AsciiDoc
-            && ((is_image && anchors.is_empty()) || placeholder(semantic, '{', '}')))
-    {
+    let elsewhere = adapter == Adapter::AsciiDoc
+        && antora_elsewhere(resolver.snapshot, document_path, construct, path_part);
+    if let Some(reason) = declined(adapter, is_image && anchors.is_empty(), elsewhere, semantic) {
         return Ok((
             unsupported_intent(query, fragment),
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
+            Resolution::UnsupportedSemantics(reason),
         ));
     }
 
@@ -503,6 +502,28 @@ fn repository_intent(
         external_scheme: None,
         query,
         fragment,
+    }
+}
+
+/// Why a destination is declined before any tree is asked: an Antora
+/// coordinate naming a catalogue the tree does not hold, or a value that
+/// arrives at build time, which is a template expression anywhere, and in
+/// `AsciiDoc` an attribute reference or an image no generator anchors, since
+/// `imagesdir` is an attribute too.
+fn declined(
+    adapter: Adapter,
+    unanchored_image: bool,
+    elsewhere: bool,
+    semantic: &str,
+) -> Option<UnsupportedSemantics<RepoPath>> {
+    if elsewhere {
+        Some(UnsupportedSemantics::ExternalInventory)
+    } else if template_expression(semantic)
+        || (adapter == Adapter::AsciiDoc && (unanchored_image || placeholder(semantic, '{', '}')))
+    {
+        Some(UnsupportedSemantics::AttributeDependent)
+    } else {
+        None
     }
 }
 

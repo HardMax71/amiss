@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use amiss_fixtures::CommitChain;
+use amiss_fixtures::{CommitChain, Staged, staged_repository};
 use amiss_git::Repository;
 use amiss_scan::pipeline::commit_pair;
 use amiss_scan::route::{DECLARABLE, ROUTERS, RouteRule, Spelling, candidates, spellings};
@@ -269,9 +269,9 @@ fn expected(rows: Vec<Outcome>) -> Vec<Outcome> {
 /// Under `antora.yml`, a resource ID is anchored at the family directory of
 /// its module rather than beside the document: a page for an xref, the named
 /// family for a `$` coordinate, and the image family for an image. A page
-/// under a subdirectory still reaches the family root, a component
-/// coordinate stays outside this tree, and a document outside the component
-/// keeps the relative reading.
+/// under a subdirectory still reaches the family root, a coordinate naming the
+/// document's own component answers from this tree, and a document outside
+/// the component keeps the relative reading.
 #[test]
 fn an_antora_component_anchors_resource_ids_at_the_family_directory() {
     let chain = amiss_fixtures::antora_component().expect("the fixture stages");
@@ -321,7 +321,12 @@ fn an_antora_component_anchors_resource_ids_at_the_family_directory() {
             ResolutionTag::Missing,
             Some("docs/modules/api/images/absent.png"),
         ),
-        row(index, None, ResolutionTag::External, None),
+        row(
+            index,
+            Some("docs/modules/install/pages/steps.adoc"),
+            ResolutionTag::Resolved,
+            Some("docs/modules/install/pages/steps.adoc"),
+        ),
         row(
             "docs/modules/api/pages/sub/deep.adoc",
             Some(index),
@@ -334,6 +339,54 @@ fn an_antora_component_anchors_resource_ids_at_the_family_directory() {
             ResolutionTag::Missing,
             Some("guide/index.adoc"),
         ),
+    ]);
+    assert_eq!(outcomes(&chain), want);
+}
+
+/// A version or component coordinate answers from the roots this tree holds
+/// for that component version: the document's own version, and another
+/// component in whatever version the tree holds. One no root answers, another
+/// version or a component declared in another repository, is declined.
+#[test]
+fn an_antora_coordinate_answers_from_the_component_version_it_names() {
+    let chain = staged_repository(&[
+        ("README.adoc", Staged::File(b"= R\n")),
+        (
+            "docs/antora.yml",
+            Staged::File(b"name: comp\nversion: '1.0'\n"),
+        ),
+        (
+            "other/antora.yml",
+            Staged::File(b"name: other\nversion: ~\n"),
+        ),
+        (
+            "docs/modules/ROOT/pages/guide.adoc",
+            Staged::File(b"= Guide\n"),
+        ),
+        (
+            "other/modules/ROOT/pages/page.adoc",
+            Staged::File(b"= Page\n"),
+        ),
+        (
+            "docs/modules/ROOT/pages/index.adoc",
+            Staged::File(
+                b"= Index\n\n* xref:1.0@guide.adoc[a]\n* xref:2.0@guide.adoc[b]\n\
+                  * xref:other::page.adoc[c]\n* xref:gone::page.adoc[d]\n\
+                  * xref:other::gone.adoc[e]\n",
+            ),
+        ),
+    ])
+    .expect("the fixture stages");
+    let index = "docs/modules/ROOT/pages/index.adoc";
+    let guide = "docs/modules/ROOT/pages/guide.adoc";
+    let page = "other/modules/ROOT/pages/page.adoc";
+    let gone = "other/modules/ROOT/pages/gone.adoc";
+    let want = expected(vec![
+        row(index, Some(guide), ResolutionTag::Resolved, Some(guide)),
+        row(index, None, ResolutionTag::UnsupportedSemantics, None),
+        row(index, Some(page), ResolutionTag::Resolved, Some(page)),
+        row(index, None, ResolutionTag::UnsupportedSemantics, None),
+        row(index, Some(gone), ResolutionTag::Missing, Some(gone)),
     ]);
     assert_eq!(outcomes(&chain), want);
 }
@@ -679,8 +732,8 @@ fn a_mkdocs_site_reads_a_raw_html_destination_from_the_published_directory() {
 /// never read at all.
 #[test]
 fn an_asciidoc_document_publishes_the_identities_a_cross_reference_names() {
-    let chain = amiss_fixtures::staged_repository(&amiss_fixtures::ASCIIDOC_IDENTITIES)
-        .expect("the fixture stages");
+    let chain =
+        staged_repository(&amiss_fixtures::ASCIIDOC_IDENTITIES).expect("the fixture stages");
     let inline = "docs/inline.adoc";
     let literal = "docs/literal.adoc";
     let title = "docs/title.adoc";
@@ -1119,8 +1172,8 @@ fn a_module_mount_names_the_content_root_a_directory_key_would_have() {
 /// in a tree no site holds stays refused and contributes nothing.
 #[test]
 fn a_docusaurus_site_reads_the_comment_mdx_refuses() {
-    let chain = amiss_fixtures::staged_repository(&amiss_fixtures::DOCUSAURUS_COMMENTS)
-        .expect("the fixture stages");
+    let chain =
+        staged_repository(&amiss_fixtures::DOCUSAURUS_COMMENTS).expect("the fixture stages");
     let want: Vec<Outcome> = vec![row(
         "site/docs/page.mdx",
         Some("site/docs/guide.md"),
@@ -1137,8 +1190,8 @@ fn a_docusaurus_site_reads_the_comment_mdx_refuses() {
 /// file binding no address, configure no site, so the same link is missing.
 #[test]
 fn a_shared_configuration_name_is_hugo_only_where_its_bindings_say_so() {
-    let chain = amiss_fixtures::staged_repository(&amiss_fixtures::HUGO_CONFIG_SPELLINGS)
-        .expect("the fixture stages");
+    let chain =
+        staged_repository(&amiss_fixtures::HUGO_CONFIG_SPELLINGS).expect("the fixture stages");
     let want: Vec<Outcome> = vec![
         row(
             "site/content/docs/page.md",

@@ -328,7 +328,7 @@ fn record_publication(
 /// repository declares for its own directories.
 #[derive(Default)]
 struct Declared {
-    antora_components: BTreeMap<RepoPath, (String, bool)>,
+    antora_components: BTreeMap<RepoPath, crate::route::AntoraComponent>,
     source_suffixes: BTreeMap<Vec<u8>, BTreeSet<String>>,
     routers: BTreeMap<RepoPath, (String, Option<String>)>,
     published_roots: BTreeMap<Vec<u8>, Vec<(Vec<u8>, String)>>,
@@ -409,7 +409,7 @@ pub struct SnapshotDiscovery {
     pub asciidoc_included: BTreeSet<RepoPath>,
     /// Each `antora.yml` the tree holds, by its own path, against the
     /// component name it declares and whether it reserves an `ext` block.
-    pub antora_components: BTreeMap<RepoPath, (String, bool)>,
+    pub antora_components: BTreeMap<RepoPath, crate::route::AntoraComponent>,
     /// Each Sphinx root whose `conf.py` names the suffixes it reads, by the
     /// directory holding that file.
     pub source_suffixes: BTreeMap<Vec<u8>, BTreeSet<String>>,

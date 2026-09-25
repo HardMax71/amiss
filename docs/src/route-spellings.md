@@ -100,7 +100,7 @@ is how sphinx's own repository carries 176 `conf.py` and declares one site.
 <!-- amiss-doc-contract:declared-routers:end -->
 
 `antora-resource` reads an AsciiDoc destination as an Antora resource ID,
-`[module:][family$]relative`, in a document under `modules/<name>/` of the component whose
+`[version@][component:][module:][family$]relative`, in a document under `modules/<name>/` of the component whose
 root holds `antora.yml`. The relative part is anchored at the family directory of the named
 module, or of the document's own module when none is named. So `xref:index.adoc[]` in
 `modules/api/nav.adoc` is `modules/api/pages/index.adoc`, `include::partial$success.adoc[]`
@@ -111,17 +111,23 @@ the page family and an image to the image family. An include without a family co
 stays relative to the file that includes it, which is Antora's own compatibility rule for the
 plain include. This rule replaces the relative reading rather than following it: a page under
 `pages/sub/` that writes `xref:index.adoc[]` means the family root, and Antora never looks
-beside the file. A version coordinate (`2.0@`) or a component coordinate
-(`component:module:page.adoc`) names a catalogue this tree does not hold, so such a
-destination keeps the reading it had before, and a `./` or `../` relative is Antora's own
-page-relative form and stays beside the document.
+beside the file. A version or component coordinate is answered from the source roots this
+tree holds for that component version: `xref:1.0@guide.adoc[]` under a descriptor saying
+`version: '1.0'` is the component's own `guide.adoc`, and `xref:other::page.adoc[]` is a page of
+the `ROOT` module of a component declared elsewhere in the tree, in whatever version the tree
+holds, since a coordinate without a version means the latest one. A coordinate no root in the
+tree answers, another version or a component whose descriptor lives in another repository,
+names a catalogue this engine does not build, so it is `unsupported-reference-semantics` with
+the external-inventory reason rather than a path or a URL. A `./` or `../` relative is
+Antora's own page-relative form and stays beside the document.
 
 A component is not one directory. Antora assembles it from every source root whose
 `antora.yml` spells the same name, so a module coordinate is answered by whichever of those
 roots holds the resource. Spring Boot has four roots and all four declare `name: boot`, which
 is why `xref:gradle-plugin:packaging-oci-image.adoc` written under `documentation/` means a
-page stored under `build-plugin/`. The name is the one thing read out of the descriptor, a
-plain scalar on a line of its own, and a root naming another component answers nothing. The
+page stored under `build-plugin/`. The name and the version are what is read out of the
+descriptor, each a plain scalar on a line of its own, and a root naming another component or
+version answers nothing for a coordinate that did not name it. The
 document's own root is asked first, so a finding still names the path under the root the
 author wrote in.
 
