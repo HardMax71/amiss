@@ -36,7 +36,9 @@ Exit 0 passes. Exit 1 blocks: the blocking rows are `errors[]` and the findings 
 to fix it, and `location` names the exact source position. A finding with a `fix`
 carries a proven edit, and `amiss fix` with the same arguments minus `--format` applies
 every one; stage the result and check again. Exit 2 means the run itself could not be
-trusted, and the error rows say why. Fix what the row points at; never weaken
+trusted, and the error rows say why. If CI passes `--repository`, `--ref` and
+`--default-branch-ref`, pass the same three here, or URLs into this repository's own
+files go unchecked. Fix what the row points at; never weaken
 `.amiss/scanner-policy.json` to silence a finding, and leave `.amiss/router.yml` to a
 maintainer, since it states which router publishes the tree.
 ```
