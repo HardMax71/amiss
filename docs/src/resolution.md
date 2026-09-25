@@ -361,7 +361,12 @@ Two more spellings under that declaration are read the same way: a heading whose
 `<!-- md:setting name -->` comment a hook expands, and a `=== "Title"` content tab the
 tabbed extension slugs under settings that live in `mkdocs.yml`. Neither identity is in the
 tree, so neither page proves absence.
-An option-free `literalinclude` contributes no parsed headings. The graph
+An option-free `literalinclude` contributes no parsed headings. Its selection is checked the
+way a line fragment is: `:lines: 5-8` must fall inside the file and tracks those lines alone,
+a list or an open end reads as the span from its first selected line to its last, and a
+`:pyobject:` is a code fragment the run declines while still tracking the whole file. The
+range is spelled the way a run with no forge, or a GitHub or Gitea one, spells a line
+fragment, so under a GitLab or Bitbucket Data Center identity it goes unchecked. The graph
 is bounded by `references-per-document`, `parser-nesting`, and
 `aggregate-heading-anchor-evaluation-bytes-per-snapshot`. A cycle, an unscanned or non-local target,
 a build-time attribute, include options, or a nested parser context leaves the identities collected

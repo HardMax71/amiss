@@ -257,6 +257,7 @@ fn build(kind: ReferenceKind, target: &str, at: usize, start: usize, end: usize)
     Reference {
         kind,
         target: target.to_owned(),
+        selection: None,
         span: (at.saturating_add(start), at.saturating_add(end)),
         block: 0,
         block_span: (0, 0),

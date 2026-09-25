@@ -46,7 +46,7 @@ ripgrep	pass	24	0	69	0	0
 rust-book	pass	478	0	1538	0	32
 rust-by-example	pass	204	0	407	0	0
 scrapy	pass	90	0	1282	35	21
-sphinx	pass	170	0	527	17	2
+sphinx	pass	170	0	511	17	2
 spring-boot	pass	229	0	2897	0	1
 starlight	pass	380	1	656	1491	1
 superset	pass	1211	5	839	877	62

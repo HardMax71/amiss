@@ -94,11 +94,14 @@ impl ReferenceKind {
     }
 }
 
-/// One recognised reference, with the exact source text of its target.
+/// One recognised reference, with the exact source text of its target and the
+/// part of that target a `literalinclude` option selects, spelled as the line
+/// or object fragment the resolver reads.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reference {
     pub kind: ReferenceKind,
     pub target: String,
+    pub selection: Option<String>,
     pub span: (usize, usize),
     pub block: usize,
     pub block_span: (usize, usize),
@@ -208,6 +211,7 @@ fn read_block(
     body: &str,
 ) {
     let has_directive_body = body.lines().skip(1).any(|line| !line.trim().is_empty());
+    let literal_include = block.kind == Kind::Directive && opens_literal_include(body);
     let mut offset = 0_usize;
     let mut previous: Option<(usize, &str)> = None;
     let mut literal: Option<(usize, bool)> = None;
@@ -247,18 +251,8 @@ fn read_block(
                 title_underline(line, text).map(|character| (start, text, character))
             });
             if let Some((start, text, character)) = title {
-                let level = order
-                    .iter()
-                    .position(|held| *held == character)
-                    .map_or_else(
-                        || {
-                            order.push(character);
-                            order.len()
-                        },
-                        |found| found.saturating_add(1),
-                    );
                 extraction.titles.push(Title {
-                    level,
+                    level: title_level(order, character),
                     text: text.trim().to_owned(),
                     span: (
                         block.span.0.saturating_add(start),
@@ -285,6 +279,14 @@ fn read_block(
         } else {
             ""
         };
+        if let Some(selection) = include_selection(line).filter(|_| literal_include)
+            && let Some(last) = extraction
+                .references
+                .last_mut()
+                .filter(|last| last.block == index)
+        {
+            last.selection = Some(selection);
+        }
         for mut reference in references(chunk, at) {
             reference.block = index;
             reference.block_span = block.span;
@@ -370,6 +372,56 @@ fn literal_opener(line: &str) -> Option<bool> {
 }
 
 /// The name of the directive a line opens, `code-block` for `.. code-block::`.
+/// The level a title's underline character takes: its place in the order the
+/// document first used each character, recorded the first time it is seen.
+fn title_level(order: &mut Vec<char>, character: char) -> usize {
+    if let Some(found) = order.iter().position(|held| *held == character) {
+        return found.saturating_add(1);
+    }
+    order.push(character);
+    order.len()
+}
+
+/// Whether a directive block opens a `literalinclude`, the directive whose
+/// options select part of a file.
+fn opens_literal_include(body: &str) -> bool {
+    body.lines()
+        .next()
+        .and_then(|first| directive_name(first.trim_start()))
+        == Some("literalinclude")
+}
+
+/// The part of a file a `literalinclude` option selects, as a fragment: a
+/// `:lines:` spec as the span from its first to its last selected line,
+/// `L5-L8`, or `L5` where it runs on to the end, and a `:pyobject:` as the
+/// object's name.
+fn include_selection(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if let Some(name) = trimmed.strip_prefix(":pyobject:").map(str::trim) {
+        return (!name.is_empty() && !name.contains(char::is_whitespace)).then(|| name.to_owned());
+    }
+    let mut first: Option<u64> = None;
+    let mut last: Option<u64> = Some(0);
+    for part in trimmed.strip_prefix(":lines:")?.split(',') {
+        let (start, end) = part.split_once('-').unwrap_or((part, part));
+        let start = match start.trim() {
+            "" => 1,
+            written => written.parse().ok()?,
+        };
+        let end = match end.trim() {
+            "" => None,
+            written => Some(written.parse::<u64>().ok()?),
+        };
+        first = Some(first.map_or(start, |held| held.min(start)));
+        last = last.zip(end).map(|(held, end)| held.max(end));
+    }
+    let first = first?;
+    Some(match last.filter(|last| *last > first) {
+        Some(last) => format!("L{first}-L{last}"),
+        None => format!("L{first}"),
+    })
+}
+
 fn directive_name(trimmed: &str) -> Option<&str> {
     trimmed
         .strip_prefix(".. ")
