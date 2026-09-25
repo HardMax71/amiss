@@ -178,7 +178,10 @@ impl<'a> Resolver<'a> {
         document_path: &RepoPath,
         occurrence: &crate::scanned::ScannedOccurrence,
     ) -> Result<(Intent, Resolution<RepoPath>, Option<String>), Error> {
-        if occurrence.occurrence.construct == SourceConstruct::RstRefRole {
+        if matches!(
+            occurrence.occurrence.construct,
+            SourceConstruct::RstRefRole | SourceConstruct::RstNumrefRole
+        ) {
             return self.resolve_label(
                 document_path,
                 &occurrence.occurrence.semantic_destination,

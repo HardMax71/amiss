@@ -451,7 +451,9 @@ fn role_occurrence(entry: &ScannedOccurrence) -> bool {
     matches!(
         entry.occurrence.construct,
         SourceConstruct::RstDocRole
+            | SourceConstruct::RstDownloadRole
             | SourceConstruct::RstRefRole
+            | SourceConstruct::RstNumrefRole
             | SourceConstruct::RstTocTreeEntry
     )
 }

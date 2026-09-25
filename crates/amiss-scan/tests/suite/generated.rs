@@ -495,3 +495,36 @@ fn a_sphinx_extension_declares_the_labels_it_builds() {
         &Resolution::Missing(Missing::LabelNotDeclared)
     );
 }
+
+/// A `:download:` names a file beside its document, or under the source root
+/// when it opens with a slash, and a `:numref:` is a label like a `:ref:`.
+#[test]
+fn a_download_names_a_file_and_a_numref_a_label() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("docs/conf.py", "project = 'probe'\n"),
+            ("docs/files/data.csv", "a,b\n"),
+            ("docs/guide/run.py", "print()\n"),
+            (
+                "docs/guide/index.rst",
+                ".. _fig-arch:\n\nGuide\n=====\n\n:download:`run.py`\n\n:download:`/files/data.csv`\n\n:download:`gone.py`\n\n:numref:`fig-arch`\n",
+            ),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    for line in [6, 8, 12] {
+        assert!(
+            matches!(
+                answer(&rows, "docs/guide/index.rst", line),
+                Resolution::Resolved { .. }
+            ),
+            "line {line}"
+        );
+    }
+    assert!(matches!(
+        answer(&rows, "docs/guide/index.rst", 10),
+        Resolution::Missing(Missing::PathNotFound { .. })
+    ));
+}

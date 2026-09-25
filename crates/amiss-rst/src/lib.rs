@@ -51,10 +51,10 @@ pub struct Block {
     pub indent: usize,
 }
 
-/// The reference forms the specification defines, plus the two Sphinx roles
-/// every Sphinx project writes. `:doc:` and `:ref:` are modelled by name and
-/// the grammar profile says so; every other role stays an open extension
-/// point, declared rather than guessed at.
+/// The reference forms the specification defines, plus the Sphinx roles that
+/// name a document, a file or a label. `:doc:`, `:download:`, `:ref:` and
+/// `:numref:` are modelled by name and the grammar profile says so; every
+/// other role stays an open extension point, declared rather than guessed at.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReferenceKind {
     InlineHyperlink,
@@ -63,8 +63,11 @@ pub enum ReferenceKind {
     Include,
     FileOption,
     DocRole,
+    DownloadRole,
     RefRole,
+    NumrefRole,
     TocTreeEntry,
+    TargetOption,
 }
 
 impl ReferenceKind {
@@ -77,8 +80,11 @@ impl ReferenceKind {
             Self::Include => "rst-include-directive",
             Self::FileOption => "rst-file-option",
             Self::DocRole => "rst-doc-role",
+            Self::DownloadRole => "rst-download-role",
             Self::RefRole => "rst-ref-role",
+            Self::NumrefRole => "rst-numref-role",
             Self::TocTreeEntry => "rst-toctree-entry",
+            Self::TargetOption => "rst-target-option",
         }
     }
 

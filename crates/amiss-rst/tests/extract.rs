@@ -72,7 +72,7 @@ fn an_unregistered_role_is_never_a_reference_because_the_role_set_is_open() {
 }
 
 #[test]
-fn the_two_sphinx_roles_are_modelled_by_name() {
+fn the_doc_and_ref_roles_are_modelled_by_name() {
     assert_eq!(
         kinds("See :doc:`guide` and :ref:`some-label` for more.\n"),
         vec![
@@ -107,6 +107,38 @@ fn the_two_sphinx_roles_are_modelled_by_name() {
             (ReferenceKind::InlineHyperlink, "guide.rst".to_owned()),
             (ReferenceKind::DocRole, "intro".to_owned()),
             (ReferenceKind::RefRole, "setup label".to_owned()),
+        ],
+    );
+}
+
+/// A downloaded file, a numbered figure's label, the image a substitution
+/// names, and the link a figure opens each name a target of their own, so
+/// none of them is dropped without a row.
+#[test]
+fn download_numref_substitution_images_and_figure_targets_are_read() {
+    assert_eq!(
+        kinds("Get :download:`the script <../scripts/run.py>` or :download:`data.csv`.\n"),
+        vec![
+            (ReferenceKind::DownloadRole, "../scripts/run.py".to_owned()),
+            (ReferenceKind::DownloadRole, "data.csv".to_owned()),
+        ],
+    );
+    assert_eq!(
+        kinds("See :numref:`Figure %s <fig-arch>` and :numref:`fig-arch`.\n"),
+        vec![
+            (ReferenceKind::NumrefRole, "fig-arch".to_owned()),
+            (ReferenceKind::NumrefRole, "fig-arch".to_owned()),
+        ],
+    );
+    assert_eq!(
+        kinds(".. |logo| image:: images/logo.png\n"),
+        vec![(ReferenceKind::Image, "images/logo.png".to_owned())],
+    );
+    assert_eq!(
+        kinds(".. figure:: arch.png\n   :target: guide.html\n\n   Caption.\n"),
+        vec![
+            (ReferenceKind::Image, "arch.png".to_owned()),
+            (ReferenceKind::TargetOption, "guide.html".to_owned()),
         ],
     );
 }

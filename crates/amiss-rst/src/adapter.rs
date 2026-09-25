@@ -110,7 +110,10 @@ const fn construct(kind: ReferenceKind) -> SourceConstruct {
         ReferenceKind::Include => SourceConstruct::RstIncludeDirective,
         ReferenceKind::FileOption => SourceConstruct::RstFileOption,
         ReferenceKind::DocRole => SourceConstruct::RstDocRole,
+        ReferenceKind::DownloadRole => SourceConstruct::RstDownloadRole,
         ReferenceKind::RefRole => SourceConstruct::RstRefRole,
+        ReferenceKind::NumrefRole => SourceConstruct::RstNumrefRole,
+        ReferenceKind::TargetOption => SourceConstruct::RstTargetOption,
         ReferenceKind::TocTreeEntry => SourceConstruct::RstTocTreeEntry,
     }
 }

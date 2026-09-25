@@ -64,6 +64,12 @@ pub enum SourceConstruct {
     RstRefRole,
     #[strum(serialize = "rst-toctree-entry")]
     RstTocTreeEntry,
+    #[strum(serialize = "rst-download-role")]
+    RstDownloadRole,
+    #[strum(serialize = "rst-numref-role")]
+    RstNumrefRole,
+    #[strum(serialize = "rst-target-option")]
+    RstTargetOption,
     #[strum(serialize = "markdown-link-reference-definition")]
     LinkReferenceDefinition,
     #[strum(serialize = "markdown-mdbook-include")]
