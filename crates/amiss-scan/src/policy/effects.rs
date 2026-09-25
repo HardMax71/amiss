@@ -93,26 +93,39 @@ fn removed_projection_assertions(
         .collect()
 }
 
-/// The old default-branch names the base declared that the candidate does not.
-/// Both sides are read under the candidate's names, so a dropped one sends
-/// the links naming it back to undecided on both sides at once, and a broken
-/// link it was holding open leaves the report with nothing saying it went.
-fn removed_aliases(
+/// The weakening a policy file shows about itself rather than about a path.
+/// An old default-branch name the base declared and the candidate drops sends
+/// the links naming it back to undecided, and a renderer pin the candidate
+/// drops, or widens by a name the base's pin did not hold, lets identities
+/// back in. Both sides are read under the candidate's names and pin, so either
+/// change takes away on both sides at once a finding it was holding open.
+fn file_weakening(
     base: Option<&ScannerPolicy>,
     candidate: Option<&ScannerPolicy>,
 ) -> Vec<ControlSeed> {
-    let declared = |policy: Option<&ScannerPolicy>| {
+    let aliases = |policy: Option<&ScannerPolicy>| {
         policy
             .and_then(|policy| policy.default_branch_aliases.clone())
             .unwrap_or_default()
     };
-    let kept = declared(candidate);
-    declared(base)
+    let kept = aliases(candidate);
+    let mut rules: Vec<String> = aliases(base)
         .into_iter()
         .filter(|alias| !kept.contains(alias))
-        .map(|alias| ControlSeed {
+        .map(|alias| format!("policy/default-branch-alias-removed/{}", alias.name()))
+        .collect();
+    let pinned = base.and_then(|policy| policy.anchor_renderers.as_ref());
+    let pin = candidate.and_then(|policy| policy.anchor_renderers.as_ref());
+    if let Some(pinned) = pinned
+        && pin.is_none_or(|pin| pin.iter().any(|name| !pinned.contains(name)))
+    {
+        rules.push("policy/anchor-renderers-widened".to_owned());
+    }
+    rules
+        .into_iter()
+        .map(|rule_id| ControlSeed {
             kind: FindingKind::PolicyWeakened,
-            rule_id: format!("policy/default-branch-alias-removed/{}", alias.name()),
+            rule_id,
             control_path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
         })
         .collect()
@@ -291,7 +304,7 @@ pub fn effects(
         base_assertions,
         candidate_assertions,
     ));
-    controls.extend(removed_aliases(base_policy, candidate_policy));
+    controls.extend(file_weakening(base_policy, candidate_policy));
     let base_raised = raised(base_policy);
     let candidate_raised = raised(candidate_policy);
     for (kind, strength) in &base_raised {

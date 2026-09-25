@@ -164,7 +164,14 @@ fn anchor_resolution(
         *slot = match charged {
             Ok(()) => retained_source(resolver.snapshot, path, adapter)
                 .map(|source| {
-                    expanded_anchors(resolver.snapshot, resolver.scan, path, adapter, source)
+                    expanded_anchors(
+                        resolver.snapshot,
+                        resolver.scan,
+                        path,
+                        adapter,
+                        source,
+                        resolver.renderers,
+                    )
                 })
                 .or_else(|| {
                     crate::scan::parse(adapter, body, allowance)
@@ -182,6 +189,7 @@ fn anchor_resolution(
                                     declared_anchors: &extraction.declared_anchors,
                                     transclusions: &extraction.transclusions,
                                 },
+                                resolver.renderers,
                             )
                         })
                 })
@@ -222,6 +230,7 @@ fn expanded_anchors(
     path: &RepoPath,
     adapter: Adapter,
     source: Source<'_>,
+    pin: Option<&BTreeSet<String>>,
 ) -> Anchors {
     let expanded = expand(snapshot, scan, path, adapter, source);
     let identities = AnchorIndex::new(anchor_set(
@@ -229,8 +238,11 @@ fn expanded_anchors(
         expanded.html_anchors.as_ref(),
         expanded.declared_anchors.as_ref(),
         |rule| {
-            rule.declared_by.is_empty()
-                || declared_root(snapshot, path.as_bytes(), rule.declared_by).is_some()
+            (rule.declared_by.is_empty()
+                || declared_root(snapshot, path.as_bytes(), rule.declared_by).is_some())
+                && pin
+                    .filter(|_| matches!(adapter, Adapter::Markdown | Adapter::Mdx))
+                    .is_none_or(|pin| pin.contains(rule.name))
         },
     ));
     // An AsciiDoc chapter renders inside the book that includes it.

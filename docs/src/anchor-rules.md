@@ -44,7 +44,19 @@ nothing here.
 
 An anchor resolves when any of them would publish it, or when the document declares it
 outright. Adding a rule can only grow that set, so a rule missing from the table is the
-only way a live anchor is reported absent, and nothing a repository declares can shrink it.
+only way a live anchor is reported absent.
+
+The union has a price in the other direction. A heading `Setup & Config` publishes
+`setup--config` on github.com and `setup-config` under VitePress, and a link spelled either way
+passes in a repository GitHub renders, where only the first works. So a repository that knows
+its renderer can say so, and the pin can only narrow the set. `anchor_renderers` in the
+[scanner policy](controls.md) names rules from the table above, and a Markdown or MDX page is
+then read under those rules alone, beside the identities it declares. AsciiDoc and
+reStructuredText pages keep their own rules whatever the pin says, and a name the table does
+not hold refuses the policy rather than emptying the set. A narrower pin can only turn a
+resolved anchor into a missing one, which is why it fits a policy that only raises. Dropping
+the pin, or adding a name the base's pin did not hold, is `policy-weakened` under
+`policy/anchor-renderers-widened`.
 
 `mdn` is the one row read only in some trees: under `front-matter-config.json` or
 `.front-matter-config.json`, the front-matter schema mdn/content and mdn/translated-content
@@ -509,4 +521,4 @@ renders, which only the definition-list terms model, and a live sample's frame,
 `config.toml` whose headings reach outside ASCII therefore keeps absence undecided: an
 identity the union knows still resolves, and one it does not is declined rather than
 reported missing. The fix for any of them is another row, derived and pinned the same way, since the
-union only grows.
+union only grows and a pin can only name rows the table holds.

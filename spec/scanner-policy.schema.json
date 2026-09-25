@@ -76,9 +76,28 @@
    "items": {
     "$ref": "#/$defs/BranchRef"
    }
+  },
+  "anchor_renderers": {
+   "type": "array",
+   "minItems": 1,
+   "maxItems": 16,
+   "description": "Raise-only pin: the heading renderers whose identities a Markdown or MDX page publishes, named as the engine's anchor rules. Sort by UTF-8 bytes.",
+   "x-amiss-order": [
+    "RendererName"
+   ],
+   "uniqueItems": true,
+   "items": {
+    "$ref": "#/$defs/RendererName"
+   }
   }
  },
  "$defs": {
+  "RendererName": {
+   "type": "string",
+   "minLength": 1,
+   "maxLength": 64,
+   "pattern": "^[a-z][a-z0-9-]*$"
+  },
   "BranchRef": {
    "type": "string",
    "minLength": 12,

@@ -1,7 +1,7 @@
 use amiss_wire::controls::ScannerPolicy;
 use amiss_wire::controls::{
-    BlobLineSelection, DEFAULT_BRANCH_ALIASES, DOCUMENT_SUFFIX_BYTES, ProjectionKind,
-    ProjectionSource, SOURCE_MARKER_BYTES, check_projection_source,
+    ANCHOR_RENDERERS, BlobLineSelection, DEFAULT_BRANCH_ALIASES, DOCUMENT_SUFFIX_BYTES,
+    ProjectionKind, ProjectionSource, SOURCE_MARKER_BYTES, check_projection_source,
 };
 use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
@@ -455,41 +455,64 @@ fn a_tree_suffix_is_one_bounded_exact_selector() {
 }
 
 /// The old names a policy declares for its default branch are full branch
-/// refs, sorted, unique and bounded, and a policy without the key reads the
-/// way it always did.
+/// refs, and a renderer pin names lowercase rules, which the engine checks
+/// against its own table. Both are sorted, unique and bounded sets, the pin is
+/// never empty, and a policy without either key reads the way it always did.
 #[test]
-fn default_branch_aliases_are_a_bounded_sorted_set_of_refs() {
-    let policy = |aliases: &str| {
-        format!(
-            r#"{{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":[],"finding_dispositions":[],"default_branch_aliases":[{aliases}]}}"#
-        )
-    };
-    let kind = |text: String| {
+fn the_alias_and_renderer_sets_are_bounded_and_sorted() {
+    let kind = |key: &str, members: &str| {
+        let text = format!(
+            r#"{{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":[],"finding_dispositions":[],"{key}":[{members}]}}"#
+        );
         ScannerPolicy::parse(text.as_bytes())
             .err()
             .map(|defect| defect.kind)
     };
+    let oversized = |limit: usize, spell: fn(usize) -> String| {
+        (0..=limit).map(spell).collect::<Vec<_>>().join(",")
+    };
+    let aliases = "default_branch_aliases";
     assert_eq!(
-        kind(policy(r#""refs/heads/master","refs/heads/trunk""#)),
+        kind(aliases, r#""refs/heads/master","refs/heads/trunk""#),
         None
     );
     assert_eq!(
-        kind(policy(r#""refs/heads/trunk","refs/heads/master""#)),
+        kind(aliases, r#""refs/heads/trunk","refs/heads/master""#),
         Some(ErrorKind::UnsortedSet)
     );
     assert_eq!(
-        kind(policy(r#""refs/heads/master","refs/heads/master""#)),
+        kind(aliases, r#""refs/heads/master","refs/heads/master""#),
         Some(ErrorKind::DuplicateMember)
     );
     assert!(
-        kind(policy(r#""master""#)).is_some(),
+        kind(aliases, r#""master""#).is_some(),
         "an alias is a full ref"
     );
-    let many: Vec<String> = (0..=DEFAULT_BRANCH_ALIASES)
-        .map(|index| format!(r#""refs/heads/old-{index:02}""#))
-        .collect();
     assert_eq!(
-        kind(policy(&many.join(","))),
+        kind(
+            aliases,
+            &oversized(DEFAULT_BRANCH_ALIASES, |index| format!(
+                r#""refs/heads/old-{index:02}""#
+            ))
+        ),
+        Some(ErrorKind::LimitExceeded)
+    );
+    let renderers = "anchor_renderers";
+    assert_eq!(kind(renderers, r#""github","mdit-vue""#), None);
+    assert_eq!(
+        kind(renderers, r#""mdit-vue","github""#),
+        Some(ErrorKind::UnsortedSet)
+    );
+    assert_eq!(kind(renderers, ""), Some(ErrorKind::LimitExceeded));
+    assert_eq!(
+        kind(renderers, r#""GitHub""#),
+        Some(ErrorKind::InvalidValue)
+    );
+    assert_eq!(
+        kind(
+            renderers,
+            &oversized(ANCHOR_RENDERERS, |index| format!(r#""rule-{index:02}""#))
+        ),
         Some(ErrorKind::LimitExceeded)
     );
 }

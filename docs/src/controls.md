@@ -62,7 +62,8 @@ with policies written before projections existed and the file valid only whole:
   "finding_dispositions": [
     { "finding_kind": "explicit-target-missing", "disposition": "fail" }
   ],
-  "default_branch_aliases": ["refs/heads/master"]
+  "default_branch_aliases": ["refs/heads/master"],
+  "anchor_renderers": ["github"]
 }
 ```
 
@@ -70,8 +71,9 @@ The first tree include readmits a subtree the built-in skip list would drop, whi
 [Discovery](discovery.md)'s monorepo lever. The second admits only `.txt` descendants of
 `docs` and reads them as reStructuredText. The document include reads one extensionless file
 under the markdown grammar. The protected path makes its removal a finding, the disposition
-row promotes one kind to `fail`, and the alias says the default branch used to be called
-`master`. The
+row promotes one kind to `fail`, the alias says the default branch used to be called
+`master`, and the renderer pin reads Markdown headings the way github.com slugs them, as
+[What twelve renderers call a heading](anchor-rules.md) explains. The
 [scanner-policy schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-policy.schema.json)
 closes the grammar, and each array keeps the sort order the schema states. The strictness
 also sets the upgrade order: an engine that predates a policy field refuses the whole file
