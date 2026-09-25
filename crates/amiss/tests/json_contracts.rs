@@ -56,10 +56,7 @@ fn refs_preserve_original_occurrences_but_reject_unknown_span_fields() {
     assert!(output.stderr.is_empty());
     let human = String::from_utf8(output.stdout).unwrap();
     assert!(human.contains("candidate occurrences 2"), "{human}");
-    assert!(
-        human.contains(r#"reference "docs/\u00ff.md":3:9"#),
-        "{human}"
-    );
+    assert!(human.contains(r#"reference "docs/\xff.md":3:9"#), "{human}");
 
     let base = occurrences(&report.payload.observations[0])
         .base
