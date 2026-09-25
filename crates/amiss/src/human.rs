@@ -117,10 +117,13 @@ pub(crate) fn report<P, R, M, S, D, F>(
         } else {
             say!(
                 &mut out,
-                "error {} {} {}",
+                "error {} {} {}{}",
                 row.phase.as_ref(),
                 row.code.as_ref(),
-                path_atom(row.path.as_ref())
+                path_atom(row.path.as_ref()),
+                row.json_path
+                    .as_ref()
+                    .map_or_else(String::new, |member| format!(" at {}", atom(member)))
             );
         }
     }

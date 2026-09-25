@@ -93,6 +93,7 @@ pub fn unavailable_evaluation_envelope(
                 path: None,
                 path_bytes: None,
                 resource: None,
+                json_path: None,
             })
         })
         .collect();

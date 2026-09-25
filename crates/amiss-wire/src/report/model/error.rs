@@ -14,6 +14,8 @@ pub struct AnalysisError<P = RepoPath> {
     pub code: AnalysisErrorCode,
     pub configured_limit: Option<u64>,
     pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json_path: Option<String>,
     pub observed_lower_bound: Option<u64>,
     pub path: Option<P>,
     pub path_bytes: Option<Vec<u8>>,

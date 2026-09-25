@@ -30,6 +30,7 @@ pub(super) fn reports() -> serde_json::Result<[ReportEnvelope; 2]> {
         path_bytes: None,
         phase: AnalysisPhase::Configuration,
         resource: None,
+        json_path: None,
     });
     report.payload.result.complete = false;
     report.payload.result.error_count = 1;

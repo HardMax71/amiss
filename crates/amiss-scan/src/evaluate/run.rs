@@ -223,6 +223,7 @@ fn apply_exceptions(
             path: None,
             path_bytes: None,
             resource: None,
+            json_path: None,
         }]
     } else {
         Vec::new()

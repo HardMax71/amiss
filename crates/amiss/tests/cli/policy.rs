@@ -320,6 +320,83 @@ fn an_invalid_policy_is_fatal_with_unavailable_controls() {
     );
 }
 
+/// A broken policy names the member its defect sits at, beside the specific
+/// code where one applies, so the fix does not start with a search.
+#[test]
+fn a_broken_policy_names_the_member_it_failed_at() {
+    let fx = fixture();
+    let root = fx.root();
+    fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
+    let tail = r#""protected_inventory":[],"finding_dispositions":[]}"#;
+    for (head, expected) in [
+        (
+            r#"{"schema":"amiss/scanner-policy","document_includes":[{"kind":"folder","path":"x"}],"#,
+            vec![("CONFIGURATION_INVALID", "$.document_includes[0].kind")],
+        ),
+        (
+            r#"{"schema":"amiss/scanner-policy-2","document_includes":[],"#,
+            vec![
+                ("CONFIGURATION_INVALID", "$.schema"),
+                ("UNKNOWN_SCHEMA", "$.schema"),
+            ],
+        ),
+        (
+            r#"{"schema":"amiss/scanner-policy","schema":"amiss/scanner-policy","document_includes":[],"#,
+            vec![
+                ("CONFIGURATION_INVALID", "$.schema"),
+                ("DUPLICATE_JSON_KEY", "$.schema"),
+            ],
+        ),
+        (
+            r#"{"schema":"amiss/scanner-policy","extra":1,"document_includes":[],"#,
+            vec![
+                ("CONFIGURATION_INVALID", "$.extra"),
+                ("UNKNOWN_FIELD", "$.extra"),
+            ],
+        ),
+    ] {
+        fs::write(
+            root.join(".amiss/scanner-policy.json"),
+            format!("{head}{tail}"),
+        )
+        .unwrap_or_default();
+        git(root, &["add", "."]);
+        let args = [
+            "check",
+            "--repo",
+            &fx.repo,
+            "--object-format",
+            "sha1",
+            "--base",
+            &fx.candidate,
+            "--index",
+            "--profile",
+            "observe",
+        ];
+        let (code, stdout, _stderr) = amiss(&[args.as_slice(), &["--format", "json"]].concat());
+        assert_eq!(code, 2);
+        let payload = payload(&stdout);
+        let rows: Vec<(&str, &str)> = payload["errors"]
+            .as_array()
+            .map(|rows| {
+                rows.iter()
+                    .filter_map(|row| Some((row["code"].as_str()?, row["json_path"].as_str()?)))
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert_eq!(rows, expected, "{head}");
+        let (_code, human, _stderr) = amiss(&args);
+        assert!(
+            String::from_utf8_lossy(&human).contains(&format!(
+                "error configuration CONFIGURATION_INVALID \".amiss/scanner-policy.json\" at \"{}\"\n",
+                expected[0].1
+            )),
+            "{}",
+            String::from_utf8_lossy(&human)
+        );
+    }
+}
+
 #[test]
 fn reserved_directives_are_boundary_incomplete_with_full_details() {
     let fx = fixture();

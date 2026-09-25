@@ -194,6 +194,7 @@ fn output_crossing<P: serde::Serialize>(
         path: None,
         path_bytes: None,
         resource: Some((ResourceName::MachineJsonBytes, ceiling, wire_length)),
+        json_path: None,
     }))
 }
 
@@ -205,6 +206,7 @@ fn governed_details(governed: &[crate::evaluate::GovernedSeed]) -> Vec<ErrorDeta
             path: Some(seed.document.clone()),
             path_bytes: None,
             resource: None,
+            json_path: None,
         })
         .collect()
 }
@@ -252,6 +254,7 @@ fn findings_ceiling_crossing(setup: &Setup, findings: &[Finding]) -> Option<Erro
             setup.policy.complete_findings,
             finding_total,
         )),
+        json_path: None,
     })
 }
 
@@ -279,6 +282,7 @@ fn retained_details(details: &[ErrorDetail], ceiling: usize) -> Vec<ErrorDetail>
                 limit,
                 limit.saturating_add(1),
             )),
+            json_path: None,
         });
     }
     sorted

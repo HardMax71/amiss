@@ -9,7 +9,9 @@ Every row names its code, the phase it came from (invocation, configuration, git
 parse, resolution, policy, output, or internal), and the fixed sentence below. A row that
 knows a file carries its path, or the raw bytes as hex when the name is outside the path
 grammar, and a ceiling crossing carries the resource, the configured limit, and the observed
-lower bound. [The report](report.md) has the exact shape. The human output prints the same
+lower bound. A JSON input that fails its strict reader, such as the repository policy, also
+carries `json_path`, the member the defect sits at, as in `$.document_includes[0].kind`, and
+the human error line prints it after the file. [The report](report.md) has the exact shape. The human output prints the same
 sentence as a `note` line once per code, so an exit-2 log says what to do without this page
 open.
 

@@ -69,6 +69,7 @@ impl From<de::Error> for Error {
             ErrorKind::Json(_)
             | ErrorKind::MissingField
             | ErrorKind::UnknownField
+            | ErrorKind::DuplicateKey
             | ErrorKind::WrongType
             | ErrorKind::InvalidValue
             | ErrorKind::UnsortedSet

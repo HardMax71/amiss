@@ -48,6 +48,7 @@ pub fn verify_floor(
         path: None,
         path_bytes: None,
         resource: None,
+        json_path: None,
     };
     let Some(identity) = repository else {
         return Err(mismatch);
@@ -104,6 +105,7 @@ const fn binding_mismatch_row() -> ErrorDetail {
         path: None,
         path_bytes: None,
         resource: None,
+        json_path: None,
     }
 }
 
@@ -113,6 +115,7 @@ pub(crate) const fn trusted_time_invalid_row() -> ErrorDetail {
         path: None,
         path_bytes: None,
         resource: None,
+        json_path: None,
     }
 }
 
@@ -138,6 +141,7 @@ fn verify_item_limit(
             path: None,
             path_bytes: None,
             resource: Some((resource, limit, limit.saturating_add(1))),
+            json_path: None,
         })
     }
 }
@@ -194,6 +198,7 @@ pub(crate) fn verify_constraint(input: &ConstraintInput) -> Result<ConstraintCon
         path: None,
         path_bytes: None,
         resource: None,
+        json_path: None,
     };
     input.descriptor.validate().map_err(|_defect| invalid())?;
     let digest = document_digest(

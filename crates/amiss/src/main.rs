@@ -426,6 +426,7 @@ fn run(invocation: &Invocation, reserve: &mut BufWriter<Stdout>) -> ExitCode {
                     path: None,
                     path_bytes: None,
                     resource: None,
+                    json_path: None,
                 }],
                 reserve,
             );
@@ -528,6 +529,7 @@ fn semantic_input(
             path: None,
             path_bytes: None,
             resource: None,
+            json_path: None,
         },
     )?;
     let template = amiss_wire::semantic::SemanticEvidenceTemplate::parse(&bytes)
