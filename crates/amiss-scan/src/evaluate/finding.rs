@@ -64,6 +64,10 @@ pub(super) fn missing_fix(candidates: &[&Observation]) -> Option<FindingFix> {
         Resolution::Missing(Missing::PathNotFound {
             near: Some(near), ..
         }) => path_fix(observation, near),
+        Resolution::Missing(Missing::PathNotFound {
+            same_object_at: Some(moved),
+            ..
+        }) => relocation_fix(observation, moved),
         Resolution::Missing(_)
         | Resolution::Resolved { .. }
         | Resolution::DeclaredUntracked(_)
@@ -115,6 +119,58 @@ fn path_fix(observation: &Observation, near: &RepoPath) -> Option<FindingFix> {
         span,
         replacement,
         kind: FixKind::PathRespelling,
+    })
+}
+
+/// A plain relative path that reached the missed file from beside its
+/// document is rewritten, relative the same way, to the one path the change
+/// moved identical bytes to. Any other spelling is left to its author.
+fn relocation_fix(observation: &Observation, moved: &RepoPath) -> Option<FindingFix> {
+    let span = observation.path_span?;
+    let part = observation
+        .raw_destination
+        .split(['#', '?'])
+        .next()
+        .unwrap_or_default();
+    let target = moved.as_str()?;
+    let plain = |text: &str| {
+        !text.is_empty()
+            && !text.starts_with('/')
+            && !text.contains(['%', ' ', '(', ')', '<', '>', '\\', ':'])
+    };
+    if !plain(part) || !plain(target) {
+        return None;
+    }
+    let document = observation.document.as_bytes();
+    let beside = crate::route::directory(document);
+    let (reached, _) = crate::route::normalized_path_under(beside, false, part).ok()?;
+    if Some(&reached) != observation.intent.repository_path.as_ref() {
+        return None;
+    }
+    let from: Vec<&str> = std::str::from_utf8(beside)
+        .ok()?
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    let to: Vec<&str> = target.split('/').collect();
+    let shared = from
+        .iter()
+        .zip(&to)
+        .take_while(|(left, right)| left == right)
+        .count();
+    let mut written: Vec<&str> = vec![".."; from.len().saturating_sub(shared)];
+    written.extend(to.get(shared..)?);
+    let relative = written.join("/");
+    let replacement = if part.starts_with("./") && !relative.starts_with("../") {
+        format!("./{relative}")
+    } else {
+        relative
+    };
+    Some(FindingFix {
+        path: RepoPathText::try_from(observation.document.as_str()?.to_owned()).ok()?,
+        span,
+        replacement,
+        kind: FixKind::PathRelocation,
     })
 }
 

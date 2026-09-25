@@ -410,7 +410,12 @@ fn exact_relocation_evidence_requires_one_removed_and_one_added_identity() {
         };
         let (unique, fix) = resolution("unique-old.bin");
         assert_eq!(unique["same_object_at"], "unique-new.bin", "{unique}");
-        assert!(fix.is_null(), "equal bytes do not prove a repair: {fix}");
+        assert_eq!(fix["replacement"], "unique-new.bin", "{fix}");
+        assert_eq!(
+            fix["description"],
+            FixKind::PathRelocation.meaning(),
+            "{fix}"
+        );
         for path in [
             "base-a.bin",
             "base-b.bin",
