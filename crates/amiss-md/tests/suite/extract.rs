@@ -1105,3 +1105,44 @@ fn a_myst_include_writes_the_edge_the_rst_spelling_writes() {
         ]
     );
 }
+
+/// mdBook and the mkdocs snippet extension splice files in before Markdown
+/// reads the page, so an include line is a reference wherever it sits, in a
+/// fence as much as in prose. A selector stays in the raw target and off the
+/// path, a quoted path may hold a space, and an escaped command is text.
+#[test]
+fn preprocessor_includes_are_references_in_prose_and_fences() {
+    let source = "# Page\n\n{{#include ../listings/main.rs:io}}\n\n```rust\n{{#rustdoc_include src/lib.rs:2:10}}\n```\n\n{{#include \"has space.md\"}}\n\n\\{{#include escaped.rs}}\n\n--8<-- \"docs/snippet.md\"\n\n```python\n--8<-- \"examples/run.py:1:4\"\n```\n";
+    let got = triples(&extraction(Adapter::Markdown, source));
+    assert_eq!(
+        got,
+        [
+            (
+                SourceConstruct::MdbookInclude,
+                "../listings/main.rs:io",
+                "../listings/main.rs"
+            ),
+            (
+                SourceConstruct::MdbookInclude,
+                "src/lib.rs:2:10",
+                "src/lib.rs"
+            ),
+            (
+                SourceConstruct::MdbookInclude,
+                "has space.md",
+                "has space.md"
+            ),
+            (
+                SourceConstruct::MkdocsSnippet,
+                "docs/snippet.md",
+                "docs/snippet.md"
+            ),
+            (
+                SourceConstruct::MkdocsSnippet,
+                "examples/run.py:1:4",
+                "examples/run.py"
+            ),
+        ]
+        .map(|(construct, raw, target)| (construct, raw.to_owned(), target.to_owned()))
+    );
+}

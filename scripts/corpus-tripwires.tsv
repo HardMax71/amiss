@@ -9,7 +9,7 @@ bat	pass	17	0	92	0	21
 biome	pass	115	3	240	102	100
 click	pass	53	0	45	957	0
 cncf-glossary	pass	963	0	2239	419	4
-comprehensive-rust	pass	584	0	700	0	7
+comprehensive-rust	pass	584	0	943	0	10
 containerd.io	pass	9	0	7	3	1
 content	pass	14649	0	1951	54863	2659
 django	pass	686	0	2347	10	31
@@ -21,16 +21,16 @@ fastapi	pass	1665	0	1808	1633	40
 flask	pass	85	0	160	0	0
 grafana	pass	1164	0	2200	2774	564
 grpc.io	pass	188	0	81	193	0
-helix	pass	51	0	211	2	10
+helix	pass	51	0	214	2	10
 httpx	pass	29	0	41	0	7
 hugoDocs	pass	1006	0	3209	591	0
 ionic-docs	pass	11955	0	2699	774	29
 jekyll	pass	222	0	76	167	5
 jest	pass	275	0	1102	194	45
 k8s-community	pass	963	4	2094	957	254
-mdbook	pass	50	0	111	0	0
+mdbook	pass	50	0	117	0	0
 minimal-mistakes	pass	125	0	91	21	11
-mkdocs	pass	21	0	331	0	1
+mkdocs	pass	21	0	332	0	1
 mkdocs-material	pass	103	0	1039	5	4
 myst-parser	pass	32	0	196	29	3
 nextra	pass	243	2	25	224	0
@@ -43,7 +43,7 @@ pydantic-settings	pass	2	0	11	0	10
 react-native-website	pass	2719	0	8319	2370	306
 redux	pass	113	0	636	52	8
 ripgrep	pass	24	0	69	0	0
-rust-book	pass	478	0	831	0	32
+rust-book	pass	478	0	1538	0	32
 rust-by-example	pass	204	0	407	0	0
 scrapy	pass	90	0	1006	6	42
 sphinx	pass	170	0	351	13	28
