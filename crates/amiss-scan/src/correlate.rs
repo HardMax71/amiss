@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
-use amiss_wire::resolution::{Resolution, TaggedBlobTarget, UnsupportedSemantics};
+use amiss_wire::resolution::{Resolution, TaggedBlobTarget, Target, UnsupportedSemantics};
 
 use components::{ObservationPool, correlation_components};
 pub(crate) use components::{directory_pairs, unique_path_pairs};
@@ -281,6 +281,16 @@ fn derive(
     {
         if left_projection == right_projection {
             return (TargetChange::Equal, equal_impact);
+        }
+        let own_page = matches!(
+            (left, right),
+            (
+                Resolution::Resolved { target: Target::Blob(left_blob) },
+                Resolution::Resolved { target: Target::Blob(right_blob) },
+            ) if left_blob.path == base.document && right_blob.path == candidate.document
+        );
+        if own_page {
+            return (TargetChange::Changed, equal_impact);
         }
         let impact = if source_changed {
             Impact::DependencyAndSubjectCochanged
