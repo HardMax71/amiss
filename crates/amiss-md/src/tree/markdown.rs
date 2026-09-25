@@ -17,6 +17,23 @@ use super::{Definition, Kind, Node, Reference, ReferenceForm};
 /// `ParserError` when a reference names no definition or the stream is not
 /// balanced.
 pub(crate) fn from_markdown(suffix: &str, options: Options) -> Result<Node, Fault> {
+    // pulldown ends a line only at LF or CRLF, while `CommonMark` also ends one
+    // at a lone CR; both are one byte, so the swap keeps every offset.
+    let lf_endings: String;
+    let suffix = if suffix.contains('\r') {
+        let mut bytes = suffix.as_bytes().to_vec();
+        for index in 0..bytes.len() {
+            let lone = bytes.get(index) == Some(&b'\r')
+                && bytes.get(index.saturating_add(1)) != Some(&b'\n');
+            if lone && let Some(byte) = bytes.get_mut(index) {
+                *byte = b'\n';
+            }
+        }
+        lf_endings = String::from_utf8(bytes).map_err(|_invalid| Fault::ParserError)?;
+        lf_endings.as_str()
+    } else {
+        suffix
+    };
     let mut events = Parser::new_ext(suffix, options).into_offset_iter();
     let winners = events.reference_definitions().clone();
     let definitions = definitions(suffix, options, &winners)?;

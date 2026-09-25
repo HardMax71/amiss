@@ -472,6 +472,41 @@ fn crlf_spans_are_byte_exact() {
     assert_eq!(spans, vec![(2, 8), (12, 18)]);
 }
 
+/// A bare CR ends a line as `CommonMark` says, so a fence under CR endings
+/// hides what it holds exactly as it does under LF, and every span stays
+/// the byte range the source writes.
+#[test]
+fn bare_cr_lines_fence_the_same_as_lf() {
+    for ending in ["\n", "\r", "\r\n"] {
+        let source = [
+            "# T",
+            "",
+            "```",
+            "[inside](gone.md)",
+            "```",
+            "",
+            "[outside](present.md)",
+            "",
+        ]
+        .join(ending);
+        let got = extraction(Adapter::Markdown, &source);
+        let destinations: Vec<&str> = got
+            .occurrences
+            .iter()
+            .map(|entry| entry.raw_destination.as_str())
+            .collect();
+        assert_eq!(destinations, ["present.md"], "{ending:?}");
+        let [only] = got.occurrences.as_slice() else {
+            panic!("{ending:?}");
+        };
+        assert_eq!(
+            source.get(only.span.0..only.span.1),
+            Some("[outside](present.md)"),
+            "{ending:?}"
+        );
+    }
+}
+
 /// Every golden in the corpus obeys the closed span contract: bounded,
 /// ordered, non-splitting, with a disjoint opaque partition and the right
 /// empty side per profile.
