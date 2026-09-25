@@ -512,6 +512,50 @@ fn site_base(value: &str) -> Option<&str> {
         .map(|path| path.trim_end_matches('/'))
 }
 
+/// The directory Starlight's docs loader reads pages from, below the Astro
+/// project, while no `srcDir` moves the sources.
+pub(crate) const STARLIGHT_CONTENT: &str = "src/content/docs";
+
+/// The path one Astro configuration serves its site under: the quoted literal
+/// the one line opening with `base` binds, and the site root where no line
+/// does. A base spelled any other way or bound twice, or a `srcDir` moving the
+/// pages, leaves the site unread.
+#[must_use]
+pub(crate) fn astro_base(source: &[u8]) -> Option<String> {
+    let lines =
+        || amiss_md::lines::scan(source).map(|line| line.content(source).trim_ascii_start());
+    if lines().any(|line| line.starts_with(b"srcDir")) {
+        return None;
+    }
+    let bound: Vec<&[u8]> = lines()
+        .filter_map(|line| {
+            line.strip_prefix(b"base")?
+                .trim_ascii_start()
+                .strip_prefix(b":")
+        })
+        .map(|value| {
+            value
+                .trim_ascii()
+                .strip_suffix(b",")
+                .unwrap_or(value)
+                .trim_ascii()
+        })
+        .collect();
+    let [value] = bound.as_slice() else {
+        return bound.is_empty().then(String::new);
+    };
+    let (quote, inner) = value.split_first()?;
+    let inner = inner
+        .strip_suffix(&[*quote])
+        .filter(|inner| matches!(quote, b'\'' | b'"') && !inner.contains(quote))?;
+    Some(
+        std::str::from_utf8(inner)
+            .ok()?
+            .trim_matches('/')
+            .to_owned(),
+    )
+}
+
 /// Every content root one Hugo configuration names and the path each is
 /// served under: the project's own, where a key opens a line of the file
 /// itself, and one for every language table. Where the file names no root,
@@ -880,22 +924,22 @@ const HUGO_ONLY_KEYS: [&[u8]; 6] = [
 ];
 
 /// What a document declares about its own publication in frontmatter: the
-/// name it publishes under, which is `slug` before `id`, and the page URLs it
-/// is also served at. A name is a plain scalar on a line of its own and the
-/// URLs are the block under `aliases`. Nothing else in the region is read, and
-/// the region stays opaque to the grammar.
+/// `slug` and the `id` it publishes under, and the page URLs it is also served
+/// at. A name is a plain scalar on a line of its own and the URLs are the block
+/// under `aliases`. Nothing else in the region is read, and the region stays
+/// opaque to the grammar.
 #[must_use]
 pub(crate) fn declared_publication(
     adapter: Adapter,
     source: &[u8],
-) -> (Option<String>, Vec<String>) {
+) -> (Option<String>, Option<String>, Vec<String>) {
     if !matches!(adapter, Adapter::Markdown | Adapter::Mdx) {
-        return (None, Vec::new());
+        return (None, None, Vec::new());
     }
     let Some(body) = amiss_md::frontmatter::recognize(source)
         .and_then(|region| source.get(region.bom_bytes..region.suffix_offset))
     else {
-        return (None, Vec::new());
+        return (None, None, Vec::new());
     };
     let mut id = None;
     let mut slug = None;
@@ -914,7 +958,7 @@ pub(crate) fn declared_publication(
             id = id.or(Some(value));
         }
     }
-    (slug.or(id).map(str::to_owned), redirects)
+    (slug.map(str::to_owned), id.map(str::to_owned), redirects)
 }
 
 /// Whether a key opens a block sequence: it opens the line and carries no

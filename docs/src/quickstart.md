@@ -97,8 +97,9 @@ base: /
 ```
 
 With that file under `src/content/docs`, `/en/guides/astro-components/` is the `.mdx` of that
-name under it, and the Astro documentation resolves 8,663 references it used to leave
-undecided. A route the tree cannot answer stays undecided, so the key adds no missing target.
+name under it. A Starlight site needs no file, since its Astro configuration already says where
+its pages are and what they are served under. A route the tree cannot answer stays undecided,
+so the key adds no missing target.
 
 The promise above holds. A declaration can move a destination onto a file the tree already
 holds, and it can never clear one the tree lacks, so nothing that is really missing goes quiet.

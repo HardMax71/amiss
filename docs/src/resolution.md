@@ -188,9 +188,10 @@ reads those templates as links, since each holds spaces, so they are read out of
 they open, and a quoted URL through `relative_url` is the site route it names. Both generators
 fail the build on a template naming nothing, so such a target is missing rather than undecided,
 while one with no site of its generator above the page is `unsupported-reference-semantics`.
-The file's presence selects the rule, and three of them are read further for what they bind:
-an Antora descriptor for its name, a `conf.py` for the suffixes it reads, and a Hugo
-configuration for the content root and base a site route is answered under. The
+The file's presence selects the rule, and four of them are read further for
+what they bind: an Antora descriptor for its name, a `conf.py` for the suffixes it reads, a
+Hugo configuration for the content root and base a site route is answered under, and an Astro
+configuration for whether it loads Starlight, whose content root and base answer the same way. The
 nearest such file above the document selects it, and where none is above it and the tree
 holds exactly one, that one does, since a site in `website/` reads pages that sit outside it.
 An alias in a tree holding several sites and none above the document is

@@ -433,6 +433,18 @@ unless it is the language the file names as its default and that default is not 
 subdirectory. So a route without a code is the default language's, and one with a code is
 that language's.
 
+An Astro configuration that imports `@astrojs/starlight` says both as well. Starlight's loader
+reads the pages under `src/content/docs` beside the configuration, and the quoted `base` the
+file binds is what every route opens with, the site root where it binds none. A page is served
+at the `slug` its frontmatter declares in place of its own path, read from that directory, and
+a directory's `index` page is served at the directory. Starlight serves a page nowhere else, so
+a route no page claims stays with the build, which is where its fallback serves the default
+locale's page for a translation that lacks one. A `srcDir` moving the sources, or a base
+spelled as anything but a quoted literal, leaves the site unread. Read whole on 2026-09-25
+under the observe profile, Astro's documentation resolves 12,106 references where it resolved
+3,471 and Starlight's own resolves 2,078 where it resolved 656. Three claims arrive, each an
+anchor into a translated page naming a heading that page does not carry.
+
 A configuration that mounts its content rather than naming a directory says the same thing
 another way, and the mount targeting the content directory is read where no key names one.
 Several such mounts are a site composed of parts this does not take apart, so none of them
@@ -640,7 +652,8 @@ three ways. A declaration with no `base` line reads exactly as it did before.
 
 A route naming a directory reaches that directory, since a tree holding `guides/index.mdx`
 holds `guides`, and a fragment on a directory stays undecided the way it already does for
-`../guides/#setup`. That is 1,106 of those references, with 302 fragments left unread. Nothing
+`../guides/#setup`. Where Docusaurus or Starlight publishes that index page at the directory,
+the route reaches the page instead. That is 1,106 of those references, with 302 fragments left unread. Nothing
 else about the reading is new: the destination is a path under the declared directory, read by
 the spellings every other path is read by.
 
@@ -648,8 +661,9 @@ Four repositories show what the file does, each read whole on 2026-09-20 under t
 profile, once as it stands and once with the file below staged.
 
 Astro's documentation keeps its pages under `src/content/docs` and serves that directory at
-the root of its site, so all 10,323 of its slash-rooted destinations are routes nothing in the
-tree answers. The file goes at `src/content/docs/.amiss/router.yml`:
+the root of its site. Before its Starlight configuration was read, all 10,323 of its
+slash-rooted destinations were routes nothing in the tree answered, and the file went at
+`src/content/docs/.amiss/router.yml`:
 
 ```yaml
 router: astro
@@ -657,9 +671,10 @@ base: /
 ```
 
 The router line turns on no spelling there, since `built-route` withholds an answer rather than
-serving a file, and the base is read whichever router the line above it names. Site routes fall
-from 10,323 to 1,647 and resolved references rise from 3,470 to 12,133. Three claims arrive,
-each an anchor on a page that only resolves now, and no missing path arrives at all.
+serving a file, and the base is read whichever router the line above it names. Site routes fell
+from 10,323 to 1,647 and resolved references rose from 3,470 to 12,133. Three claims arrived,
+each an anchor on a page that only resolved then, and no missing path arrived at all. The
+configuration now says the same thing on its own, so the file moves nothing there today.
 
 Kubernetes serves its website out of `content/en` and its `hugo.toml` says so, which is why
 that repository is no longer an example here: the configuration is read where it sits, and a
@@ -688,7 +703,7 @@ base: /docs/grafana/latest/
 Its claims fall from 546 to 153, and the 494 missing paths become 45. The 52 anchor claims
 become 108, since a path that resolves has its fragment read. Without the base line the count
 is 151 instead of 153, so the second key is worth two claims and 52 references on this tree,
-where on Astro's it is worth all 8,663.
+where on Astro's, before its Starlight configuration was read, it was worth all 8,663.
 
 Nothing in the output suggests writing one, and nothing honestly could. A tree says whether a
 generator is configured inside it; it never says whether its documents are published at all. So
