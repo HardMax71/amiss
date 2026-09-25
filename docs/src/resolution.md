@@ -253,8 +253,9 @@ than absent. A heading anchor on an AsciiDoc target resolves through the Asciido
 carry a prefix.
 
 An AsciiDoc document publishes three identities a cross reference can name. A block anchor,
-`[#install]` or `[[install]]` on a line of its own, and an inline anchor, `[[remove-refs]]` in
-the flow of a list item or a paragraph, are identities as written. A section title is the
+`[#install]`, `[[install]]`, `[source#install]` or `[id=install]` on a line of its own, and an
+inline anchor, `[[remove-refs]]`, `[[[bib]]]` or `anchor:remove-refs[]` in the flow of a list
+item, a paragraph or a section title, are identities as written. A section title is the
 reference text a natural cross reference names, so `<<API entrypoints>>` reaches the section
 titled `API entrypoints` however far down the page it sits, which is the reverse lookup
 Asciidoctor runs when the target is no known ID. It runs that lookup only where the target
