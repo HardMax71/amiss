@@ -27,7 +27,7 @@ hugoDocs	pass	1006	0	3209	591	0
 ionic-docs	pass	11955	0	2699	774	29
 jekyll	pass	222	0	76	167	5
 jest	pass	275	0	1102	194	45
-k8s-community	pass	963	4	2094	957	254
+k8s-community	pass	964	3	2094	973	254
 mdbook	pass	50	0	111	0	0
 minimal-mistakes	pass	125	0	91	21	11
 mkdocs	pass	21	0	331	0	1
@@ -36,7 +36,7 @@ myst-parser	pass	32	0	196	29	3
 nextra	pass	243	2	20	224	5
 numpy	pass	627	0	722	7	16
 ohmyzsh	pass	387	7	155	0	7
-opentelemetry.io	pass	2019	5	3095	7274	16
+opentelemetry.io	pass	2024	0	3104	7284	16
 prettier	pass	147	0	180	18	1
 pydantic	pass	99	1	502	0	1
 pydantic-settings	pass	2	0	11	0	10

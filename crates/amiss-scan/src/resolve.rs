@@ -178,6 +178,16 @@ impl<'a> Resolver<'a> {
         document_path: &RepoPath,
         occurrence: &crate::scanned::ScannedOccurrence,
     ) -> Result<(Intent, Resolution<RepoPath>, Option<String>), Error> {
+        let written = u64::try_from(occurrence.occurrence.raw_destination.len());
+        if written.map_or(true, |bytes| {
+            bytes > self.scan.limits().raw_link_destination_bytes
+        }) {
+            return Ok((
+                unsupported_intent(None, None),
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::OversizedDestination),
+                None,
+            ));
+        }
         if occurrence.occurrence.construct == SourceConstruct::RstRefRole {
             return self.resolve_label(&occurrence.occurrence.semantic_destination, semantic);
         }
