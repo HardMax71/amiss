@@ -8,8 +8,9 @@ use crate::discovery::{SnapshotDiscovery, site_root, snippet_root};
 use crate::route::{HUGO, JEKYLL, directory, join, normalized_path_under, within};
 
 /// The rules the document or its construct selects whatever else the tree
-/// declares: a file a Sphinx page includes reads a relative path from that
-/// page, and then a Sphinx docname in either format, an mkdocs snippet under
+/// declares: a file a Sphinx or Antora page includes reads a relative path
+/// from that page, all but an Antora include, which Antora reads from the
+/// file that writes it, and then a Sphinx docname in either format, an mkdocs snippet under
 /// the directory declaring mkdocs, and a Jekyll or Hugo template under the
 /// site of its own generator. None where nothing selects one.
 pub(super) fn anchors(
@@ -21,6 +22,7 @@ pub(super) fn anchors(
     path_part: &str,
 ) -> Option<Vec<(Vec<u8>, String)>> {
     if let Some(pages) = snapshot.fragment_pages.get(document)
+        && !(adapter == Adapter::AsciiDoc && construct == Some(SourceConstruct::AsciidocInclude))
         && !path_part.is_empty()
         && !path_part.starts_with('/')
         && scheme(path_part).is_none()

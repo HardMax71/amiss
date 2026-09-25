@@ -1,3 +1,5 @@
+pub(crate) mod component;
+
 use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -465,25 +467,42 @@ fn included_closure(
 
 /// The page each included file is rendered into. Sphinx reads every relative
 /// path an included file writes, a nested include's among them, from the
-/// directory of the page under `conf.py` that renders it, so the walk starts
-/// at each page no other file includes and reads each include it meets from
-/// that page. An include carrying options is not followed, since `MyST`'s
+/// directory of the page under `conf.py` that renders it, and Antora reads a
+/// partial's cross references and images from the module of the page that
+/// renders it, though its includes from the partial. So the walk starts at
+/// each such page no other file includes and follows each include it meets.
+/// A Sphinx include carrying options is not followed, since `MyST`'s
 /// `relative-docs` and `relative-images` read paths from the file instead.
 fn fragment_pages(discovery: &SnapshotDiscovery) -> BTreeMap<RepoPath, BTreeSet<RepoPath>> {
+    let rendered = |file: &RepoPath, page: &RepoPath| -> Vec<(RepoPath, bool)> {
+        if discovery
+            .document(file.as_bytes())
+            .is_some_and(|record| record.adapter == Some(Adapter::AsciiDoc))
+        {
+            return component::antora_includes(discovery, file);
+        }
+        included_documents(discovery, file, page)
+    };
     let included: BTreeSet<RepoPath> = discovery
         .documents
         .iter()
-        .flat_map(|record| included_documents(discovery, &record.path, &record.path))
+        .flat_map(|record| rendered(&record.path, &record.path))
         .map(|(target, _plain)| target)
         .collect();
     let mut pages: BTreeMap<RepoPath, BTreeSet<RepoPath>> = BTreeMap::new();
-    for page in discovery.documents.iter().map(|record| &record.path) {
-        if included.contains(page) || site_root(discovery, page.as_bytes(), &SPHINX).is_none() {
+    for record in &discovery.documents {
+        let page = &record.path;
+        let renders = if record.adapter == Some(Adapter::AsciiDoc) {
+            component::antora_page(discovery, page)
+        } else {
+            site_root(discovery, page.as_bytes(), &SPHINX).is_some()
+        };
+        if included.contains(page) || !renders {
             continue;
         }
         let mut frontier = vec![page.clone()];
         while let Some(file) = frontier.pop() {
-            for (target, plain) in included_documents(discovery, &file, page) {
+            for (target, plain) in rendered(&file, page) {
                 if plain
                     && included.contains(&target)
                     && pages
