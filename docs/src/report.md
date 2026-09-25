@@ -147,7 +147,10 @@ format's own decoding so that
 `https://example.com/x?a=1&amp;b=2` is recorded as the address a fetcher would request rather
 than as the bytes the source spells. A locally resolved or disproved historical target has no
 delegated destination. An ordinary external URL raises no finding and the summary counts it under
-`external_out_of_scope`, because the engine never fetched it and so decided nothing. A Sphinx
+`external_out_of_scope`, because the engine never fetched it and so decided nothing. The
+summary counts every candidate reference twice over: once by what it names, `explicit_local`,
+`same_repository` or `external_out_of_scope`, and once by what the run concluded, `resolved`,
+`missing`, or `unsupported` for one it declined to judge, whatever it names. A Sphinx
 label resolved through candidate-bound inventory evidence carries both the selected destination
 and `reason: "intersphinx-inventory"`, but counts as resolved and is not delegated again. A
 generated route proved by complete site-build evidence similarly carries `reason: "site-build"`,
