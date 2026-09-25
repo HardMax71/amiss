@@ -272,7 +272,8 @@ outright with `.. _name:` resolve as themselves. The Sphinx roles that name a do
 or a label are modelled by name, which is why the grammar profile says
 `docutils-rst-sphinx-refs`: `:doc:`, `:download:`, `:ref:` and `:numref:`. A `:download:` names
 a file as written, beside its document, or under the directory holding `conf.py` when it opens
-with a slash, and a `:numref:` is a label the way a `:ref:` is. An image a substitution
+with a slash, and so do the paths an `image`, `figure`, `include` or `literalinclude` names,
+since Sphinx reads each of them the same way. A `:numref:` is a label the way a `:ref:` is. An image a substitution
 definition names, `.. |logo| image:: logo.png`, is an image like any other, and the link an
 image or figure opens, its `:target:` option, is a destination of its own. A relative
 `:doc:` target resolves beside its document, read under the suffix its root reads and again

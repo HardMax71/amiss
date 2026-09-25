@@ -100,12 +100,6 @@ pub(crate) fn anchors(
         Adapter::Markdown | Adapter::Mdx => {
             markdown_anchors(snapshot, document, construct, is_image, path_part)
         }
-        // A downloaded file keeps its name, and a leading slash is the source root.
-        Adapter::Rst if construct == Some(SourceConstruct::RstDownloadRole) => path_part
-            .strip_prefix('/')
-            .zip(site_root(snapshot, document.as_bytes(), &SPHINX))
-            .map(|(file, root)| vec![(root, file.to_owned())])
-            .unwrap_or_default(),
         Adapter::Rst => sphinx_anchor(snapshot, document, construct, path_part),
         Adapter::PlainAdvisory => Vec::new(),
     }
@@ -671,7 +665,8 @@ fn published_anchors(
 
 /// Where a `:doc:` target is anchored: a leading slash at the directory
 /// holding `conf.py`, and anything else beside the document, which is what
-/// `docname_join` does. A trailing slash is normalized away first.
+/// `docname_join` does. A trailing slash is normalized away first. A file
+/// Sphinx reads keeps its name and takes the same root for a leading slash.
 fn sphinx_anchor(
     snapshot: &SnapshotDiscovery,
     document: &RepoPath,
@@ -692,7 +687,8 @@ fn sphinx_anchor(
 /// Where a construct's docname is read: nowhere when the construct names no
 /// docname, beside its document under the default suffix when no `conf.py`
 /// sits above it, and otherwise under the directory holding the nearest
-/// `conf.py`, with the suffix that file declares.
+/// `conf.py`, with the suffix that file declares. A file Sphinx reads keeps
+/// its name, so it takes no suffix and has no reading without that root.
 enum DocnameRoot<'a> {
     NotDocname,
     Unrooted,
@@ -704,6 +700,19 @@ fn docname_root<'a>(
     document: &RepoPath,
     construct: Option<SourceConstruct>,
 ) -> DocnameRoot<'a> {
+    if matches!(
+        construct,
+        Some(
+            SourceConstruct::RstDownloadRole
+                | SourceConstruct::RstImageDirective
+                | SourceConstruct::RstIncludeDirective
+        )
+    ) {
+        return site_root(snapshot, document.as_bytes(), &SPHINX)
+            .map_or(DocnameRoot::NotDocname, |root| {
+                DocnameRoot::Rooted(root, "")
+            });
+    }
     if !matches!(
         construct,
         Some(SourceConstruct::RstDocRole | SourceConstruct::RstTocTreeEntry)
