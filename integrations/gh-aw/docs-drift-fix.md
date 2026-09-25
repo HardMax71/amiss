@@ -28,11 +28,15 @@ if tag="$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null)"; then
 else
   base="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
 fi
+identity=(--repository "${GITHUB_SERVER_URL#https://}/${GITHUB_REPOSITORY,,}" --forge github
+  --ref "$GITHUB_REF" --default-branch-ref "$GITHUB_REF")
 amiss check --repo . --object-format sha1 \
-  --base "$base" --candidate "$(git rev-parse HEAD)" \
+  --base "$base" --candidate "$(git rev-parse HEAD)" "${identity[@]}" \
   --profile enforce --format json > amiss-report.json
 ```
 
+The identity flags let Amiss check a URL into this repository's own files as it checks a
+relative link; the scheduled run sits on the default branch, so `GITHUB_REF` names both refs.
 Read `amiss-report.json`. Work only from the rows: the actionable ones are `errors[]`
 and the findings whose `effective_disposition` is not `record`. Every row carries a
 `description` stating what it means, and `location.path` with `location.span` naming the
@@ -45,7 +49,7 @@ document, the byte span and the replacement; stage the tree and let Amiss apply 
 ```sh
 git add -A
 amiss fix --repo . --object-format sha1 \
-  --base "$base" --index --profile enforce
+  --base "$base" --index "${identity[@]}" --profile enforce
 ```
 
 Then repair by hand only what you can prove from the repository itself:
