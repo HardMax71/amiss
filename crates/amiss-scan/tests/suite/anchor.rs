@@ -123,7 +123,7 @@ fn every_rendered_document_reproduces_its_identities() {
         };
         let (headings, anchors, declared) = parsed(adapter, &source);
         if document.get("covers").and_then(Value::as_str) == Some("union") {
-            let union = anchor_set(&headings, &anchors, &declared);
+            let union = anchor_set(&headings, &anchors, &declared, |_rule| true);
             for identity in &want {
                 assert!(
                     union.contains(identity),
@@ -144,7 +144,7 @@ fn every_rendered_document_reproduces_its_identities() {
 fn the_union_holds_every_rule_and_every_html_anchor() {
     let source = "## Setup & Config\n\n<a name=\"html-declared\"></a>\n\n[](){#block-declared}\n";
     let (headings, anchors, declared) = headings(source);
-    let union = anchor_set(&headings, &anchors, &declared);
+    let union = anchor_set(&headings, &anchors, &declared, |_rule| true);
     assert!(union.contains("setup--config"), "the github family is in");
     assert!(
         union.contains("setup-config"),
@@ -218,7 +218,7 @@ fn the_footnote_rules_reproduce_what_their_renderers_published() {
             let (headings, anchors, declared) = parsed(adapter, source);
             let want: BTreeSet<String> = published.iter().map(|id| (*id).to_owned()).collect();
             assert_eq!(
-                anchor_set(&headings, &anchors, &declared),
+                anchor_set(&headings, &anchors, &declared, |_rule| true),
                 want,
                 "{adapter}: {source:?}"
             );
@@ -272,6 +272,7 @@ fn duplicate_headings_diverge_by_suffix_style() {
     for (name, ids) in published {
         let want: Vec<String> = match name {
             "gitea" => vec!["same", "same", "same"],
+            "mdn" => vec!["same", "same_2", "same_3"],
             "asciidoctor" => vec!["_same", "_same_2", "_same_3"],
             "python-markdown" | "pymdownx" => vec!["same", "same_1", "same_2"],
             _ => vec!["same", "same-1", "same-2"],
@@ -281,6 +282,22 @@ fn duplicate_headings_diverge_by_suffix_style() {
         .collect();
         assert_eq!(ids, want, "{name}");
     }
+}
+
+/// MDN numbers a definition-list term only once every Markdown heading holds
+/// its identity, so the term takes `_2` even when it comes first.
+#[test]
+fn mdn_numbers_its_terms_after_every_heading() {
+    let rule = RULES
+        .iter()
+        .find(|rule| rule.name == "mdn")
+        .expect("the table holds the mdn rule");
+    let (headings, _anchors, _declared) =
+        headings("- `max-age`\n  - : The term.\n\n## max-age\n\n## max-age\n");
+    assert_eq!(
+        identities(rule, &headings),
+        ["max-age", "max-age_2", "max-age_3"].map(str::to_owned)
+    );
 }
 
 #[test]
@@ -334,7 +351,9 @@ fn a_raw_html_heading_belongs_to_the_rules_that_anchor_one() {
     let (headings, _anchors, _declared) = headings("<h2>Twin</h2>\n\n## Twin\n");
     for rule in &RULES {
         let published = identities(rule, &headings);
-        let want: Vec<String> = if rule.raw_html == RawHtml::Anchored {
+        let want: Vec<String> = if rule.name == "mdn" {
+            vec!["twin".to_owned(), "twin_2".to_owned()]
+        } else if rule.raw_html == RawHtml::Anchored {
             vec!["twin".to_owned(), "twin-1".to_owned()]
         } else if rule.name == "asciidoctor" {
             vec!["_twin".to_owned()]
@@ -355,6 +374,7 @@ fn a_heading_that_filters_to_nothing_diverges_by_empty_rule() {
                 assert!(published.is_empty(), "{} publishes no anchor", rule.name);
             }
             "asciidoctor" => assert_eq!(published, vec!["_...".to_owned()]),
+            "mdn" => assert_eq!(published, vec!["...".to_owned()]),
             "forgejo" | "goldmark" => assert_eq!(published, vec!["heading".to_owned()]),
             "kramdown" => assert_eq!(published, vec!["section".to_owned()]),
             "python-markdown" | "pymdownx" => assert_eq!(published, vec!["_1".to_owned()]),

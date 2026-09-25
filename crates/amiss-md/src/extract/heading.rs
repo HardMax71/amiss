@@ -128,6 +128,60 @@ pub(super) fn definition_terms(node: &Node) -> Vec<Heading> {
         .collect()
 }
 
+/// The term MDN's own list syntax writes: an item ending in a nested list
+/// whose every item opens with `: `, which MDN renders as a definition list.
+/// It publishes the term's identity from the text of the element the term
+/// opens with, or from the whole term when it opens with text. A macro it
+/// opens with renders first, as an element showing the macro's display text.
+pub(super) fn mdn_term(item: &Node) -> Option<Heading> {
+    let (details, term) = item.children.split_last()?;
+    let defines = !details.children.is_empty()
+        && details.children.iter().all(|detail| {
+            matches!(detail.kind, Kind::ListItem) && text_content(detail).starts_with(": ")
+        });
+    if !defines {
+        return None;
+    }
+    let inlines = match term {
+        [paragraph] if matches!(paragraph.kind, Kind::Paragraph) => paragraph.children.as_slice(),
+        inlines => inlines,
+    };
+    let first = inlines.first()?;
+    let opening = if let Kind::Text(value) = &first.kind {
+        Some(value)
+    } else {
+        None
+    };
+    let text = match opening {
+        Some(value) => {
+            macro_display(value).unwrap_or_else(|| inlines.iter().map(text_content).collect())
+        }
+        None => text_content(first),
+    };
+    Some(Heading {
+        text: text.trim().to_owned(),
+        attribute: None,
+        source: HeadingSource::DefinitionTerm,
+        span: item.span,
+    })
+}
+
+/// The text a `KumaScript` cross-reference macro the text opens with displays:
+/// its second string argument when it names one, and its first otherwise,
+/// with the two entities MDN writes in them decoded.
+/// `{{cssxref("&lt;string&gt;")}}` displays `<string>`.
+fn macro_display(text: &str) -> Option<String> {
+    let (_name, rest) = text.strip_prefix("{{")?.split_once('(')?;
+    let arguments = rest.split_once(")}}")?.0;
+    let mut quoted = arguments.split('"').skip(1).step_by(2);
+    let first = quoted.next()?;
+    let shown = quoted
+        .next()
+        .filter(|second| !second.is_empty())
+        .unwrap_or(first);
+    Some(shown.replace("&lt;", "<").replace("&gt;", ">"))
+}
+
 /// Each term is the line above a line opening a definition, so a second
 /// definition under one term names no new term.
 fn terms(content: &str) -> Vec<&str> {
@@ -147,6 +201,18 @@ fn attribute_line(line: Option<&str>) -> Option<String> {
     let inner = line?.trim().strip_prefix('{')?.strip_suffix('}')?;
     attribute_id(inner)
 }
+
+/// The `Try it` heading MDN's `InteractiveExample` macro renders above the
+/// example, under the identity its `en-US` title takes. `KumaScript` reads a
+/// macro's name in any case.
+pub(super) fn interactive_example(line: &str) -> Option<String> {
+    let call = line.trim().strip_prefix("{{")?;
+    call.get(..INTERACTIVE_EXAMPLE.len())?
+        .eq_ignore_ascii_case(INTERACTIVE_EXAMPLE)
+        .then(|| "try_it".to_owned())
+}
+
+const INTERACTIVE_EXAMPLE: &str = "InteractiveExample";
 
 /// The identity a `MyST` target declares, `(name)=` alone on its line, which
 /// the renderer writes onto the block that follows it. Sphinx stores the same

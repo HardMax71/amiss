@@ -1,4 +1,4 @@
-use amiss_fixtures::{CommitChain, Staged, staged_repository};
+use amiss_fixtures::{CommitChain, Staged, commit_chain, staged_repository};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::resolve::{Resolver, TargetCache};
 use amiss_scan::{ScanLimits, ScanResources, discover};
@@ -65,6 +65,61 @@ fn a_heading_anchor_resolves_under_the_union_of_the_renderer_rules() {
             panic!("{fragment} is published by no renderer: {row:?}");
         };
         assert_eq!(path.as_str(), Some("docs/anchors.md"));
+    }
+}
+
+/// MDN's rule is read only under the front-matter schema its repositories keep
+/// at their root, so its underscore spelling answers for no other tree.
+#[test]
+fn the_mdn_rule_is_read_only_under_mdn_content() {
+    for (marker, read) in [
+        (None, false),
+        (Some("front-matter-config.json"), true),
+        (Some(".front-matter-config.json"), true),
+    ] {
+        let mut files = vec![
+            ("files/guide.md", "# Setup Config\n"),
+            ("files/index.md", "# Index\n"),
+        ];
+        files.extend(marker.map(|name| (name, "{}\n")));
+        let chain = commit_chain(&[("tree", files.as_slice())])
+            .unwrap_or_else(|_defect| panic!("commit {marker:?}"));
+        let mut bed = bed_at(chain, 0, ScanLimits::CONTRACT, GitLimits::CONTRACT);
+        let row = bed
+            .run_as(
+                Adapter::Markdown,
+                None,
+                "files/index.md",
+                false,
+                "guide.md#setup_config",
+            )
+            .unwrap_or_else(|_defect| panic!("resolve under {marker:?}"))
+            .1;
+        assert_eq!(
+            matches!(row, Resolution::Resolved { .. }),
+            read,
+            "{marker:?}: {row:?}"
+        );
+    }
+}
+
+/// A text directive is text a browser finds on the page, never an identity,
+/// so it is declined wherever it sits in the fragment.
+#[test]
+fn a_text_directive_is_declined_rather_than_missing() {
+    let mut bed = bed();
+    for destination in ["anchors.md#:~:text=setup", "anchors.md#setup:~:text=config"] {
+        let row = bed
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
+            .unwrap_or_else(|_defect| panic!("resolve {destination}"))
+            .1;
+        assert!(
+            matches!(
+                row,
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(_))
+            ),
+            "{destination}: {row:?}"
+        );
     }
 }
 

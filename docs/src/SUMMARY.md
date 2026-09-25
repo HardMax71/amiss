@@ -17,7 +17,7 @@
 - [Snapshots](snapshots.md)
 - [Discovery](discovery.md)
 - [Resolution](resolution.md)
-  - [What twelve renderers call a heading](anchor-rules.md)
+  - [What thirteen renderers call a heading](anchor-rules.md)
   - [What a documentation router serves](route-spellings.md)
 - [Correlation and impact](correlation.md)
 - [Claims](claims.md)

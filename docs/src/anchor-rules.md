@@ -1,4 +1,4 @@
-# What twelve renderers call a heading
+# What thirteen renderers call a heading
 
 A heading anchor is not a property of Markdown. `## Setup & Config` has no identity until
 something renders it, and the renderers disagree: github.com publishes `setup--config`,
@@ -15,7 +15,7 @@ matches.
 
 | Rule | Serves | Distinguishing behavior |
 | --- | --- | --- |
-| `github` | github.com, GitLab, Docusaurus, Hugo's github type | keeps letters, marks, numbers and connector punctuation; one separator per space; the only rule that also anchors a heading written as raw HTML |
+| `github` | github.com, GitLab, Docusaurus, Hugo's github type | keeps letters, marks, numbers and connector punctuation; one separator per space; also anchors a heading written as raw HTML, on the counter its Markdown headings use |
 | `gitea` | Gitea 1.27 repository files and wiki pages | drops marks; publishes nothing for an empty identity; never suffixes a repeat |
 | `forgejo` | Forgejo 16 repository files and wiki pages | Gitea's filter, but an empty identity becomes `heading` and repeats take `-1` |
 | `mdbook` | mdBook with smart punctuation off | Rust's alphanumeric test, so Indic vowel signs survive where Gitea drops them |
@@ -26,7 +26,8 @@ matches.
 | `mdit-vue` | VitePress, VuePress | a wide punctuation class collapses to one separator; a leading digit takes `_` |
 | `kramdown` | Jekyll, GitHub Pages | strips the leading run of non-letters; ASCII only; empty becomes `section` |
 | `docutils` | Docutils and Sphinx | every non-alphanumeric run becomes one separator, so `foo_bar` is `foo-bar`; a leading digit run is stripped rather than prefixed; NFKD then ASCII fold, so `Ⅻ chapter` is `xii-chapter` |
-| `asciidoctor` | Asciidoctor and Antora, at the default `idprefix` and `idseparator` | the only rule whose separator is `_` and whose every identity carries a fixed prefix; hyphens and dots survive as themselves; repeats number from `_2` |
+| `asciidoctor` | Asciidoctor and Antora, at the default `idprefix` and `idseparator` | the only rule whose every identity carries a fixed prefix, and whose separator is `_`; hyphens and dots survive as themselves; repeats number from `_2` |
+| `mdn` | MDN Web Docs, built by rari, under a `front-matter-config.json` | drops ASCII punctuation except `!`, `-`, `.` and `_` and keeps everything else, Unicode included; a run of spaces becomes one `_`; empty becomes `sect`; repeats number from `_2`, and a definition-list term or raw HTML heading takes its number after every Markdown heading holds one |
 
 The AsciiDoc rule is the one pinned to a configuration rather than to a renderer's only
 behaviour. `idprefix` and `idseparator` are document attributes, and this engine evaluates no
@@ -38,6 +39,12 @@ attribute-driven cases above.
 An anchor resolves when any of them would publish it, or when the document declares it
 outright. Adding a rule can only grow that set, so a rule missing from the table is the
 only way a live anchor is reported absent, and nothing a repository declares can shrink it.
+
+`mdn` is the one row read only in some trees: under `front-matter-config.json` or
+`.front-matter-config.json`, the front-matter schema mdn/content and mdn/translated-content
+keep at their root. Its underscore spelling is what most other rules write with a dash, so
+read everywhere it would answer for a broken link on any site. k8s-community's
+`#kinds_of_tests` is one: github.com publishes `kinds-of-tests`, and the link is broken there.
 
 Two of the rows are configurations rather than renderers. mdBook ships with smart
 punctuation on and MkDocs takes its slug function from `mkdocs.yml`, so both spellings are
@@ -102,6 +109,7 @@ wherever their profile is.
 | `mdx-heading-id` | an MDX expression ending a heading, `{#id}` | `mdx` | any tree |
 | `jsx-id` | an `id` attribute on a lowercase JSX element | `mdx` | any tree |
 | `mdx-partial` | a default import of a relative document, rendered as an element | `mdx` | any tree |
+| `mdn-interactive-example` | an `InteractiveExample` macro call, which renders a `Try it` heading | `markdown` | any tree |
 | `asciidoc-anchor` | a block anchor alone on its line, `[[id]]` or `[#id]` | `asciidoc` | any tree |
 | `asciidoc-inline-anchor` | an anchor in the flow of a line, `[[id]]` | `asciidoc` | any tree |
 | `asciidoc-reference-text` | a section title a natural cross reference names | `asciidoc` | any tree |
@@ -156,6 +164,17 @@ definition under one term names no new term. Hugo's own flag decides whether any
 published and this engine does not read it, so a term joins the union wherever the
 spelling appears. A page that writes a definition list in a tree Hugo never builds gains an
 identity nothing publishes, which can leave a finding unreported and cannot invent one.
+
+MDN writes its definition lists another way, `- term` over a nested `  - : definition`, and
+the `mdn` rule reads those terms itself rather than through this row. rari names a term once
+every Markdown heading holds its identity, from the text of the element the term opens with,
+or from the whole term when it opens with text, so `` - `accept` (optional) `` publishes
+`accept`. A term opening with a cross-reference macro publishes what the macro displays, its
+second string argument or else its first, so `{{cssxref("@layer")}}` publishes `layer`.
+
+`mdn-interactive-example` is the `Try it` heading MDN's `InteractiveExample` macro renders
+above the example it embeds. Its identity is `try_it`, the English title under the `mdn` rule,
+and a call standing alone on its line declares it.
 
 The two MDX rows are the same heading identity written two ways, because the attribute
 spelling is an expression in that grammar. `mdx-heading-id` is the classic
@@ -362,9 +381,11 @@ mismatch: github-slugger 2.0.0 and comrak 0.54.0 for `github`, goldmark 1.8.4,
 python-markdown 3.10, pymdownx, `@mdit-vue/shared`, and kramdown's own generator. The
 remaining five are transcribed and traced by hand: Gitea's `CleanValue`, Forgejo's
 `prefixedIDs`, mdBook's `id_from_content`, Asciidoctor's `Section.generate_id`, and Docutils'
-`make_id`. The
+`make_id`. The `mdn` column came from rari's own `anchorize`, compiled from its source at
+a86696d and run over every case. Against mdn/content it leaves 3 of the 2,581 anchor findings
+a release without it reported, and two of the three are real breaks. The
 [published vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/heading-anchor-vectors.json)
-name which of the twelve is which and what each transcription is not checked against.
+name which of the thirteen is which and what each transcription is not checked against.
 
 Eight documents, in
 [`corpus/third_party/anchor-fixtures/`](https://github.com/HardMax71/amiss/tree/main/corpus/third_party/anchor-fixtures),
@@ -455,5 +476,7 @@ identity the target actually publishes.
 Renderers outside the table publish identities this check will not match, and a repository
 served by one of them can see an anchor reported missing that its own site resolves. Pandoc,
 Hugo's non-github id types, Sphinx and Docusaurus's custom slug functions are the known
-cases. The fix for any of them is another row, derived and pinned the same way, since the
+cases. Within MDN, a heading whose text is a macro takes its identity from what the macro
+renders, which only the definition-list terms model, and a live sample's frame,
+`frame_` and the sample's identity, is not read. The fix for any of them is another row, derived and pinned the same way, since the
 union only grows.

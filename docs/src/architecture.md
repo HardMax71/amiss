@@ -119,8 +119,8 @@ moves any of those moves the manifest, and review sees the diff.
 
 `amiss-scan` is the evaluation itself: discovery, resolution, correlation, the
 base-versus-candidate comparison, policy, and report construction. It is a library that
-does no I/O beyond the store handed to it. It also carries the twelve heading-identity rules,
-twelve rows for ten renderers since mdBook and MkDocs carry two spellings apiece, every one
+does no I/O beyond the store handed to it. It also carries the thirteen heading-identity rules,
+thirteen rows for eleven renderers since mdBook and MkDocs carry two spellings apiece, every one
 pinned against the renderer it models rather than written from its documentation.
 
 `amiss` is the binary: the closed public command grammar, the in-process run, the five output
