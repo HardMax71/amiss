@@ -2918,6 +2918,50 @@ fn a_router_declaration_that_declares_nothing_refuses_the_candidate() {
     }
 }
 
+/// Deleting a page a site route reaches is a broken link, not a removed one.
+/// The candidate cannot anchor the route to a page it no longer holds, so the
+/// route is read under the base's anchoring, and the unchanged link is the
+/// missing target it now names.
+#[test]
+fn deleting_a_page_a_route_reaches_is_a_missing_target() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs/.amiss")).unwrap();
+    fs::write(
+        root.join("docs/.amiss/router.yml"),
+        "router: directory-pages\nbase: /\n",
+    )
+    .unwrap();
+    fs::write(root.join("docs/live.md"), "# Live\n\n[guide](/guide/)\n").unwrap();
+    fs::write(root.join("docs/guide.md"), "# Guide\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = oid(git(root, &["rev-parse", "HEAD"]).trim());
+    git(root, &["rm", "-q", "docs/guide.md"]);
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let staged = payload(&staged_index(&repo, &engine(), None, &shell(), &base).unwrap());
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = oid(git(root, &["rev-parse", "HEAD"]).trim());
+    let committed =
+        payload(&commit_pair(&repo, &engine(), None, &shell(), &base, &candidate).unwrap());
+    for report in [&staged, &committed] {
+        let rows: Vec<(&str, &str)> = report["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["location"]["path"] == "docs/live.md")
+            .filter_map(|row| Some((row["kind"].as_str()?, row["attribution"].as_str()?)))
+            .collect();
+        assert_eq!(
+            rows,
+            [("explicit-target-missing", "introduced")],
+            "{}",
+            report["findings"]
+        );
+    }
+}
+
 /// A Hugo configuration is the same declaration written where the generator
 /// reads it. A candidate that newly binds one lends it to the base, so the
 /// anchor it makes readable on an untouched page is pre-existing. A candidate
