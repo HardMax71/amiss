@@ -66,16 +66,11 @@ const MACROS: [(&str, ReferenceKind); 4] = [
 #[must_use]
 pub fn references(line: &str, at: usize) -> Vec<Reference> {
     let mut found = Vec::new();
-    if let Some(rest) = line.strip_prefix("include::")
-        && let Some((target, options, end)) = target_of(rest)
+    if line.starts_with("include::")
+        && let Some((target, options, end)) =
+            bracketed(line, "include::".len(), &mut brackets(line))
     {
-        let mut reference = build(
-            ReferenceKind::Include,
-            target,
-            at,
-            0,
-            end.saturating_add("include::".len()),
-        );
+        let mut reference = build(ReferenceKind::Include, target, at, 0, end);
         reference.transclusion = Some(if target.contains('{') && target.contains('}') {
             Err(TransclusionRefusal::DynamicTarget)
         } else if options.is_empty() {
@@ -88,26 +83,21 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
     }
     let skips = passthrough_spans(line);
     let bytes = line.as_bytes();
+    let mut brackets = brackets(line);
+    let mut xref_close = cursor(line, |rest| rest.find(">>"));
+    let mut angle = cursor(line, |rest| rest.find('<'));
     let mut index = 0;
     while index < line.len() {
-        if skips
-            .iter()
-            .any(|(start, end)| index >= *start && index < *end)
-        {
+        if skipped(&skips, index) || bytes.get(index.wrapping_sub(1)) == Some(&b'\\') {
             index = index.saturating_add(1);
             continue;
         }
-        if bytes.get(index.wrapping_sub(1)) == Some(&b'\\') {
-            index = index.saturating_add(1);
-            continue;
-        }
-        let tail = line.get(index..).unwrap_or_default();
-        if let Some(reference) = internal(tail, at, index) {
+        if let Some(reference) = internal(line, at, index, &mut xref_close, &mut angle) {
             index = reference.span.1.saturating_sub(at);
             found.push(reference);
             continue;
         }
-        if let Some(reference) = macro_at(line, tail, at, index) {
+        if let Some(reference) = macro_at(line, at, index, &mut brackets) {
             index = reference.span.1.saturating_sub(at);
             found.push(reference);
             continue;
@@ -117,32 +107,35 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
     found
 }
 
-fn macro_at(line: &str, tail: &str, at: usize, index: usize) -> Option<Reference> {
+fn macro_at(line: &str, at: usize, index: usize, brackets: &mut Brackets<'_>) -> Option<Reference> {
     if !boundary(line, index) {
         return None;
     }
+    let tail = line.get(index..)?;
     let (name, kind) = MACROS
         .iter()
         .find(|(name, _)| tail.starts_with(name))
         .copied()?;
-    let rest = tail.get(name.len()..)?;
-    let (target, _options, end) = target_of(rest)?;
-    Some(build(
-        kind,
-        target,
-        at,
-        index,
-        index.saturating_add(name.len()).saturating_add(end),
-    ))
+    let (target, _options, end) = bracketed(line, index.checked_add(name.len())?, brackets)?;
+    Some(build(kind, target, at, index, end))
 }
 
-fn internal(tail: &str, at: usize, index: usize) -> Option<Reference> {
-    let rest = tail.strip_prefix("<<")?;
-    let close = rest.find(">>")?;
-    let inside = rest.get(..close)?;
-    if inside.is_empty() || inside.contains('<') {
+/// A cross reference, `<<target,text>>`, closing on the first `>>` after it
+/// and holding no `<` of its own.
+fn internal(
+    line: &str,
+    at: usize,
+    index: usize,
+    xref_close: &mut Next<'_>,
+    angle: &mut Next<'_>,
+) -> Option<Reference> {
+    line.get(index..)?.strip_prefix("<<")?;
+    let from = index.checked_add(2)?;
+    let close = next_at(xref_close, from)?;
+    if close == from || next_at(angle, from).is_some_and(|inner| inner < close) {
         return None;
     }
+    let inside = line.get(from..close)?;
     let target = inside.split(',').next().unwrap_or_default().trim();
     if target.is_empty() {
         return None;
@@ -152,11 +145,62 @@ fn internal(tail: &str, at: usize, index: usize) -> Option<Reference> {
         target,
         at,
         index,
-        index
-            .saturating_add(2)
-            .saturating_add(close)
-            .saturating_add(2),
+        close.checked_add(2)?,
     ))
+}
+
+/// Where one pattern next matches at or after a position, for a scan whose
+/// positions only grow. Each match is found once however many positions ask
+/// for it, which keeps one long line linear rather than quadratic.
+struct Next<'a> {
+    line: &'a str,
+    pattern: fn(&str) -> Option<usize>,
+    found: Option<usize>,
+    exhausted: bool,
+}
+
+fn cursor(line: &str, pattern: fn(&str) -> Option<usize>) -> Next<'_> {
+    Next {
+        line,
+        pattern,
+        found: None,
+        exhausted: false,
+    }
+}
+
+fn next_at(cursor: &mut Next<'_>, position: usize) -> Option<usize> {
+    if let Some(found) = cursor.found.filter(|found| *found >= position) {
+        return Some(found);
+    }
+    if cursor.exhausted {
+        return None;
+    }
+    let start = (position..=cursor.line.len()).find(|at| cursor.line.is_char_boundary(*at))?;
+    let found = cursor
+        .line
+        .get(start..)
+        .and_then(cursor.pattern)
+        .and_then(|offset| offset.checked_add(start));
+    cursor.exhausted = found.is_none();
+    cursor.found = found;
+    found
+}
+
+/// The three places a macro's attribute list is read off: the opening
+/// bracket, the first whitespace, which ends a target before any bracket, and
+/// the closing bracket.
+struct Brackets<'a> {
+    open: Next<'a>,
+    space: Next<'a>,
+    close: Next<'a>,
+}
+
+fn brackets(line: &str) -> Brackets<'_> {
+    Brackets {
+        open: cursor(line, |rest| rest.find('[')),
+        space: cursor(line, |rest| rest.find(char::is_whitespace)),
+        close: cursor(line, |rest| rest.find(']')),
+    }
 }
 
 fn build(kind: ReferenceKind, target: &str, at: usize, start: usize, end: usize) -> Reference {
@@ -171,22 +215,34 @@ fn build(kind: ReferenceKind, target: &str, at: usize, start: usize, end: usize)
     }
 }
 
-/// A macro target runs to the opening bracket of its attribute list. Whitespace
-/// before that bracket means this was prose that happened to start with the
-/// macro name.
-fn target_of(rest: &str) -> Option<(&str, &str, usize)> {
-    let open = rest.find('[')?;
-    let target = rest.get(..open)?;
-    if target.is_empty() || target.chars().any(char::is_whitespace) {
+/// A macro target runs from where its name ends to the opening bracket of its
+/// attribute list, and the list to its closing bracket, whose end is the
+/// macro's. Whitespace before that bracket means this was prose that happened
+/// to start with the macro name.
+fn bracketed<'a>(
+    line: &'a str,
+    from: usize,
+    brackets: &mut Brackets<'_>,
+) -> Option<(&'a str, &'a str, usize)> {
+    let open = next_at(&mut brackets.open, from)?;
+    if open == from || next_at(&mut brackets.space, from).is_some_and(|space| space < open) {
         return None;
     }
-    let close = rest.get(open..)?.find(']')?;
-    let options = rest.get(open.saturating_add(1)..open.saturating_add(close))?;
+    let close = next_at(&mut brackets.close, open)?;
     Some((
-        target,
-        options,
-        open.saturating_add(close).saturating_add(1),
+        line.get(from..open)?,
+        line.get(open.checked_add(1)?..close)?,
+        close.checked_add(1)?,
     ))
+}
+
+/// Whether a position falls inside one of the sorted, disjoint spans.
+fn skipped(spans: &[(usize, usize)], position: usize) -> bool {
+    spans
+        .partition_point(|(start, _)| *start <= position)
+        .checked_sub(1)
+        .and_then(|last| spans.get(last))
+        .is_some_and(|(_, end)| position < *end)
 }
 
 /// The byte intervals a macro name cannot start in: the inline passthroughs,
@@ -195,6 +251,7 @@ fn target_of(rest: &str) -> Option<(&str, &str, usize)> {
 /// nothing, since Asciidoctor still reads a macro written between backticks.
 fn passthrough_spans(line: &str) -> Vec<(usize, usize)> {
     let mut spans = Vec::new();
+    let mut brackets = brackets(line);
     let mut index = 0;
     while let Some(tail) = line.get(index..) {
         let Some(first) = tail.chars().next() else {
@@ -209,10 +266,9 @@ fn passthrough_spans(line: &str) -> Vec<(usize, usize)> {
                 .and_then(|rest| rest.find(fence))
                 .map(|close| close.saturating_add(fence.len().saturating_mul(2))),
             None if tail.starts_with("pass:") && boundary(line, index) => {
-                tail.find('[').and_then(|open| {
-                    let close = tail.get(open..)?.find(']')?;
-                    open.checked_add(close)?.checked_add(1)
-                })
+                next_at(&mut brackets.open, index.saturating_add("pass:".len()))
+                    .and_then(|open| next_at(&mut brackets.close, open))
+                    .and_then(|close| close.checked_add(1)?.checked_sub(index))
             }
             None => None,
         };
@@ -319,7 +375,7 @@ pub fn declared_anchors(line: &str) -> Vec<String> {
             ("[[", "]]")
         };
         index = at.saturating_add(fence.len());
-        let opened = !skips.iter().any(|(start, end)| at >= *start && at < *end)
+        let opened = !skipped(&skips, at)
             && !matches!(
                 line.get(..at).and_then(|before| before.chars().next_back()),
                 Some('\\' | '[')
@@ -332,15 +388,11 @@ pub fn declared_anchors(line: &str) -> Vec<String> {
         }
         index = index.saturating_add(close).saturating_add(closer.len());
     }
+    let mut brackets = brackets(line);
     found.extend(
         line.match_indices("anchor:")
-            .filter(|(at, _)| {
-                boundary(line, *at) && !skips.iter().any(|(start, end)| (*start..*end).contains(at))
-            })
-            .filter_map(|(at, name)| {
-                line.get(at.saturating_add(name.len())..)
-                    .and_then(target_of)
-            })
+            .filter(|(at, _)| boundary(line, *at) && !skipped(&skips, *at))
+            .filter_map(|(at, name)| bracketed(line, at.saturating_add(name.len()), &mut brackets))
             .flat_map(|(id, reftext, _end)| named(Some(&format!("{id},{reftext}")))),
     );
     found

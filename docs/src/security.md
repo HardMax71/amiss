@@ -25,9 +25,13 @@ not a general CPU deadline inside the parser. The order is explicit in the
 [scan pipeline](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/scan.rs).
 One budget does act inside the parse: every candidate close of an MDX code region charges
 the accumulated region against the `aggregate-embedded-code-evaluation-bytes-per-snapshot`
-ceiling before the lexical scan reads it, which bounds the one measured quadratic case.
+ceiling before the lexical scan reads it, which bounds one measured quadratic case.
 The history of that case is in the
-[corpus notes](https://github.com/HardMax71/amiss/blob/main/corpus/README.md).
+[corpus notes](https://github.com/HardMax71/amiss/blob/main/corpus/README.md). Two more are
+measured and have no budget inside the parse, both in grammars this engine embeds rather than
+writes: a run of unclosed JSX tags on one MDX line, about 21 s for 150 KB under markdown-rs,
+and a `*a_` run on one Markdown line, about 41 s for 1.2 MB under pulldown-cmark. The
+AsciiDoc scanner is this engine's own and reads each line in one forward pass.
 
 A Markdown parser panic is caught and converted to `PARSER_PANIC` against the document that
 caused it instead of aborting the process. The known panic fixtures live in the conformance
