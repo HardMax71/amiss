@@ -35,9 +35,11 @@ parent to miss.
 The public command line is closed: the grammar below is everything, and anything else
 exits 2 as an invalid invocation. The verb comes first; after it the options come in any
 order, each at most once. Standalone `--help` prints this whole grammar on stdout, and
-`<verb> --help` prints that verb's lines of it. A refused human invocation prints one
+`<verb> --help` prints that verb's lines of it. A refused invocation prints one
 reason line per violated contract, each naming the option and the value it got, then the
-same grammar on stderr, so the binary teaches its own command line on either path. The one
+same grammar on stderr, so the binary teaches its own command line on either path. A machine
+format still writes its refusal envelope to stdout, where the error row keeps only the fixed
+sentence and the reason lines stay on stderr. The one
 exception is a malformed `--format` selection, which prints a single line, since the output
 channel itself was never agreed. The copy below is checked against the binary's in CI.
 

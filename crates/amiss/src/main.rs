@@ -90,6 +90,7 @@ fn main() -> ExitCode {
             format: format @ (OutputFormat::Json | OutputFormat::Sarif | OutputFormat::CodeQuality),
             refusals,
         } => {
+            refused(&refusals);
             let codes = refusals.iter().map(|(code, _reason)| *code).collect();
             match machine_refusal(&codes) {
                 Ok(envelope) => {
@@ -127,15 +128,7 @@ fn main() -> ExitCode {
             format: OutputFormat::Human | OutputFormat::Junit,
             refusals,
         } => {
-            let mut named = None;
-            for (code, reason) in &refusals {
-                if named != Some(code) {
-                    eprintln!("amiss: {}", code.as_ref());
-                    named = Some(code);
-                }
-                eprintln!("  {reason}");
-            }
-            eprintln!("{}", invocation::GRAMMAR);
+            refused(&refusals);
             failure
         }
         Outcome::Accepted(command) => match *command {
@@ -155,6 +148,21 @@ fn main() -> ExitCode {
             invocation::Command::RecordSet(record_set) => record_set::run(&record_set),
         },
     }
+}
+
+/// Each refusal code once with its reasons under it, then the grammar, on the
+/// diagnostics channel so a machine format's stdout stays its report.
+#[expect(clippy::print_stderr, reason = "the contract diagnostics channel")]
+fn refused(refusals: &BTreeSet<invocation::Refusal>) {
+    let mut named = None;
+    for (code, reason) in refusals {
+        if named != Some(code) {
+            eprintln!("amiss: {}", code.as_ref());
+            named = Some(code);
+        }
+        eprintln!("  {reason}");
+    }
+    eprintln!("{}", invocation::GRAMMAR);
 }
 
 fn project<P, R, M, S, D, F>(

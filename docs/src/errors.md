@@ -39,7 +39,7 @@ row, so this page is a reference, not a second source of truth.
 
 <!-- amiss-doc-contract:error-meanings:start -->
 - `INVALID_INVOCATION`: the command line does not match the closed grammar; each documented option appears at most once and nothing else is accepted
-- `INVALID_EVENT`: the declared repository, ref, or default-branch identity is not in canonical form; pass a lowercase owner and name and full refs/heads/ references
+- `INVALID_EVENT`: the declared repository, ref, default-branch, or forge identity is unusable as written; pass a lowercase owner and name, full refs/heads/ references, and --forge for a host outside the known table, as the stderr reason line names
 - `INVALID_PROFILE`: the profile is not observe, enforce-introduced, or enforce; pass one of those three to --profile
 - `REQUEST_UNREADABLE`: the machine evaluation request bytes could not be read; nothing was evaluated, so resend the whole sealed request frame on stdin with nothing after it
 - `CONFIGURATION_INVALID`: a policy or control input violates its schema; correct the file the row names, since one unknown field or malformed value makes the whole file invalid rather than partly honored

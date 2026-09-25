@@ -107,7 +107,11 @@ fn an_observe_run_projects_no_major_issue() {
 #[test]
 fn a_code_quality_refusal_is_an_empty_artifact() {
     let (code, refusal, stderr) = amiss(&["check", "--format", "codequality"]);
-    assert_eq!((code, stderr.as_str()), (2, ""));
+    assert_eq!(code, 2);
+    assert!(
+        stderr.starts_with("amiss: INVALID_INVOCATION\n  --base is required\n"),
+        "the reason travels beside the empty artifact: {stderr}"
+    );
     let issues: Vec<serde_json::Value> = serde_json::from_slice(&refusal).unwrap();
     assert!(issues.is_empty());
 }
