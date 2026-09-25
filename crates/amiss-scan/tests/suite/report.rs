@@ -355,8 +355,10 @@ fn assert_external_destinations(
     assert_eq!(external, 1, "the fixture holds one external reference");
 }
 
+/// An ambiguous match leaves its attribution unknown, which the ramp keeps
+/// blocking, so it is a fix beside the new one rather than a check.
 #[test]
-fn invalid_references_split_new_existing_and_ambiguous_feedback() {
+fn an_ambiguous_invalid_reference_is_a_fix_beside_the_new_one() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     git(root, &["init", "-q"]);
@@ -387,19 +389,15 @@ fn invalid_references_split_new_existing_and_ambiguous_feedback() {
     let feedback = &wire["payload"]["feedback"];
     assert_eq!(feedback["existing_count"], 1);
     let items = feedback["items"].as_array().unwrap();
-    assert_eq!(items.len(), 3);
+    assert_eq!(items.len(), 2);
     assert_eq!(items[0]["action"], "fix");
     assert!(items[0]["target"].is_null());
-    assert_eq!(items[0]["location_count"], 1);
-    assert_eq!(items[0]["annotation"]["path"], "docs/new.md");
-    assert_eq!(items[1]["action"], "check");
+    assert_eq!(items[0]["location_count"], 3);
+    assert_eq!(items[0]["annotation"]["path"], "docs/ambiguous.md");
+    assert_eq!(items[1]["action"], "existing");
     assert!(items[1]["target"].is_null());
-    assert_eq!(items[1]["location_count"], 2);
+    assert_eq!(items[1]["location_count"], 1);
     assert!(items[1]["annotation"].is_null());
-    assert_eq!(items[2]["action"], "existing");
-    assert!(items[2]["target"].is_null());
-    assert_eq!(items[2]["location_count"], 1);
-    assert!(items[2]["annotation"].is_null());
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
