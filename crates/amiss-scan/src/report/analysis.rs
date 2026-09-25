@@ -155,7 +155,9 @@ pub(super) fn finding<E>(finding: Finding<E>) -> model::Finding<RepoPath, E> {
         aggregation: model::FindingAggregation {
             strategy: model::AggregationStrategy::OnePerFindingKey,
             member_count: finding.member_count,
-            locations_omitted: 0,
+            locations_omitted: finding.member_count.saturating_sub(
+                u64::try_from(finding.observation_ids.len().max(1)).unwrap_or(u64::MAX),
+            ),
             representative_rule: model::RepresentativeRule::LowestLocationThenObservationId,
         },
         location: model::FindingLocation {
