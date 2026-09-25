@@ -622,3 +622,15 @@ fn an_include_inside_a_verbatim_block_names_its_file() -> Result<(), Refusal> {
     assert_eq!(includes, [("Example.java", true), ("raw.html", true)]);
     Ok(())
 }
+
+/// Each pattern here once cost a scan from every byte of the line, minutes
+/// for a line this long; read in one forward pass, each takes milliseconds.
+#[test]
+fn a_long_line_is_read_in_one_forward_pass() {
+    for pattern in ["<<", "<<a,", "xref:", "+a", "pass:", "anchor:"] {
+        let line = pattern.repeat((1 << 20) / pattern.len());
+        let source = format!("= T\n\n{line}\n");
+        let extraction = extract(source.as_bytes()).expect("utf-8");
+        assert!(extraction.references.is_empty(), "{pattern}");
+    }
+}
