@@ -246,6 +246,32 @@ pub(crate) fn missing_detail(
     detail
 }
 
+/// Each shown finding row's own words, by finding key: the kind and reason a
+/// place line reads and the target it names, for the projections whose rows
+/// otherwise carry only the kind's sentence. A recorded row shows no place
+/// and has none.
+pub(crate) fn finding_words<P, R, M, S, D, A, F>(
+    payload: &ReportPayload<P, R, M, FindingFactEvidence<P, R, S, D, M>>,
+    path_atom: A,
+    resolution: &F,
+) -> BTreeMap<Digest, String>
+where
+    A: Fn(Option<&P>) -> String + Copy,
+    F: Fn(&R) -> (ResolutionTag, Option<String>),
+{
+    places(payload, path_atom, resolution)
+        .into_iter()
+        .map(|place| {
+            let tokens = finding_tokens(&place);
+            let words = match place.target {
+                Some(target) => format!("{tokens} target {}", path_atom(Some(target))),
+                None => tokens,
+            };
+            (place.key, words)
+        })
+        .collect()
+}
+
 /// The engine groups feedback by action and target; the same grouping over
 /// the findings the report carries puts every place under its row. Places
 /// read in document then position order, closed by the finding key the

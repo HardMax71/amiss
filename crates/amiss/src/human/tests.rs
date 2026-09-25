@@ -149,14 +149,22 @@ fn measure<T, F: Fn() -> T>(label: &str, project: F) {
 fn large_projection_latency_and_memory() {
     let envelope = measurement_report(10_000);
     measure("sarif", || {
-        crate::sarif::log(&envelope, amiss_wire::model::RepoPath::as_str)
+        crate::sarif::log(
+            &envelope,
+            |path: &amiss_wire::model::RepoPath| Some(std::borrow::Cow::Borrowed(path.as_bytes())),
+            &std::collections::BTreeMap::new(),
+        )
     });
     measure("code-quality", || {
-        crate::codequality::issues(&envelope, |path| {
-            path.as_str().map_or_else(
-                || std::borrow::Cow::Owned(hex::encode(path.as_bytes())),
-                std::borrow::Cow::Borrowed,
-            )
-        })
+        crate::codequality::issues(
+            &envelope,
+            |path| {
+                path.as_str().map_or_else(
+                    || std::borrow::Cow::Owned(hex::encode(path.as_bytes())),
+                    std::borrow::Cow::Borrowed,
+                )
+            },
+            &std::collections::BTreeMap::new(),
+        )
     });
 }
