@@ -201,7 +201,7 @@ fn error_routes_preserve_the_canonical_wire() {
                 .0
         )
         .to_string(),
-        "sha256:3cab9c76c965e887a97093a21e960386b4f868af2babadcd7ff28d16f33f3969",
+        "sha256:c71169a72c78d675f5776f8c8ef67e008d72c14e2e622b6db9225abb0c9fa588",
     );
 }
 

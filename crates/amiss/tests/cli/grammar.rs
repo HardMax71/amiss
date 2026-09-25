@@ -452,7 +452,14 @@ fn every_refusal_class_names_its_option() {
     let machine = with(&["--verbose", "--format", "json"]);
     let shown: Vec<&str> = machine.iter().map(String::as_str).collect();
     let (exit, stdout, stderr) = amiss(&shown);
-    assert_eq!((exit, stderr.as_str()), (2, ""));
+    assert_eq!(exit, 2);
+    assert!(
+        stderr.starts_with(
+            "amiss: INVALID_INVOCATION
+  "
+        ) && stderr.ends_with(grammar.as_str()),
+        "a machine refusal names its reason beside the envelope: {stderr}"
+    );
     let refused = report(&stdout);
     assert_eq!(
         refused.payload.errors[0].code,

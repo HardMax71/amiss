@@ -200,7 +200,11 @@ fn a_sarif_artifact_uri_is_percent_encoded() {
 #[test]
 fn a_sarif_refusal_is_still_sarif() {
     let (code, refusal, stderr) = amiss(&["check", "--format", "sarif"]);
-    assert_eq!((code, stderr.as_str()), (2, ""));
+    assert_eq!(code, 2);
+    assert!(
+        stderr.starts_with("amiss: INVALID_INVOCATION\n  --base is required\n"),
+        "the reason travels beside the log: {stderr}"
+    );
     let refusal: serde_json::Value = serde_json::from_slice(&refusal).unwrap();
     assert_eq!(
         refusal
