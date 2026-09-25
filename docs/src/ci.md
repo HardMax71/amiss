@@ -197,10 +197,9 @@ later retries. Every attempt derives the assessment locally. A new workflow run 
 inherits an observation from the old one, and the cache never becomes a baseline or changes the
 advisory policy.
 
-The SARIF projection turns the same run into GitHub code-scanning alerts, inline on the
-lines the findings name, with fixes rendered as suggested edits and the finding key
-deduplicating alerts across runs. Two steps after any direct invocation, in a job whose
-`permissions` block adds `security-events: write` beside `contents: read`:
+The SARIF projection turns the same run into GitHub code-scanning alerts on the lines the
+findings name. Two steps after any direct invocation, in a job whose `permissions` block adds
+`security-events: write` beside `contents: read`:
 
 ```yaml
 - run: amiss check <the check flags above> --format sarif > amiss.sarif
@@ -216,6 +215,16 @@ surfaces operate on them directly,
 [agentic autofix](https://github.blog/changelog/2026-07-10-agentic-autofix-for-code-scanning-alerts-in-public-preview/)
 included. What each result carries is stated in
 [The report](report.md).
+
+Code scanning reads less of the file than the file holds, in three ways. It renders no SARIF
+`fixes`, so the replacement a finding carries reaches `amiss fix` and other SARIF viewers but
+never the alert. It tracks an alert by the
+[line hash](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning)
+upload-sarif computes and ignores every other fingerprint, so the finding key does not follow
+an alert across runs, and two findings of one kind on one line are one alert. And a pull
+request shows an alert only when its line is in the diff, while a drift finding usually sits
+in a document the change never touched. The Action's annotations and job summary list those,
+so keep the Action or the human output beside the upload rather than in place of it.
 
 On GitLab the whole job ships as a pinned template. GitLab's CI/CD Catalog only serves
 components hosted on a GitLab instance, so a GitHub-hosted project publishes the honest
