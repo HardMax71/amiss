@@ -716,5 +716,6 @@ Hugo's `g` was the case for the generated class, arriving as transclusion and as
 repository's own render hook. The exact-path core of that class is answered now, from the
 tracked ignore file recorded in [Reference coverage](completed/reference-coverage.md), and
 both of those arrivals still sit outside it. What moved is the verdict rather than the class:
-a destination a render hook rewrites is undecided instead of missing, so hugoDocs reports 123
-missing targets where it reported 618, and every one of them is an anchor.
+a destination a render hook rewrites is undecided instead of missing, so hugoDocs went from 618
+missing targets to 123, every one of them an anchor, and the anchor rules added since have taken
+it to none.

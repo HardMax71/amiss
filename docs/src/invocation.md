@@ -103,7 +103,7 @@ trust them when the short form reads ambiguous.
 | `--forge` | `github`, `gitlab`, `gitea`, `bitbucket-cloud`, or `bitbucket-data-center` | URL dialect; an explicit flag beats the host table |
 | `--profile` | `observe`, `enforce-introduced`, or `enforce` | report only, block introduced findings while carrying the backlog, or let every blocking finding gate; see [Profiles and findings](profiles.md) |
 | `--semantic-template` | path | one strict, bounded, candidate-free semantic template for `check`; the scanner binds it to the exact commit or staged-index identity and the run remains self-asserted |
-| `--explain-scope` | none | adds deterministic scope lines to human output |
+| `--explain-scope` | none | adds deterministic scope lines to human output; a machine format has no place for them and ignores it |
 | `--full` | none | prints every feedback item when replaying a report as human output; foreign to every other form and format |
 | `--format` | `human`, `json`, `sarif`, `codequality`, or render-only `junit` | grouped human items, the exact report in [The report](report.md), or one of its CI projections; human output is bounded unless replayed with `--full` |
 | `--path` | repo-relative path | the file an authored claim pins, or the exact root of an authored suffix selector |
@@ -112,7 +112,7 @@ trust them when the short form reads ambiguous.
 | `--suffix` | dot-prefixed UTF-8 suffix | the exact 2 to 64 byte tail of an authored tree selector; no slash, backslash, or NUL; glob metacharacters stay literal and no normalization occurs |
 | `--adapter` | `asciidoc`, `markdown`, `mdx`, `plain-advisory`, or `rst` | the built-in grammar an authored selector binds to matching paths |
 | `--floor-digest` | `sha256:` and 64 hex | the organization floor the minted debt snapshot binds to |
-| `--debt-owner` | text | the item owner the floor must authorize |
+| `--debt-owner` | `team:<name>`, `service:<name>` or `user:<name>` | the item owner the floor must authorize |
 | `--debt-reason` | text | why the debt is being recorded |
 | `--created-at` | UTC instant | the snapshot's and items' creation instant |
 | `--expires-at` | UTC instant | when the items expire; must be after `--created-at` |
