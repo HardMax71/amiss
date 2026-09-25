@@ -1,7 +1,9 @@
 #![cfg(test)]
 
 use super::{Fix, splice};
+use amiss_wire::controls::Profile;
 use amiss_wire::repo_path_text;
+use amiss_wire::report::model::Attribution;
 
 #[test]
 fn typed_fixes_keep_their_exact_spans_and_count_absent_repairs() {
@@ -19,13 +21,28 @@ fn typed_fixes_keep_their_exact_spans_and_count_absent_repairs() {
         description: "repair".to_owned(),
     });
     report.payload.findings[1].fix = None;
-    let (fixes, bare) = super::collect(&report.payload).unwrap();
-    assert_eq!(bare, 1);
+    let (fixes, bare, backlog) = super::collect(&report.payload, Profile::Enforce).unwrap();
+    assert_eq!((bare, backlog), (1, 0));
     assert_eq!(fixes.len(), 1);
     let rows = &fixes["docs/guide.md"];
     assert_eq!(rows.len(), 1);
     assert_eq!((rows[0].start, rows[0].end), (3, 7));
     assert_eq!(rows[0].replacement, "new target");
+
+    report.payload.findings[0].attribution = Attribution::PreExisting;
+    let (fixes, bare, backlog) =
+        super::collect(&report.payload, Profile::EnforceIntroduced).unwrap();
+    assert!(
+        fixes.is_empty(),
+        "the ramp leaves the backlog's fixes alone"
+    );
+    assert_eq!((bare, backlog), (1, 1));
+    let (fixes, _bare, backlog) = super::collect(&report.payload, Profile::Enforce).unwrap();
+    assert_eq!(
+        (fixes.len(), backlog),
+        (1, 0),
+        "enforce repairs the backlog too"
+    );
 }
 
 /// Touching spans are lawful: the overlap refusal begins strictly past the
