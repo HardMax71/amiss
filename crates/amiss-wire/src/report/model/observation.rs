@@ -128,6 +128,8 @@ pub struct ObservedOccurrence<P = RepoPath, R = ReportResolution<P>> {
     pub block_kind: BlockKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_destination: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fragment: Option<String>,
     pub observation_id: Digest,
     pub observation_id_input: ObservationIdInput<P>,
     pub resolution: R,
