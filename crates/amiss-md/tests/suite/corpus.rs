@@ -9,7 +9,7 @@ use crate::fixtures::harvest;
 /// manifest; this constant must then be updated by hand, so no golden can move
 /// without the move appearing in review.
 const CORPUS_DIGEST: &str =
-    "sha256:43c9803eb3e536ebfc1f2d1b7b64c5d17ea1dd5ad51ae78413248ddb3ddfbe14";
+    "sha256:473e8c55f8f751449af7ced1da12eab2cd4061e17534b5ac4bdd5b6fa138bf54";
 
 /// The manifest is the gate: every case's raw source with its exact node count
 /// and depth under every published profile. It is regenerated here and must

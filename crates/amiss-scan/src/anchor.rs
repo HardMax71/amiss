@@ -434,6 +434,91 @@ pub const RULES: [AnchorRule; 12] = [
     },
 ];
 
+/// What a renderer keys a footnote's identities by: the label as the document
+/// writes it, the label lowercased, or the place the note's first call takes
+/// among the notes called.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FootnoteKey {
+    Label,
+    LowercaseLabel,
+    Order,
+}
+
+/// The identities one renderer publishes for a footnote: the note under
+/// `note` and the key, and the first call to it under `call`, the key, and
+/// `call_suffix`. A note nothing calls is published only where `uncalled`
+/// says so.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FootnoteRule {
+    pub name: &'static str,
+    pub serves: &'static str,
+    pub key: FootnoteKey,
+    pub note: &'static str,
+    pub call: &'static str,
+    pub call_suffix: &'static str,
+    pub uncalled: bool,
+}
+
+/// Every footnote rule the resolver knows, joining the union beside the
+/// heading rules. github.com is absent because it suffixes each identity with
+/// a digest of the render, so no spelling a document writes can name one.
+pub const FOOTNOTES: [FootnoteRule; 6] = [
+    FootnoteRule {
+        name: "python-markdown",
+        serves: "MkDocs",
+        key: FootnoteKey::Label,
+        note: "fn:",
+        call: "fnref:",
+        call_suffix: "",
+        uncalled: true,
+    },
+    FootnoteRule {
+        name: "kramdown",
+        serves: "Jekyll, GitHub Pages",
+        key: FootnoteKey::Label,
+        note: "fn:",
+        call: "fnref:",
+        call_suffix: "",
+        uncalled: false,
+    },
+    FootnoteRule {
+        name: "goldmark",
+        serves: "Hugo",
+        key: FootnoteKey::Order,
+        note: "fn:",
+        call: "fnref:",
+        call_suffix: "",
+        uncalled: false,
+    },
+    FootnoteRule {
+        name: "markdown-it",
+        serves: "VitePress, VuePress",
+        key: FootnoteKey::Order,
+        note: "fn",
+        call: "fnref",
+        call_suffix: "",
+        uncalled: false,
+    },
+    FootnoteRule {
+        name: "remark",
+        serves: "Docusaurus, Starlight",
+        key: FootnoteKey::LowercaseLabel,
+        note: "user-content-fn-",
+        call: "user-content-fnref-",
+        call_suffix: "",
+        uncalled: false,
+    },
+    FootnoteRule {
+        name: "mdbook",
+        serves: "mdBook",
+        key: FootnoteKey::Label,
+        note: "footnote-",
+        call: "fr-",
+        call_suffix: "-1",
+        uncalled: false,
+    },
+];
+
 /// One spelling a document or its generator declares rather than a renderer
 /// deriving it from heading text: the spelling an author uses, the profiles
 /// that read it, and the file whose presence on the document's ancestor chain

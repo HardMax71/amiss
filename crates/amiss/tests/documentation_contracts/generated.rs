@@ -8,7 +8,7 @@ use std::fs;
 
 use amiss_git::GitLimits;
 use amiss_scan::ScanLimits;
-use amiss_scan::anchor::{DECLARATIONS, DeclarationRule};
+use amiss_scan::anchor::{DECLARATIONS, DeclarationRule, FOOTNOTES, FootnoteKey};
 use amiss_scan::route::{
     BUNDLER_REQUESTS, DOCUSAURUS, DOCUSAURUS_CONTENT_ROOTS, ROUTERS, RouteRule,
     TEMPLATE_EXPRESSIONS, UNROUTED_OPENING, declarable,
@@ -261,11 +261,11 @@ fn declared_identities_table(rules: &[DeclarationRule]) -> String {
     table
 }
 
-/// The table is generated from the declaration rules, and every rule it names
-/// is also explained in the prose around it, so a spelling cannot be added to
-/// the table without a paragraph saying what reads it.
+/// Both tables are generated from the anchor module, and every declaration
+/// rule is also explained in the prose around it, so a spelling cannot be
+/// added to the table without a paragraph saying what reads it.
 #[test]
-fn documented_declared_identities_are_generated_from_the_anchor_table() {
+fn documented_anchor_tables_are_generated_from_the_anchor_module() {
     let document = fs::read_to_string(repository_root().join("docs/src/anchor-rules.md"))
         .expect("anchor-rules documentation is readable");
     for rule in &DECLARATIONS {
@@ -279,6 +279,31 @@ fn documented_declared_identities_are_generated_from_the_anchor_table() {
         documented_contract(&document, "declared-identities"),
         declared_identities_table(&DECLARATIONS),
         "docs/src/anchor-rules.md drifted from amiss_scan::anchor::DECLARATIONS",
+    );
+    let mut table =
+        String::from("| Rule | Serves | Note | First call |\n| --- | --- | --- | --- |");
+    for rule in &FOOTNOTES {
+        let key = match rule.key {
+            FootnoteKey::Label => "<label>",
+            FootnoteKey::LowercaseLabel => "<lowercased label>",
+            FootnoteKey::Order => "<order>",
+        };
+        let uncalled = if rule.uncalled {
+            ", also for a note nothing calls"
+        } else {
+            ""
+        };
+        write!(
+            table,
+            "\n| `{}` | {} | `{}{key}`{uncalled} | `{}{key}{}` |",
+            rule.name, rule.serves, rule.note, rule.call, rule.call_suffix,
+        )
+        .expect("writing to a String is infallible");
+    }
+    assert_eq!(
+        documented_contract(&document, "footnote-identities"),
+        table,
+        "docs/src/anchor-rules.md drifted from amiss_scan::anchor::FOOTNOTES",
     );
 }
 

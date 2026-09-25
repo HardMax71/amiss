@@ -5,13 +5,14 @@ use unicode_general_category::{GeneralCategory, get_general_category};
 use unicode_normalization::UnicodeNormalization;
 
 use super::{
-    AnchorRule, Attribute, Case, DEFINITION_TERMS, Duplicates, Edges, Empty, Fold, Head, Keep,
-    Normalize, RULES, RawHtml, Runs, Separators, Terms, Trim, Typography,
+    AnchorRule, Attribute, Case, DEFINITION_TERMS, Duplicates, Edges, Empty, FOOTNOTES, Fold,
+    FootnoteKey, Head, Keep, Normalize, RULES, RawHtml, Runs, Separators, Terms, Trim, Typography,
 };
 
 /// Every identity the known renderers would publish for one document, plus the
 /// anchors the document declares itself, in raw HTML or in an attribute block,
-/// plus the definition-list terms one renderer publishes beside its headings.
+/// plus the definition-list terms one renderer publishes beside its headings,
+/// plus the footnotes every renderer publishes under its own spelling.
 #[must_use]
 pub fn anchor_set(
     headings: &[Heading],
@@ -24,7 +25,51 @@ pub fn anchor_set(
         set.extend(identities(rule, headings));
     }
     set.extend(identities(&DEFINITION_TERMS, headings));
+    set.extend(footnote_identities(headings));
     set
+}
+
+/// The identities the footnote rules publish: each note a call names, in the
+/// order of its first call, and each note nothing calls where a rule publishes
+/// one anyway.
+fn footnote_identities(headings: &[Heading]) -> Vec<String> {
+    let mut called: Vec<&str> = Vec::new();
+    let mut noted: Vec<&str> = Vec::new();
+    for heading in headings {
+        let seen = match heading.source {
+            HeadingSource::FootnoteReference => &mut called,
+            HeadingSource::FootnoteDefinition => &mut noted,
+            HeadingSource::Markdown
+            | HeadingSource::AsciiDoc
+            | HeadingSource::Rst
+            | HeadingSource::RawHtml
+            | HeadingSource::DefinitionTerm => continue,
+        };
+        if !seen.contains(&heading.text.as_str()) {
+            seen.push(&heading.text);
+        }
+    }
+    let mut out = Vec::new();
+    for rule in &FOOTNOTES {
+        for (order, label) in (1_usize..).zip(&called) {
+            let key = match rule.key {
+                FootnoteKey::Label => (*label).to_owned(),
+                FootnoteKey::LowercaseLabel => label.to_lowercase(),
+                FootnoteKey::Order => order.to_string(),
+            };
+            out.push(format!("{}{key}", rule.note));
+            out.push(format!("{}{key}{}", rule.call, rule.call_suffix));
+        }
+        if rule.uncalled {
+            out.extend(
+                noted
+                    .iter()
+                    .filter(|label| !called.contains(label))
+                    .map(|label| format!("{}{label}", rule.note)),
+            );
+        }
+    }
+    out
 }
 
 /// The identities one rule publishes, in document order, with the headings it
@@ -40,6 +85,7 @@ pub fn identities(rule: &AnchorRule, headings: &[Heading]) -> Vec<String> {
         let read = match heading.source {
             HeadingSource::RawHtml => rule.raw_html == RawHtml::Anchored,
             HeadingSource::DefinitionTerm => rule.terms == Terms::Anchored,
+            HeadingSource::FootnoteReference | HeadingSource::FootnoteDefinition => false,
             HeadingSource::Markdown | HeadingSource::AsciiDoc | HeadingSource::Rst => true,
         };
         if !read {
