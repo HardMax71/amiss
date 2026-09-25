@@ -15,6 +15,8 @@ pub(crate) struct Log<'report> {
 
 #[derive(Serialize)]
 pub(super) struct Run<'report> {
+    #[serde(rename = "columnKind")]
+    pub(super) column_kind: &'static str,
     pub(super) invocations: [Invocation<'report>; 1],
     pub(super) results: Vec<FindingResult<'report>>,
     pub(super) tool: Tool,
