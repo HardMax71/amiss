@@ -11,9 +11,11 @@ use crate::support::repository_root;
 
 fn assert_action_feedback_contract(dispatcher: &str, runtime: &str) {
     assert_eq!(
-        runtime.matches("$p.feedback.items[:10][]").count(),
+        runtime
+            .matches("($p.feedback.items | map(select(.action != \"existing\")))[:10][]")
+            .count(),
         1,
-        "annotations read the first ten items, where the Fixes lead"
+        "annotations read the ten Fix and Check items the summary displays"
     );
     assert!(
         runtime.contains("window($p.feedback.items | map(select(.action != \"existing\")))")
@@ -21,8 +23,8 @@ fn assert_action_feedback_contract(dispatcher: &str, runtime: &str) {
         "the summary keeps the backlog in a window of its own, as the human view does"
     );
     assert!(
-        runtime.contains("select(.action == \"fix\" and .annotation != null)"),
-        "annotations must come only from displayed Fix items"
+        runtime.contains("if .action == \"check\" then \"notice\""),
+        "a displayed Check is annotated as a notice, so it never reads as a failure"
     );
     assert!(
         runtime.contains("$p.errors[:10][]"),
@@ -54,7 +56,7 @@ fn assert_action_feedback_contract(dispatcher: &str, runtime: &str) {
     for source in [&dispatcher, &runtime] {
         assert!(
             source.contains(
-                "description: emit candidate-located displayed Fixes and scan errors as file annotations"
+                "description: emit candidate-located displayed Fixes and Checks, and scan errors, as file annotations"
             )
         );
     }
