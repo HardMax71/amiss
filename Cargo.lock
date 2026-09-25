@@ -525,6 +525,7 @@ dependencies = [
  "stats_alloc",
  "strum",
  "tempfile",
+ "toml",
  "unicode-general-category",
  "unicode-normalization",
 ]

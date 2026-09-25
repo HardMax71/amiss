@@ -181,6 +181,46 @@
         }
       }
     },
+    "BlobSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": {
+          "const": "blob"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        }
+      }
+    },
+    "KeyValueSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "key", "kind", "path"],
+      "properties": {
+        "kind": {
+          "const": "key-value"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        },
+        "format": {
+          "enum": ["json", "toml"]
+        },
+        "key": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+          }
+        }
+      }
+    },
     "CodeTextSource": {
       "oneOf": [
         {
@@ -191,6 +231,12 @@
         },
         {
           "$ref": "#/$defs/RecordValueSelection"
+        },
+        {
+          "$ref": "#/$defs/BlobSelection"
+        },
+        {
+          "$ref": "#/$defs/KeyValueSelection"
         }
       ]
     },

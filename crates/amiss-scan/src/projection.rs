@@ -1,4 +1,3 @@
-use sha2::Digest as _;
 use std::collections::BTreeMap;
 
 use amiss_wire::controls::{ProjectionAssertion, ProjectionKind, ProjectionSource};
@@ -10,9 +9,7 @@ use crate::Error;
 use crate::discovery::{DocumentStatus, SnapshotDiscovery};
 use crate::resolve::Resolver;
 use crate::resources::Aggregate;
-use crate::scanned::{
-    CODE_TEXT_SOURCE_DOMAIN, SemanticCodeSink, SpanDisplay, Verdict, unavailable,
-};
+use crate::scanned::{SemanticCodeSink, SpanDisplay, Verdict, unavailable};
 use crate::semantic::RecordSet;
 
 mod inventory;
@@ -63,8 +60,10 @@ pub(crate) fn evaluate(
     record_sets: &BTreeMap<ArtifactId, RecordSet>,
     assertion: &ProjectionAssertion,
 ) -> Result<Outcome, Error> {
-    use ProjectionKind::{CodeTextV1, DecimalCountV1, SortedRowsV1};
-    use ProjectionSource::{BlobLines, NamedRegion, RecordSet, RecordValue, TreePaths};
+    use ProjectionKind::{CodeTextV1, ContainsV1, DecimalCountV1, SortedRowsV1};
+    use ProjectionSource::{
+        Blob, BlobLines, KeyValue, NamedRegion, RecordSet, RecordValue, TreePaths,
+    };
 
     resolver.scan.charge(Aggregate::ProjectionAssertions, 1)?;
     let document = RepoPath::from(&assertion.document);
@@ -125,18 +124,17 @@ pub(crate) fn evaluate(
         ));
     };
     let verdict = match (assertion.projection, &assertion.source) {
-        (CodeTextV1, BlobLines(_) | NamedRegion(_)) => {
-            resolver.resolve_code_projection(&assertion.source, sink)?
+        (CodeTextV1 | ContainsV1, BlobLines(_) | NamedRegion(_) | Blob(_) | KeyValue(_)) => {
+            resolver.resolve_code_projection(&assertion.source, assertion.projection, sink)?
         }
-        (CodeTextV1, RecordValue(_)) | (SortedRowsV1 | DecimalCountV1, RecordSet(_)) => {
-            record_projection(
-                record_sets,
-                &assertion.source,
-                assertion.projection,
-                sink,
-                resolver.scan,
-            )?
-        }
+        (CodeTextV1 | ContainsV1, RecordValue(_))
+        | (SortedRowsV1 | DecimalCountV1, RecordSet(_)) => record_projection(
+            record_sets,
+            &assertion.source,
+            assertion.projection,
+            sink,
+            resolver.scan,
+        )?,
         (SortedRowsV1 | DecimalCountV1, TreePaths(selection)) => inventory::evaluate(
             discovery,
             selection,
@@ -144,8 +142,11 @@ pub(crate) fn evaluate(
             sink,
             resolver.scan,
         )?,
-        (CodeTextV1, TreePaths(_) | RecordSet(_))
-        | (SortedRowsV1 | DecimalCountV1, BlobLines(_) | NamedRegion(_) | RecordValue(_)) => {
+        (CodeTextV1 | ContainsV1, TreePaths(_) | RecordSet(_))
+        | (
+            SortedRowsV1 | DecimalCountV1,
+            BlobLines(_) | NamedRegion(_) | RecordValue(_) | Blob(_) | KeyValue(_),
+        ) => {
             return Err(Error::Internal);
         }
     };
@@ -171,14 +172,19 @@ fn record_projection(
         ProjectionSource::RecordSet(selection) => &selection.set,
         ProjectionSource::BlobLines(_)
         | ProjectionSource::NamedRegion(_)
-        | ProjectionSource::TreePaths(_) => return Err(Error::Internal),
+        | ProjectionSource::TreePaths(_)
+        | ProjectionSource::Blob(_)
+        | ProjectionSource::KeyValue(_) => return Err(Error::Internal),
     };
     let Some(set) = record_sets.get(set_name) else {
         return Ok(unavailable(ProjectionObserved::SourceRecordSetAbsent, sink));
     };
     match source {
         ProjectionSource::RecordValue(selection) => {
-            if projection != ProjectionKind::CodeTextV1 {
+            if !matches!(
+                projection,
+                ProjectionKind::CodeTextV1 | ProjectionKind::ContainsV1
+            ) {
                 return Err(Error::Internal);
             }
             let Some(value) = set.records.get(&selection.key) else {
@@ -199,26 +205,17 @@ fn record_projection(
                 Aggregate::ProjectionProjectedBytes,
                 u64::try_from(value.len()).unwrap_or(u64::MAX),
             )?;
-            if value == &sink.value {
-                return Ok(Verdict::Attested);
-            }
-            Ok(Verdict::Drift {
-                reason: ProjectionObserved::ContentDiffers,
-                expected_digest: Some(Digest::from(
-                    sha2::Sha256::new_with_prefix(CODE_TEXT_SOURCE_DOMAIN)
-                        .chain_update([0_u8])
-                        .chain_update(value.as_bytes())
-                        .finalize()
-                        .0,
-                )),
-                observed_digest: Some(sink.digest),
-                expected_bytes: Some(u64::try_from(value.len()).unwrap_or(u64::MAX)),
-                observed_bytes: Some(u64::try_from(sink.value.len()).unwrap_or(u64::MAX)),
-                difference: None,
-            })
+            Ok(crate::scanned::code_verdict(
+                value.as_bytes(),
+                projection,
+                sink,
+            ))
         }
         ProjectionSource::RecordSet(_) => {
-            if projection == ProjectionKind::CodeTextV1 {
+            if matches!(
+                projection,
+                ProjectionKind::CodeTextV1 | ProjectionKind::ContainsV1
+            ) {
                 return Err(Error::Internal);
             }
             if !set.complete {
@@ -246,11 +243,13 @@ fn record_projection(
                     sink,
                     resources,
                 ),
-                ProjectionKind::CodeTextV1 => Err(Error::Internal),
+                ProjectionKind::CodeTextV1 | ProjectionKind::ContainsV1 => Err(Error::Internal),
             }
         }
         ProjectionSource::BlobLines(_)
         | ProjectionSource::NamedRegion(_)
-        | ProjectionSource::TreePaths(_) => Err(Error::Internal),
+        | ProjectionSource::TreePaths(_)
+        | ProjectionSource::Blob(_)
+        | ProjectionSource::KeyValue(_) => Err(Error::Internal),
     }
 }

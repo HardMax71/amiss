@@ -7,8 +7,8 @@ use sha2::Digest as _;
 use std::{fs, path::Path};
 
 use amiss_wire::controls::{
-    BlobLineSelection, NamedRegionSelection, ProjectionKind, ProjectionSource, RecordSetSelection,
-    RecordValueSelection, TreePathSelection,
+    BlobLineSelection, BlobSelection, KeyFormat, KeyValueSelection, NamedRegionSelection,
+    ProjectionKind, ProjectionSource, RecordSetSelection, RecordValueSelection, TreePathSelection,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::envelope::Payload as _;
@@ -106,6 +106,19 @@ fn relation_plan_refuses_mixed_objects_and_incompatible_sources() {
     let error = incompatible.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.subjects[0].source");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
+
+    // Two sides' digests say nothing about one containing the other.
+    let mut contained = relation_contract().plan;
+    contained.projection = ProjectionKind::ContainsV1;
+    for subject in &mut contained.subjects {
+        subject.source = ProjectionSource::Blob(BlobSelection {
+            path: repo_path_text!("reference/api.md"),
+        });
+    }
+    assert!(matches!(
+        contained.emit(),
+        Err(error) if error.path == "$.payload.projection" && error.kind == ErrorKind::InvalidValue
+    ));
 }
 
 #[test]
@@ -147,6 +160,20 @@ fn relation_plan_preserves_every_projection_source_shape() {
             ProjectionKind::SortedRowsV1,
             ProjectionSource::RecordSet(RecordSetSelection {
                 set: identity("rust/public-api"),
+            }),
+        ),
+        (
+            ProjectionKind::CodeTextV1,
+            ProjectionSource::Blob(BlobSelection {
+                path: repo_path_text!("reference/help.txt"),
+            }),
+        ),
+        (
+            ProjectionKind::CodeTextV1,
+            ProjectionSource::KeyValue(KeyValueSelection {
+                path: repo_path_text!("Cargo.toml"),
+                format: KeyFormat::Toml,
+                key: vec!["package".to_owned(), "version".to_owned()],
             }),
         ),
     ];
