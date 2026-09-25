@@ -285,7 +285,7 @@ fn read_block(
             && let Some(last) = extraction
                 .references
                 .last_mut()
-                .filter(|last| last.block == index)
+                .filter(|last| last.block == index && last.selection.is_none())
         {
             last.selection = Some(selection);
         }
@@ -456,12 +456,21 @@ fn opens_literal_include(body: &str) -> bool {
 
 /// The part of a file a `literalinclude` option selects, as a fragment: a
 /// `:lines:` spec as the span from its first to its last selected line,
-/// `L5-L8`, or `L5` where it runs on to the end, and a `:pyobject:` as the
-/// object's name.
+/// `L5-L8`, or `L5` where it runs on to the end, a `:pyobject:` as
+/// `pyobject=` and the object's name, and the text a start or end option
+/// names as `text=` and that text.
 fn include_selection(line: &str) -> Option<String> {
     let trimmed = line.trim();
     if let Some(name) = trimmed.strip_prefix(":pyobject:").map(str::trim) {
-        return (!name.is_empty() && !name.contains(char::is_whitespace)).then(|| name.to_owned());
+        return (!name.is_empty() && !name.contains(char::is_whitespace))
+            .then(|| format!("pyobject={name}"));
+    }
+    if let Some(text) = [":start-after:", ":start-at:", ":end-before:", ":end-at:"]
+        .iter()
+        .find_map(|option| trimmed.strip_prefix(option))
+        .map(str::trim)
+    {
+        return (!text.is_empty()).then(|| format!("text={}", text.replace('%', "%25")));
     }
     let mut first: Option<u64> = None;
     let mut last: Option<u64> = Some(0);

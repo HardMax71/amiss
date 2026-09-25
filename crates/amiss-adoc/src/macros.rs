@@ -43,6 +43,9 @@ pub struct Reference {
     pub block_span: (usize, usize),
     pub list_item: bool,
     pub transclusion: Option<Result<TransclusionKind, TransclusionRefusal>>,
+    /// The part of the file an include's `tag`, `tags` or `lines` attribute
+    /// selects, spelled as the fragment the resolver reads.
+    pub selection: Option<String>,
 }
 
 impl Reference {
@@ -76,6 +79,7 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
             0,
             end.saturating_add("include::".len()),
         );
+        reference.selection = include_selection(options);
         reference.transclusion = Some(if target.contains('{') && target.contains('}') {
             Err(TransclusionRefusal::DynamicTarget)
         } else if options.is_empty() {
@@ -168,7 +172,52 @@ fn build(kind: ReferenceKind, target: &str, at: usize, start: usize, end: usize)
         block_span: (0, 0),
         list_item: false,
         transclusion: None,
+        selection: None,
     }
+}
+
+/// The part of a file an include's attributes select: the first tag a `tag`
+/// or `tags` attribute names outright, and otherwise the span from the first
+/// line a `lines` attribute selects to its last, or its first where it runs
+/// to the end.
+fn include_selection(options: &str) -> Option<String> {
+    let attributes: Vec<(&str, &str)> = options
+        .split(',')
+        .filter_map(|attribute| attribute.split_once('='))
+        .map(|(key, value)| (key.trim(), value.trim().trim_matches('"')))
+        .collect();
+    let tag = attributes
+        .iter()
+        .filter(|(key, _)| matches!(*key, "tag" | "tags"))
+        .flat_map(|(_, value)| value.split(';'))
+        .map(str::trim)
+        .find(|tag| {
+            !tag.is_empty()
+                && tag
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        });
+    if let Some(tag) = tag {
+        return Some(tag.to_owned());
+    }
+    let (_, lines) = attributes.iter().find(|(key, _)| *key == "lines")?;
+    let mut first: Option<u64> = None;
+    let mut last: Option<u64> = Some(0);
+    for range in lines.split([';', ',']) {
+        let (start, end) = range.split_once("..").unwrap_or((range, range));
+        let start = start.trim().parse::<u64>().ok()?;
+        let end = match end.trim() {
+            "-1" | "" => None,
+            written => Some(written.parse::<u64>().ok()?),
+        };
+        first = Some(first.map_or(start, |held| held.min(start)));
+        last = last.zip(end).map(|(held, end)| held.max(end));
+    }
+    let first = first.filter(|first| *first > 0)?;
+    Some(match last.filter(|last| *last > first) {
+        Some(last) => format!("L{first}-L{last}"),
+        None => format!("L{first}"),
+    })
 }
 
 /// A macro target runs to the opening bracket of its attribute list. Whitespace

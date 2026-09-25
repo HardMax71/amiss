@@ -202,6 +202,7 @@ pub(crate) fn engine_resolution(
                 Missing::PathNotFound { near: None, .. }
                 | Missing::HeadingAnchorNotFound { near: None, .. }
                 | Missing::LineFragmentOutOfRange { .. }
+                | Missing::SelectionNotFound { .. }
                 | Missing::LabelNotDeclared => None,
             };
             Some(missing_detail(MissingTag::from(missing), near))

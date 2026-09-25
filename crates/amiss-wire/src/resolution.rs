@@ -126,6 +126,12 @@ pub enum Missing<P> {
         near: Option<String>,
     },
     LabelNotDeclared,
+    /// The part of a file an include selects by a marker the file does not
+    /// carry: an mdBook anchor, an `AsciiDoc` tag, a snippet section, or the
+    /// text a `literalinclude` starts or ends at.
+    SelectionNotFound {
+        path: P,
+    },
 }
 
 /// A target absent from the tree at a path the repository's own ignore rules

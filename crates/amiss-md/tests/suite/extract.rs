@@ -1164,12 +1164,12 @@ fn preprocessor_includes_are_references_in_prose_and_fences() {
             (
                 SourceConstruct::MdbookInclude,
                 "../listings/main.rs:io",
-                "../listings/main.rs"
+                "../listings/main.rs#io"
             ),
             (
                 SourceConstruct::MdbookInclude,
                 "src/lib.rs:2:10",
-                "src/lib.rs"
+                "src/lib.rs#L2-L10"
             ),
             (
                 SourceConstruct::MdbookInclude,
@@ -1184,7 +1184,7 @@ fn preprocessor_includes_are_references_in_prose_and_fences() {
             (
                 SourceConstruct::MkdocsSnippet,
                 "examples/run.py:1:4",
-                "examples/run.py"
+                "examples/run.py#L1-L4"
             ),
         ]
         .map(|(construct, raw, target)| (construct, raw.to_owned(), target.to_owned()))

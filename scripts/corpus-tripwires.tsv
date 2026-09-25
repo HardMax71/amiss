@@ -9,7 +9,7 @@ bat	pass	17	0	92	0	21
 biome	pass	115	3	240	102	100
 click	pass	53	0	49	956	0
 cncf-glossary	pass	963	0	2239	419	4
-comprehensive-rust	pass	584	0	943	0	10
+comprehensive-rust	pass	584	0	941	0	12
 containerd.io	pass	9	0	8	3	1
 content	pass	14649	0	1951	54863	2659
 django	pass	686	0	3880	43	38
@@ -46,7 +46,7 @@ ripgrep	pass	24	0	69	0	0
 rust-book	pass	478	0	1538	0	32
 rust-by-example	pass	204	0	407	0	0
 scrapy	pass	90	0	1282	53	21
-sphinx	pass	170	0	565	12	2
+sphinx	pass	170	0	581	12	2
 spring-boot	pass	229	0	2897	0	1
 starlight	pass	380	1	656	1491	1
 superset	pass	1211	5	839	877	62

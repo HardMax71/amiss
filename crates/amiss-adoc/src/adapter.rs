@@ -94,11 +94,14 @@ fn occurrence(reference: &Reference, within: usize) -> Occurrence {
             reference.target.clone()
         }
         ReferenceKind::InternalCrossReference => format!("#{}", reference.target),
+        ReferenceKind::Include => reference.selection.as_ref().map_or_else(
+            || reference.target.clone(),
+            |selection| format!("{}#{selection}", reference.target),
+        ),
         ReferenceKind::CrossReference
         | ReferenceKind::Link
         | ReferenceKind::BlockImage
-        | ReferenceKind::InlineImage
-        | ReferenceKind::Include => reference.target.clone(),
+        | ReferenceKind::InlineImage => reference.target.clone(),
     };
     Occurrence {
         construct: construct(reference.kind),

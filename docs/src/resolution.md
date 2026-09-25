@@ -375,9 +375,19 @@ also a reference of its own, since both generators expand it before Markdown rea
 in a fence as much as in prose: the snippet line under that declaration, and an mdBook
 `{{#include}}`, `{{#rustdoc_include}}` or `{{#playground}}` in a page of the book's source
 directory, read beside the page. So a deleted or renamed listing is a missing target, and one
-that changes under unchanged prose is a check. A selector after the path, a line range or an
-anchor name, stays in the written target and is not evaluated, so the whole file is what the
-reference depends on, and a backslash before an mdBook command leaves it text. A generator
+that changes under unchanged prose is a check. A backslash before an mdBook command leaves it
+text.
+
+A selector after the path is read too. A line range, `listing.rs:2:10` or `code.py:1:4`,
+becomes the line fragment `L2-L10`, so the start must fall inside the file and those lines are
+what the reference depends on; the end stops at the end of the file, the way every include
+grammar stops it. A name is a marker the file has to carry, spelled the way its own generator
+reads it: an mdBook `ANCHOR: name`, a snippet's `--8<-- [start:name]`, an AsciiDoc
+`tag::name[]` for `include::file[tag=name]`, and for `literalinclude` the text a
+`:start-after:`, `:start-at:`, `:end-before:` or `:end-at:` names, or a `def` or `class` of the
+last name a `:pyobject:` spells. A marker the file does not carry is `selection-not-found`,
+missing like a deleted file. Comprehensive Rust includes `exercise.rs:magnitude` and
+`exercise.rs:normalize`, and the file carries neither anchor. A generator
 instruction under the same declaration, `::: pydantic.config`, is an edge this engine reads
 and cannot follow, because what it pulls in is built by a program rather than held by the
 tree, so the page keeps the identities it writes itself and absence in it stays undecided.
@@ -388,7 +398,7 @@ tree, so neither page proves absence.
 An option-free `literalinclude` contributes no parsed headings. Its selection is checked the
 way a line fragment is: `:lines: 5-8` must fall inside the file and tracks those lines alone,
 a list or an open end reads as the span from its first selected line to its last, and a
-`:pyobject:` is a code fragment the run declines while still tracking the whole file. The
+`:pyobject:` or a start or end text is a marker checked the way an include's is. The
 range is spelled the way a run with no forge, or a GitHub or Gitea one, spells a line
 fragment, so under a GitLab or Bitbucket Data Center identity it goes unchecked. The graph
 is bounded by `references-per-document`, `parser-nesting`, and

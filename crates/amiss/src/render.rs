@@ -70,6 +70,9 @@ pub(crate) fn wire_resolution<P, F: Fn(&P) -> String>(
                 MissingResolution::LineFragmentOutOfRange { .. } => {
                     (MissingTag::LineFragmentOutOfRange, None)
                 }
+                MissingResolution::SelectionNotFound { .. } => {
+                    (MissingTag::SelectionNotFound, None)
+                }
                 MissingResolution::LabelNotDeclared {} => (MissingTag::LabelNotDeclared, None),
             };
             (ResolutionTag::Missing, Some(missing_detail(tag, near)))

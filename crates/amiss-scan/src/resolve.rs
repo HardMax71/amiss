@@ -29,6 +29,7 @@ mod content;
 mod forge;
 mod history;
 mod line;
+mod selection;
 mod site;
 pub(crate) mod syntax;
 mod transclusion;
@@ -191,6 +192,22 @@ impl<'a> Resolver<'a> {
             );
         }
         let is_image = occurrence.occurrence.construct.is_image();
+        if let Some((path, marked)) = selection::marked(
+            occurrence.occurrence.construct,
+            &occurrence.occurrence.semantic_destination,
+        ) {
+            let (mut intent, resolution) = resolve_destination(
+                self,
+                context,
+                adapter,
+                document_path,
+                Some(occurrence.occurrence.construct),
+                is_image,
+                path,
+            )?;
+            intent.fragment = Some(marked.name.clone());
+            return Ok((intent, self.selected(resolution, &marked)?, None));
+        }
         let (intent, mut resolution) = resolve_destination(
             self,
             context,
@@ -200,6 +217,24 @@ impl<'a> Resolver<'a> {
             is_image,
             &occurrence.occurrence.semantic_destination,
         )?;
+        if matches!(
+            resolution,
+            Resolution::Missing(Missing::LineFragmentOutOfRange { .. })
+        ) && let Some(opening) = selection::opening_line(
+            occurrence.occurrence.construct,
+            &occurrence.occurrence.semantic_destination,
+        ) {
+            resolution = resolve_destination(
+                self,
+                context,
+                adapter,
+                document_path,
+                Some(occurrence.occurrence.construct),
+                is_image,
+                &opening,
+            )?
+            .1;
+        }
         if intent.kind == IntentKind::SiteRoute
             && matches!(
                 resolution,

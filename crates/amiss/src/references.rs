@@ -77,6 +77,7 @@ fn matching_occurrences(
                 | ReportResolution::Missing(
                     MissingResolution::HeadingAnchorNotFound { path, .. }
                     | MissingResolution::LineFragmentOutOfRange { path }
+                    | MissingResolution::SelectionNotFound { path }
                     | MissingResolution::PathNotFound { path, .. },
                 )
                 | ReportResolution::UnsupportedVersion {

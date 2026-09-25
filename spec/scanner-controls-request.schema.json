@@ -1033,7 +1033,7 @@
           "const": "missing"
         },
         "reason": {
-          "enum": ["line-fragment-out-of-range"]
+          "enum": ["line-fragment-out-of-range", "selection-not-found"]
         },
         "path": {
           "$ref": "#/$defs/RepoPath"
