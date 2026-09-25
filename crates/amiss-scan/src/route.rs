@@ -71,7 +71,7 @@ pub const DOCUSAURUS: RouteRule = RouteRule {
 
 pub(crate) const MKDOCS: RouteRule = RouteRule {
     name: "mkdocs",
-    declared_by: &["mkdocs.yml", "mkdocs.yaml"],
+    declared_by: &["mkdocs.yml", "mkdocs.yaml", "zensical.toml"],
     serves: &[Spelling::DirectoryUrl],
 };
 use amiss_wire::controls::TargetKind;

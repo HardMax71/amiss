@@ -97,10 +97,10 @@ wherever their profile is.
 | `attr-list` | an attribute block alone on a block's first or last line, `{#id}` | `markdown` | any tree |
 | `attr-list-inline` | an attribute block directly after an inline construct or a bracketed span, `**text**{#id}` or `[text]{#id}` | `markdown` | any tree |
 | `definition-term` | a term line above a `: ` definition line | `markdown` | any tree |
-| `mkdocs-snippet` | a `--8<--` line naming a quoted path, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
-| `mkdocs-directive` | a `:::` line naming what a generator renders, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
-| `mkdocs-shortcode` | an HTML comment naming a hook's shortcode, `<!-- md:name -->` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
-| `mkdocs-content-tab` | a content tab opening a quoted title, `=== "Title"` | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
+| `mkdocs-snippet` | a `--8<--` line naming a quoted path, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml`, `zensical.toml` |
+| `mkdocs-directive` | a `:::` line naming what a generator renders, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml`, `zensical.toml` |
+| `mkdocs-shortcode` | an HTML comment naming a hook's shortcode, `<!-- md:name -->` | `markdown` | `mkdocs.yml`, `mkdocs.yaml`, `zensical.toml` |
+| `mkdocs-content-tab` | a content tab opening a quoted title, `=== "Title"` | `markdown` | `mkdocs.yml`, `mkdocs.yaml`, `zensical.toml` |
 | `hugo-shortcode` | a shortcode call alone on its line or anywhere in a heading, `{{% name %}}` or `{{< name >}}` | `markdown` | `hugo.toml`, `hugo.yaml`, `hugo.json`, `config.toml`, `config.yaml`, `config.json`, `config/_default/hugo.toml`, `config/_default/hugo.yaml`, `config/_default/hugo.json`, `config/_default/config.toml`, `config/_default/config.yaml`, `config/_default/config.json` |
 | `eleventy-template` | a Liquid tag or output anywhere in a heading, `{% name %}` or `{{ name }}` | `markdown` | `eleventy.config.ts`, `eleventy.config.js`, `eleventy.config.mjs`, `eleventy.config.cjs`, `.eleventy.js` |
 | `myst-target` | a target alone on its line, `(name)=` | `markdown` | any tree |
@@ -219,7 +219,8 @@ Docusaurus tree it is eight of the findings.
 
 `mkdocs-snippet` does the same composition in Markdown, and it is the one row this table
 gates on a file. The syntax belongs to the `pymdownx.snippets` extension, so the line is
-read only when `mkdocs.yml` or `mkdocs.yaml` sits on the document's ancestor chain, and on
+read only when `mkdocs.yml` or `mkdocs.yaml` sits on the document's ancestor chain, or the
+`zensical.toml` of Zensical, which builds the same sites with the same extensions, and on
 that chain alone: the rule moves the directory an include is read from, which the one site a
 tree declares cannot stand in for the way it does for the routes in
 [Route spellings](route-spellings.md). Without one
