@@ -5,7 +5,7 @@ use amiss_wire::model::RepoPath;
 use amiss_wire::model::RepoPathText;
 use amiss_wire::repo_path_text;
 use amiss_wire::report::model::{
-    AnalysisError, ByteSpan, FindingFix, ReportEnvelope, ReportStatus, SourceSpan,
+    AnalysisError, ByteSpan, FindingFix, LocationSide, ReportEnvelope, ReportStatus, SourceSpan,
 };
 use amiss_wire::report::{Disposition, FindingKind, model::AnalysisErrorCode};
 
@@ -143,4 +143,27 @@ fn sarif_paths_escape_uri_delimiters_and_utf8_in_locations_and_fixes() {
             expected
         );
     }
+}
+
+/// A row located in the base names a line the candidate no longer has, so the
+/// log leaves it out, and its rule with it, and code scanning can close the
+/// alert its key opened.
+#[test]
+fn base_located_rows_stay_out_of_the_log() -> Result<(), serde_json::Error> {
+    let mut payload = projection_payload();
+    let mut resolved = payload.findings[0].clone();
+    resolved.kind = FindingKind::DocumentRemoved;
+    resolved.location.side = LocationSide::Base;
+    let mut live = payload.findings[0].clone();
+    live.location.side = LocationSide::Candidate;
+    payload.findings = vec![resolved, live];
+    let value = serde_json::to_value(super::log(&payload, RepoPath::as_str))?;
+    let run = &value["runs"][0];
+    assert_eq!(run["results"].as_array().map(Vec::len), Some(1));
+    assert_eq!(run["results"][0]["ruleId"], "explicit-target-missing");
+    assert_eq!(
+        run["tool"]["driver"]["rules"].as_array().map(Vec::len),
+        Some(1)
+    );
+    Ok(())
 }

@@ -2,7 +2,7 @@
 
 use amiss_wire::model::RepoPath;
 use amiss_wire::repo_path_text;
-use amiss_wire::report::model::ReportEnvelope;
+use amiss_wire::report::model::{LocationSide, ReportEnvelope};
 use amiss_wire::report::{Disposition, FindingKind};
 
 use super::issues;
@@ -82,4 +82,23 @@ fn paths_and_dispositions_keep_their_projection_without_owned_json_rows() {
         assert_eq!(value[0]["severity"], severity);
         assert_eq!(value[0]["description"], "a \"missing\" target\n");
     }
+}
+
+/// GitLab counts an issue fixed when head stops reporting it, so a row located
+/// in the base, whose line head no longer has, is not an issue.
+#[test]
+fn base_located_rows_are_not_issues() -> Result<(), serde_json::Error> {
+    let mut report: ReportEnvelope = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT)?;
+    let mut resolved = report.payload.findings[0].clone();
+    resolved.location.side = LocationSide::Base;
+    let mut live = resolved.clone();
+    live.location.side = LocationSide::Candidate;
+    live.kind = FindingKind::PolicyWeakened;
+    report.payload.findings = vec![resolved, live];
+    let projected = serde_json::to_value(issues(&report.payload, |path| {
+        std::borrow::Cow::Borrowed(path.as_str().unwrap_or("-"))
+    }))?;
+    assert_eq!(projected.as_array().map(Vec::len), Some(1));
+    assert_eq!(projected[0]["check_name"], "policy-weakened");
+    Ok(())
 }

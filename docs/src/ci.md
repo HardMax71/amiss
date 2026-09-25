@@ -197,9 +197,11 @@ later retries. Every attempt derives the assessment locally. A new workflow run 
 inherits an observation from the old one, and the cache never becomes a baseline or changes the
 advisory policy.
 
-The SARIF projection turns the same run into GitHub code-scanning alerts, inline on the
-lines the findings name, with fixes rendered as suggested edits and the finding key
-deduplicating alerts across runs. Two steps after any direct invocation, in a job whose
+The SARIF projection turns the same run into GitHub code-scanning alerts on the lines the
+findings name. GitHub shows a pull request only the alerts on lines the pull request added or
+edited, and drift often sits elsewhere, so read the full list on the Security tab. It ignores
+SARIF fixes and keys alerts on its own line hash rather than on the finding key, which other
+SARIF consumers can use. Two steps after any direct invocation, in a job whose
 `permissions` block adds `security-events: write` beside `contents: read`:
 
 ```yaml
