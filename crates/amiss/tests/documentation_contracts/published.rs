@@ -311,6 +311,13 @@ fn the_gitlab_template_keeps_the_release_choices() {
         template.contains("sha256sum -c"),
         "the downloaded binary must be verified before it runs"
     );
+    assert!(
+        template.contains(r#"--repository "$CI_SERVER_HOST/$project" --forge gitlab"#)
+            && template.contains(r#"--ref "refs/heads/$target""#)
+            && template.contains(r#"--default-branch-ref "refs/heads/$CI_DEFAULT_BRANCH""#)
+            && template.contains("tr '[:upper:]' '[:lower:]'"),
+        "the template declares the project's lowercase identity, so its own URLs are checked"
+    );
     let downloads: Vec<&str> = template
         .lines()
         .filter(|line| line.contains("releases/download/"))
