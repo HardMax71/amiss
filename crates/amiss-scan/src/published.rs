@@ -102,6 +102,12 @@ pub(crate) fn anchors(
         Adapter::Markdown | Adapter::Mdx => {
             markdown_anchors(snapshot, document, construct, is_image, path_part)
         }
+        // A downloaded file keeps its name, and a leading slash is the source root.
+        Adapter::Rst if construct == Some(SourceConstruct::RstDownloadRole) => path_part
+            .strip_prefix('/')
+            .zip(site_root(snapshot, document.as_bytes(), &SPHINX))
+            .map(|(file, root)| vec![(root, file.to_owned())])
+            .unwrap_or_default(),
         Adapter::Rst => sphinx_anchor(snapshot, document, construct, path_part),
         Adapter::PlainAdvisory => Vec::new(),
     }

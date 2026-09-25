@@ -25,7 +25,19 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
     let lead = line.len().saturating_sub(trimmed.len());
 
     if let Some(rest) = trimmed.strip_prefix(".. ") {
-        let after = lead.saturating_add(3);
+        // A substitution definition carries its directive after the `|name|`.
+        let (rest, after) = match rest
+            .strip_prefix('|')
+            .and_then(|body| body.split_once("| "))
+        {
+            Some((name, directive)) => (
+                directive,
+                lead.saturating_add(3)
+                    .saturating_add(name.len())
+                    .saturating_add(3),
+            ),
+            None => (rest, lead.saturating_add(3)),
+        };
         if let Some((name, kind, transclusion)) = PATH_DIRECTIVES
             .iter()
             .find(|(name, _, _)| {
@@ -57,6 +69,16 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
         found.push(build(ReferenceKind::FileOption, path, at, lead, line.len()));
         return found;
     }
+    if let Some(target) = target_option(trimmed) {
+        found.push(build(
+            ReferenceKind::TargetOption,
+            target,
+            at,
+            lead,
+            line.len(),
+        ));
+        return found;
+    }
     interpreted_text(&without_inline_literals(line), at, &mut found);
     found.sort_by_key(|reference| reference.span);
     found
@@ -84,9 +106,11 @@ fn without_inline_literals(line: &str) -> std::borrow::Cow<'_, str> {
     std::borrow::Cow::Owned(masked)
 }
 
-const SPHINX_ROLES: [(&str, ReferenceKind); 2] = [
+const SPHINX_ROLES: [(&str, ReferenceKind); 4] = [
     (":doc:`", ReferenceKind::DocRole),
+    (":download:`", ReferenceKind::DownloadRole),
     (":ref:`", ReferenceKind::RefRole),
+    (":numref:`", ReferenceKind::NumrefRole),
 ];
 
 struct RoleState {
@@ -109,6 +133,13 @@ fn named_target(rest: &str) -> Option<&str> {
 /// which is an alias rather than anything a tree can answer.
 fn indirect(target: &str) -> bool {
     target.ends_with('_')
+}
+
+/// The `:target:` option an `image` or `figure` takes, the link the picture
+/// opens: a path or a URL, never an indirect name.
+fn target_option(trimmed: &str) -> Option<&str> {
+    let value = trimmed.strip_prefix(":target:")?.trim();
+    (!value.is_empty() && !value.contains(char::is_whitespace) && !indirect(value)).then_some(value)
 }
 
 /// The `:file:` option that `csv-table` and `raw` take.
@@ -141,7 +172,10 @@ fn interpreted_text(line: &str, at: usize, found: &mut Vec<Reference>) {
                     .unwrap_or(body);
                 // A role wrapped across lines folds its whitespace the way Docutils does.
                 let target = written.split_whitespace().collect::<Vec<_>>().join(" ");
-                let phrase_allowed = matches!(role.kind, ReferenceKind::RefRole);
+                let phrase_allowed = matches!(
+                    role.kind,
+                    ReferenceKind::RefRole | ReferenceKind::NumrefRole
+                );
                 let acceptable = !target.is_empty()
                     && (phrase_allowed || !target.contains(' '))
                     && !target.contains('`');
