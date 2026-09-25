@@ -697,8 +697,9 @@ fn refusal(
         return Some(Resolution::TypeMismatch { target: entry });
     }
     let evaluable = !is_tree
-        && classify(path.as_bytes())
+        && (classify(path.as_bytes())
             .is_some_and(|class| class != DocumentClassification::PlainAdvisory)
+            || snapshot.bound_adapter(path).is_some())
         && snapshot.is_scanned_structured(path);
     match query {
         Some(_) if !evaluable => Some(Resolution::UnsupportedSemantics(

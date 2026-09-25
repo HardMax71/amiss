@@ -76,7 +76,8 @@ pub(super) fn fragment_resolution(
     if let Some(range) = line_fragment(forge, path, decoded) {
         return line_resolution(resolver, path, mode, blob, range);
     }
-    match classify(path.as_bytes()) {
+    let bound = resolver.snapshot.bound_adapter(path).is_some();
+    match classify(path.as_bytes()).filter(|_| !bound) {
         Some(classification) => match native_adapter(classification) {
             Some(adapter) => anchor_resolution(resolver, path, mode, blob, adapter, decoded),
             None => Ok(Resolution::UnsupportedSemantics(

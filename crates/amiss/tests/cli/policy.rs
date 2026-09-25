@@ -462,6 +462,51 @@ fn unsupplied_controls_report_none_and_claim_no_trust() {
     );
 }
 
+/// An advisory file extracts nothing on its own, so an include that binds it
+/// to a grammar reads it under that grammar, and a link in `llms.txt` whose
+/// target goes away blocks.
+#[test]
+fn a_bound_include_reads_an_advisory_file() {
+    let fx = fixture();
+    let root = fx.root();
+    let bound = r#"{"schema":"amiss/scanner-policy","document_includes":[{"adapter":"markdown","kind":"document","path":"llms.txt"}],"protected_inventory":[],"finding_dispositions":[]}"#;
+    fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
+    fs::write(root.join(".amiss/scanner-policy.json"), bound).unwrap_or_default();
+    fs::write(root.join("llms.txt"), "# Project\n\n- [Guide](guide.md)\n").unwrap_or_default();
+    fs::write(root.join("guide.md"), "# Guide\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "bound"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    git(root, &["rm", "-q", "guide.md"]);
+    git(root, &["commit", "-qm", "gone"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "enforce",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 1, "the bound grammar reads the link");
+    let payload = payload(&stdout);
+    let documents = payload["documents"].as_array().cloned().unwrap_or_default();
+    let llms = documents
+        .iter()
+        .find(|row| row["path"] == "llms.txt")
+        .unwrap();
+    assert_eq!(llms["classification"], "policy-included");
+    assert_eq!(llms["candidate"]["adapter_id"], "markdown");
+}
+
 /// A tree include may bind one built-in grammar: the bound `.txt` parses as
 /// reStructuredText, its broken `:doc:` blocks, and the documents row says
 /// which adapter read it, while an unbound include stays inert.
