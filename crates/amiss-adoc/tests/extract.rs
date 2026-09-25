@@ -314,6 +314,7 @@ fn an_attribute_reference_needs_both_braces() {
         block_span: (0, 1),
         list_item: false,
         transclusion: None,
+        selection: None,
     };
     assert!(reference("{attr}/x").attribute_substituted());
     assert!(!reference("{attr/x").attribute_substituted());

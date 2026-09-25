@@ -448,7 +448,8 @@
         },
         "reason": {
           "enum": [
-            "line-fragment-out-of-range"
+            "line-fragment-out-of-range",
+            "selection-not-found"
           ]
         },
         "path": {

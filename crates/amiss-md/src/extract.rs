@@ -632,7 +632,7 @@ const MDBOOK_INCLUDES: [&str; 3] = ["include", "rustdoc_include", "playground"];
 /// `{{#include file.rs:2:10}}` anywhere in a line unless a backslash escapes
 /// it, its path quoted where it holds a space, and an mkdocs snippet line,
 /// `--8<-- "file.md"`, alone on its line. A selector after the path, a line
-/// range or an anchor name, stays in the target as written and off the path.
+/// range or an anchor name, becomes the fragment the resolver reads.
 fn preprocessor_includes(suffix: &str, span: (usize, usize)) -> Vec<PreprocessorInclude> {
     let (at, raw) = (span.0, suffix.get(span.0..span.1).unwrap_or_default());
     let mut found = Vec::new();
@@ -663,7 +663,7 @@ fn preprocessor_includes(suffix: &str, span: (usize, usize)) -> Vec<Preprocessor
         found.push(PreprocessorInclude {
             construct: SourceConstruct::MdbookInclude,
             raw: written.to_owned(),
-            target: written.split(':').next().unwrap_or(written).to_owned(),
+            target: selected(written),
             span: (at.saturating_add(open), at.saturating_add(end)),
         });
     }
@@ -681,14 +681,14 @@ fn preprocessor_includes(suffix: &str, span: (usize, usize)) -> Vec<Preprocessor
             continue;
         };
         let target = if written.contains("://") {
-            written
+            written.to_owned()
         } else {
-            written.split(':').next().unwrap_or(written)
+            selected(written)
         };
         found.push(PreprocessorInclude {
             construct: SourceConstruct::MkdocsSnippet,
             raw: written.to_owned(),
-            target: target.to_owned(),
+            target,
             span: (
                 at.saturating_add(start),
                 at.saturating_add(start)
@@ -700,16 +700,45 @@ fn preprocessor_includes(suffix: &str, span: (usize, usize)) -> Vec<Preprocessor
     found
 }
 
+/// A preprocessor target with its selector spelled as the fragment the
+/// resolver reads: a line or a range of lines as `L2` or `L2-L10`, an open
+/// end as its first line, and a name as itself, the marker the file must
+/// carry. A selector spelled any other way is left off the path unread.
+fn selected(written: &str) -> String {
+    let (path, selector) = written.split_once(':').unwrap_or((written, ""));
+    let line = |text: &str| {
+        (!text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit()))
+            .then(|| text.parse::<u64>().ok())
+            .flatten()
+    };
+    let fragment = match selector.split(':').collect::<Vec<_>>().as_slice() {
+        [""] => None,
+        [only] if let Some(first) = line(only) => Some(format!("L{first}")),
+        [name] => name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+            .then(|| (*name).to_owned()),
+        [start, end] => match (line(start), line(end)) {
+            (Some(first), Some(last)) if last > first => Some(format!("L{first}-L{last}")),
+            (Some(first), Some(_) | None) => Some(format!("L{first}")),
+            (None, Some(last)) if start.is_empty() && last > 1 => Some(format!("L1-L{last}")),
+            (None, Some(_) | None) => start.is_empty().then(|| "L1".to_owned()),
+        },
+        _ => None,
+    };
+    fragment.map_or_else(|| path.to_owned(), |fragment| format!("{path}#{fragment}"))
+}
+
 /// The page an mdBook include of a Markdown file brings in, whose headings
 /// the page publishes as its own. A selector takes a part of the file rather
 /// than the whole of it, which the expansion refuses.
 fn markdown_include(include: &PreprocessorInclude) -> Option<Transclusion> {
-    let markdown = include
-        .target
+    let path = include.raw.split(':').next().unwrap_or(&include.raw);
+    let markdown = path
         .rsplit_once('.')
         .is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("md"));
     markdown.then(|| Transclusion {
-        target: include.target.clone(),
+        target: path.to_owned(),
         span: include.span,
         kind: if include.raw.contains(':') {
             Err(TransclusionRefusal::Options)

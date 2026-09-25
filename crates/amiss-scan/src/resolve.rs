@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
 use amiss_wire::controls::{GitMode, ResourceName, TargetKind};
-use amiss_wire::extraction::SourceConstruct;
+use amiss_wire::extraction::{Occurrence, SourceConstruct};
 use amiss_wire::model::{
     Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity,
 };
@@ -33,6 +33,7 @@ mod content;
 mod forge;
 mod history;
 mod line;
+mod selection;
 mod site;
 pub(crate) mod syntax;
 mod transclusion;
@@ -125,6 +126,9 @@ impl TargetCache {
     }
 }
 
+/// A resolution with the intent it answers and the destination it records.
+type Answer = (Intent, Resolution<RepoPath>, Option<String>);
+
 /// One snapshot-bound resolution session and its shared target evidence.
 pub struct Resolver<'a> {
     repo: &'a Repository,
@@ -181,6 +185,52 @@ impl<'a> Resolver<'a> {
         )
     }
 
+    /// The answer for a construct that names a label rather than a path: a
+    /// Sphinx role, looked up in the label table, or a Markdown reference whose
+    /// label no definition in its document declares. None for any other.
+    fn labelled(
+        &mut self,
+        adapter: Adapter,
+        document_path: &RepoPath,
+        semantic: crate::semantic::View<'_>,
+        occurrence: &Occurrence,
+    ) -> Option<Result<Answer, Error>> {
+        let label = &occurrence.semantic_destination;
+        if matches!(
+            occurrence.construct,
+            SourceConstruct::RstRefRole
+                | SourceConstruct::RstNumrefRole
+                | SourceConstruct::RstTermRole
+        ) {
+            return Some(self.resolve_label(document_path, label, semantic));
+        }
+        if !matches!(
+            occurrence.construct,
+            SourceConstruct::MarkdownUndefinedReference
+                | SourceConstruct::MarkdownUndefinedImageReference
+        ) {
+            return None;
+        }
+        let intent = Intent {
+            kind: IntentKind::Label,
+            commit_oid: None,
+            repository_path: None,
+            target_kind: None,
+            external_scheme: None,
+            query: None,
+            fragment: Some(label.clone()),
+        };
+        // mkdocs-autorefs answers a label from the site's own inventory, which no page holds.
+        let autorefs =
+            crate::discovery::snippet_root(self.snapshot, adapter, document_path).is_some();
+        let resolution = if autorefs {
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
+        } else {
+            Resolution::Missing(Missing::LabelNotDeclared)
+        };
+        Some(Ok((intent, resolution, None)))
+    }
+
     pub(crate) fn resolve_scanned(
         &mut self,
         context: Option<&ForgeContext>,
@@ -199,43 +249,28 @@ impl<'a> Resolver<'a> {
                 None,
             ));
         }
-        if matches!(
-            occurrence.occurrence.construct,
-            SourceConstruct::RstRefRole
-                | SourceConstruct::RstNumrefRole
-                | SourceConstruct::RstTermRole
-        ) {
-            return self.resolve_label(
-                document_path,
-                &occurrence.occurrence.semantic_destination,
-                semantic,
-            );
-        }
-        if matches!(
-            occurrence.occurrence.construct,
-            SourceConstruct::MarkdownUndefinedReference
-                | SourceConstruct::MarkdownUndefinedImageReference
-        ) {
-            let intent = Intent {
-                kind: IntentKind::Label,
-                commit_oid: None,
-                repository_path: None,
-                target_kind: None,
-                external_scheme: None,
-                query: None,
-                fragment: Some(occurrence.occurrence.semantic_destination.clone()),
-            };
-            // mkdocs-autorefs answers a label from the site's own inventory, which no page holds.
-            let autorefs =
-                crate::discovery::snippet_root(self.snapshot, adapter, document_path).is_some();
-            let resolution = if autorefs {
-                Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
-            } else {
-                Resolution::Missing(Missing::LabelNotDeclared)
-            };
-            return Ok((intent, resolution, None));
+        if let Some(answer) =
+            self.labelled(adapter, document_path, semantic, &occurrence.occurrence)
+        {
+            return answer;
         }
         let is_image = occurrence.occurrence.construct.is_image();
+        if let Some((path, marked)) = selection::marked(
+            occurrence.occurrence.construct,
+            &occurrence.occurrence.semantic_destination,
+        ) {
+            let (mut intent, resolution) = resolve_destination(
+                self,
+                context,
+                adapter,
+                document_path,
+                Some(occurrence.occurrence.construct),
+                is_image,
+                path,
+            )?;
+            intent.fragment = Some(marked.name.clone());
+            return Ok((intent, self.selected(resolution, &marked)?, None));
+        }
         let (intent, mut resolution) = resolve_destination(
             self,
             context,
@@ -245,6 +280,24 @@ impl<'a> Resolver<'a> {
             is_image,
             &occurrence.occurrence.semantic_destination,
         )?;
+        if matches!(
+            resolution,
+            Resolution::Missing(Missing::LineFragmentOutOfRange { .. })
+        ) && let Some(opening) = selection::opening_line(
+            occurrence.occurrence.construct,
+            &occurrence.occurrence.semantic_destination,
+        ) {
+            resolution = resolve_destination(
+                self,
+                context,
+                adapter,
+                document_path,
+                Some(occurrence.occurrence.construct),
+                is_image,
+                &opening,
+            )?
+            .1;
+        }
         if intent.kind == IntentKind::SiteRoute
             && matches!(
                 resolution,

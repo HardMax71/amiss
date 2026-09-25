@@ -84,6 +84,9 @@ pub(crate) fn wire_resolution<P, F: Fn(&P) -> String>(
                 MissingResolution::LabelNotDeclared {} => {
                     (MissingTag::LabelNotDeclared, None, None)
                 }
+                MissingResolution::SelectionNotFound { .. } => {
+                    (MissingTag::SelectionNotFound, None, None)
+                }
             };
             (
                 ResolutionTag::Missing,
