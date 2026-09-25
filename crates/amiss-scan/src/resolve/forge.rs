@@ -142,6 +142,10 @@ fn foreign_row(query: Option<String>, fragment: Option<String>) -> (Intent, Reso
     )
 }
 
+/// GitHub serves a `blob` URL naming a directory and a `tree` URL naming a
+/// file by redirecting to the other form, and serves either with a trailing
+/// slash, so the URL promises no kind.
+///
 /// Foreign unless proven trusted: exact accepted `blob`/`tree` forms, literal
 /// ASCII owner and repository folded only `A`-`Z`, each later segment decoded
 /// exactly once, the trusted refs matched by whole segments, and the
@@ -156,23 +160,32 @@ fn github(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     if !repository_pair_matches(identity, owner, repository) {
         return ForgeRoute::Foreign;
     }
-    let target_kind = match *form {
-        "blob" => TargetKind::Blob,
-        "tree" => TargetKind::Tree,
-        _ => return ForgeRoute::Foreign,
-    };
-
-    let tolerate_terminal_slash = target_kind == TargetKind::Tree;
+    if !matches!(*form, "blob" | "tree") {
+        return ForgeRoute::Foreign;
+    }
+    let tail = segments.get(3..).unwrap_or_default();
     same_route(
         IntentKind::SameRepositoryGithub,
-        target_kind,
-        versioned_split(
-            identity,
-            tolerate_terminal_slash,
-            segments.get(3..).unwrap_or_default(),
-            TailVersions::NamedOrCommit,
-        ),
+        TargetKind::Either,
+        versioned_split(identity, true, tail, TailVersions::NamedOrCommit),
     )
+}
+
+/// Whether a ref-and-path tail ends in a slash, the author's promise of a
+/// directory.
+fn directory_hint(tail: &[&str]) -> bool {
+    tail.len() > 1 && tail.last() == Some(&"")
+}
+
+/// The kind a Gitea or Bitbucket Data Center URL promises: a directory when
+/// its tail ends in a slash, and otherwise either, since neither form names a
+/// kind.
+fn promised_kind(tail: &[&str]) -> TargetKind {
+    if directory_hint(tail) {
+        TargetKind::Tree
+    } else {
+        TargetKind::Either
+    }
 }
 
 /// GitLab's canonical form: every segment before the reserved `-` separator
@@ -206,24 +219,19 @@ fn gitlab(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     {
         return ForgeRoute::Foreign;
     }
-    let target_kind = match segments.get(separator.saturating_add(1)) {
-        Some(&"blob") => TargetKind::Blob,
-        Some(&"tree") => TargetKind::Tree,
-        Some(_) | None => return ForgeRoute::Foreign,
-    };
-
+    if !matches!(
+        segments.get(separator.saturating_add(1)),
+        Some(&"blob" | &"tree")
+    ) {
+        return ForgeRoute::Foreign;
+    }
     let tail = segments
         .get(separator.saturating_add(2)..)
         .unwrap_or_default();
     same_route(
         IntentKind::SameRepositoryGitlab,
-        target_kind,
-        versioned_split(
-            identity,
-            target_kind == TargetKind::Tree,
-            tail,
-            TailVersions::NamedOrCommit,
-        ),
+        TargetKind::Either,
+        versioned_split(identity, true, tail, TailVersions::NamedOrCommit),
     )
 }
 
@@ -244,12 +252,8 @@ fn gitea(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
         return ForgeRoute::Foreign;
     };
     let raw_tail = segments.get(5..).unwrap_or_default();
-    let directory_hint = raw_tail.len() > 1 && raw_tail.last() == Some(&"");
-    let target_kind = if directory_hint {
-        TargetKind::Tree
-    } else {
-        TargetKind::Either
-    };
+    let directory_hint = directory_hint(raw_tail);
+    let target_kind = promised_kind(raw_tail);
     let split = match *selector {
         "branch" => {
             let branch_tail = segments.get(4..).unwrap_or_default();
@@ -382,12 +386,8 @@ fn bitbucket_data_center(identity: &ForgeContext, suffix: &str, query: Option<&s
         return ForgeRoute::Foreign;
     }
     let raw_tail = segments.get(marker.saturating_add(5)..).unwrap_or_default();
-    let directory_hint = raw_tail.len() > 1 && raw_tail.last() == Some(&"");
-    let target_kind = if directory_hint {
-        TargetKind::Tree
-    } else {
-        TargetKind::Either
-    };
+    let directory_hint = directory_hint(raw_tail);
+    let target_kind = promised_kind(raw_tail);
     let split = decoded_tail(directory_hint, raw_tail)
         .and_then(|decoded| contained_path(&decoded))
         .and_then(|path| {

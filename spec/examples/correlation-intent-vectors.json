@@ -28,7 +28,7 @@
         "kind": "repository-path",
         "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "repository_path": "docs/a.md",
-        "target_kind": "blob",
+        "target_kind": "either",
         "query_digest": null,
         "fragment_digest": null,
         "external_scheme": null
@@ -37,7 +37,7 @@
         "kind": "same-repository-github",
         "raw_destination_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
         "repository_path": "docs/a.md",
-        "target_kind": "blob",
+        "target_kind": "either",
         "query_digest": null,
         "fragment_digest": null,
         "external_scheme": null
@@ -468,7 +468,7 @@
         "kind": "repository-path",
         "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "repository_path": "docs/a.md",
-        "target_kind": "blob",
+        "target_kind": "either",
         "query_digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac",
         "fragment_digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14",
         "external_scheme": null
@@ -477,7 +477,7 @@
         "kind": "same-repository-github",
         "raw_destination_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
         "repository_path": "docs/a.md",
-        "target_kind": "blob",
+        "target_kind": "either",
         "query_digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac",
         "fragment_digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14",
         "external_scheme": null

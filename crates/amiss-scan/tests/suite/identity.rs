@@ -188,7 +188,7 @@ fn observation_inputs_preserve_text_and_byte_paths_across_owned_decode() {
             kind: IntentKind::SameRepositoryGithub,
             commit_oid: Oid::new(ObjectFormat::Sha1, "a".repeat(40)),
             repository_path: Some(text_path.clone()),
-            target_kind: Some(TargetKind::Blob),
+            target_kind: Some(TargetKind::Either),
             external_scheme: None,
             query: None,
             fragment: Some("historical".to_owned()),

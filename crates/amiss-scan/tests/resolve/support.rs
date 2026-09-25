@@ -185,7 +185,7 @@ pub(crate) fn github_urls_need_the_whole_trusted_chain() {
         intent.repository_path.as_ref().and_then(RepoPath::as_str),
         Some("docs/guide.md")
     );
-    assert_eq!(intent.target_kind, Some(TargetKind::Blob));
+    assert_eq!(intent.target_kind, Some(TargetKind::Either));
     let Resolution::Resolved {
         target: Target::Blob(blob),
     } = row

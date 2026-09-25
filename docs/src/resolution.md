@@ -352,7 +352,9 @@ can prove absence inside the closed option-free subset.
 
 Resolution is exact, and the small rules matter. A trailing slash means the author
 promised a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even
-though `guide.md` exists. Percent-encoding is decoded exactly once: `%252F` stays as the
+though `guide.md` exists. A GitHub or GitLab URL promises no kind at all: both forges
+redirect a `blob` URL naming a directory to its `tree` and back, and serve either with a
+trailing slash. Percent-encoding is decoded exactly once: `%252F` stays as the
 literal three characters `%2F` instead of turning into a second slash. A percent escape
 may decode to bytes that are not text at all, and those bytes are simply the path.
 `bad-%FF-name.md` resolves against the tree entry carrying that exact byte, because Git
