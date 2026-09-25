@@ -270,8 +270,13 @@ Asciidoctor checks first.
 
 A reStructuredText heading anchor resolves through the Docutils rule in
 [What thirteen renderers call a heading](anchor-rules.md), and the labels a document declares
-outright with `.. _name:` resolve as themselves. The two Sphinx roles are modelled by
-name, which is why the grammar profile says `docutils-rst-sphinx-refs`. A relative
+outright with `.. _name:` resolve as themselves. The Sphinx roles that name a document, a file
+or a label are modelled by name, which is why the grammar profile says
+`docutils-rst-sphinx-refs`: `:doc:`, `:download:`, `:ref:` and `:numref:`. A `:download:` names
+a file as written, beside its document, or under the directory holding `conf.py` when it opens
+with a slash, and a `:numref:` is a label the way a `:ref:` is. An image a substitution
+definition names, `.. |logo| image:: logo.png`, is an image like any other, and the link an
+image or figure opens, its `:target:` option, is a destination of its own. A relative
 `:doc:` target resolves beside its document, read under the suffix its root reads and again
 as the author wrote it, so a docname carrying a dot of its own reaches the file that name
 takes the suffix of. One already spelled with a suffix keeps it, since that spelling was the
@@ -282,7 +287,7 @@ site route when nothing names the Sphinx root. An entry of a `toctree` body is a
 same way and resolves the same way, bare or as `Title <docname>`; its options, `self`, URLs,
 and glob patterns name no single document and are passed over. A `:ref:` resolves against the snapshot's label table, built after
 discovery from every name a document whose profile reads roles declares and
-bounded by `declared-labels-per-snapshot`: a unique declaration resolves to its
+bounded by `declared-labels-per-snapshot`, and a `:numref:` too: a unique declaration resolves to its
 declaring document, a name nobody declares is a missing target, and a name declared
 twice is undecided rather than guessed between. Labels follow the Docutils simple-name
 rule, case-folded with whitespace runs collapsed, a phrase declaration may arrive
