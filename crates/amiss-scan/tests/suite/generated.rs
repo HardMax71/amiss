@@ -521,6 +521,79 @@ fn a_download_names_a_file_and_a_numref_a_label() {
     ));
 }
 
+/// Sphinx reads every relative path an included file writes from the page
+/// that includes it, a nested include's too, so a fragment beside nothing it
+/// names still reaches the page's files and one the page lacks is missing
+/// there.
+#[test]
+fn an_included_fragment_reads_from_its_page() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("docs/conf.py", "project = 'probe'\n"),
+            ("docs/index.rst", "Index\n=====\n\n.. include:: sub/frag.rst\n"),
+            ("docs/other.rst", "Other\n=====\n"),
+            ("docs/data.txt", "data\n"),
+            ("docs/pic.png", "png\n"),
+            ("docs/part.rst", "Part.\n"),
+            (
+                "docs/sub/frag.rst",
+                ":doc:`other`\n\n:download:`data.txt`\n\n.. image:: pic.png\n\n.. include:: part.rst\n\n.. image:: gone.png\n",
+            ),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    for (line, target) in [
+        (1, "docs/other.rst"),
+        (3, "docs/data.txt"),
+        (5, "docs/pic.png"),
+        (7, "docs/part.rst"),
+    ] {
+        assert_eq!(
+            blob(answer(&rows, "docs/sub/frag.rst", line)),
+            Some(target),
+            "line {line}"
+        );
+    }
+    assert!(matches!(
+        answer(&rows, "docs/sub/frag.rst", 9),
+        Resolution::Missing(Missing::PathNotFound { path, .. }) if path.as_bytes() == b"docs/gone.png"
+    ));
+}
+
+/// A file two pages include has to reach its target from both, so the page
+/// whose directory lacks it is where it is missing.
+#[test]
+fn an_included_fragment_answers_to_every_page() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("docs/conf.py", "project = 'probe'\n"),
+            (
+                "docs/a/index.rst",
+                "A\n=\n\n.. include:: ../shared/frag.rst\n",
+            ),
+            (
+                "docs/b/index.rst",
+                "B\n=\n\n.. include:: ../shared/frag.rst\n",
+            ),
+            ("docs/a/pic.png", "png\n"),
+            ("docs/shared/frag.rst", ".. image:: pic.png\n"),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    assert!(
+        matches!(
+            answer(&rows, "docs/shared/frag.rst", 1),
+            Resolution::Missing(Missing::PathNotFound { path, .. }) if path.as_bytes() == b"docs/b/pic.png"
+        ),
+        "{:?}",
+        answer(&rows, "docs/shared/frag.rst", 1)
+    );
+}
+
 /// Sphinx finds a docname's file under any suffix its root reads, so a
 /// `:doc:` in reStructuredText reaches a `MyST` page and a `{doc}` in `MyST`
 /// reaches a reStructuredText one, relative or from the root.

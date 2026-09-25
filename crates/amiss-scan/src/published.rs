@@ -88,7 +88,9 @@ pub(crate) fn anchors(
     if let Some(declared) = declared_site_anchor(snapshot, adapter, document, is_image, path_part) {
         return vec![declared];
     }
-    if let Some(anchored) = construct::anchors(snapshot, adapter, document, construct, path_part) {
+    if let Some(anchored) =
+        construct::anchors(snapshot, adapter, document, construct, is_image, path_part)
+    {
         return anchored;
     }
     match adapter {

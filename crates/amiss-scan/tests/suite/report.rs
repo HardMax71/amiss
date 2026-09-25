@@ -671,6 +671,7 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
         redirect_routes: std::collections::BTreeMap::new(),
         sole_sites: std::collections::BTreeMap::new(),
         sphinx_included: std::collections::BTreeSet::new(),
+        fragment_pages: std::collections::BTreeMap::new(),
         antora_components: std::collections::BTreeMap::new(),
         source_suffixes: std::collections::BTreeMap::new(),
         sphinx_configs: std::collections::BTreeMap::new(),

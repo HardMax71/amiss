@@ -10,7 +10,9 @@ use crate::resources::{Aggregate, ScanResources};
 
 use crate::discovery::followed;
 use crate::discovery::local_target;
+use crate::discovery::site_root;
 use crate::discovery::snippet_root;
+use crate::route::SPHINX;
 
 #[derive(Clone, Copy)]
 pub(super) struct Source<'a> {
@@ -31,6 +33,8 @@ struct Expansion<'snapshot, 'scan> {
     snapshot: &'snapshot SnapshotDiscovery,
     scan: &'scan mut ScanResources,
     adapter: Adapter,
+    /// The page a Sphinx build reads every nested include from, where there is one.
+    sphinx_page: Option<RepoPath>,
     stack: BTreeSet<RepoPath>,
     edges: u64,
     headings: Vec<Heading>,
@@ -58,6 +62,9 @@ pub(super) fn expand<'source>(
         snapshot,
         scan,
         adapter,
+        sphinx_page: (adapter == Adapter::Rst
+            && site_root(snapshot, path.as_bytes(), &SPHINX).is_some())
+        .then(|| path.clone()),
         stack: BTreeSet::from([path.clone()]),
         edges: 0,
         headings: Vec::new(),
@@ -123,7 +130,8 @@ impl Expansion<'_, '_> {
             return;
         };
 
-        let Some(target) = local_target(root.as_deref(), path, &transclusion.target) else {
+        let read_from = self.sphinx_page.as_ref().unwrap_or(path);
+        let Some(target) = local_target(root.as_deref(), read_from, &transclusion.target) else {
             self.complete = false;
             return;
         };

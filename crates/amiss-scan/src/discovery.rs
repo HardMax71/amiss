@@ -85,6 +85,7 @@ pub struct DocumentRecord {
 /// a code span there is the prose it looks like.
 fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> Result<(), Error> {
     discovery.sphinx_included = sphinx_included(discovery);
+    discovery.fragment_pages = fragment_pages(discovery);
     let governed: Vec<bool> = discovery
         .documents
         .iter()
@@ -436,7 +437,7 @@ fn sphinx_included(discovery: &SnapshotDiscovery) -> BTreeSet<RepoPath> {
         .collect();
     let mut found = BTreeSet::new();
     while let Some(document) = frontier.pop() {
-        for target in included_documents(discovery, &document) {
+        for (target, _plain) in included_documents(discovery, &document, &document) {
             if discovery.document(target.as_bytes()).is_some_and(markdown)
                 && found.insert(target.clone())
             {
@@ -445,6 +446,42 @@ fn sphinx_included(discovery: &SnapshotDiscovery) -> BTreeSet<RepoPath> {
         }
     }
     found
+}
+
+/// The page each included file is rendered into. Sphinx reads every relative
+/// path an included file writes, a nested include's among them, from the
+/// directory of the page under `conf.py` that renders it, so the walk starts
+/// at each page no other file includes and reads each include it meets from
+/// that page. An include carrying options is not followed, since `MyST`'s
+/// `relative-docs` and `relative-images` read paths from the file instead.
+fn fragment_pages(discovery: &SnapshotDiscovery) -> BTreeMap<RepoPath, BTreeSet<RepoPath>> {
+    let included: BTreeSet<RepoPath> = discovery
+        .documents
+        .iter()
+        .flat_map(|record| included_documents(discovery, &record.path, &record.path))
+        .map(|(target, _plain)| target)
+        .collect();
+    let mut pages: BTreeMap<RepoPath, BTreeSet<RepoPath>> = BTreeMap::new();
+    for page in discovery.documents.iter().map(|record| &record.path) {
+        if included.contains(page) || site_root(discovery, page.as_bytes(), &SPHINX).is_none() {
+            continue;
+        }
+        let mut frontier = vec![page.clone()];
+        while let Some(file) = frontier.pop() {
+            for (target, plain) in included_documents(discovery, &file, page) {
+                if plain
+                    && included.contains(&target)
+                    && pages
+                        .entry(target.clone())
+                        .or_default()
+                        .insert(page.clone())
+                {
+                    frontier.push(target);
+                }
+            }
+        }
+    }
+    pages
 }
 
 fn role_occurrence(entry: &ScannedOccurrence) -> bool {
@@ -487,6 +524,9 @@ pub struct SnapshotDiscovery {
     pub redirect_routes: BTreeMap<RepoPath, RepoPath>,
     pub sole_sites: BTreeMap<&'static str, Vec<u8>>,
     pub sphinx_included: BTreeSet<RepoPath>,
+    /// The Sphinx pages each included file is rendered into, which is where
+    /// every relative path the file writes is read from.
+    pub fragment_pages: BTreeMap<RepoPath, BTreeSet<RepoPath>>,
     /// Each `antora.yml` the tree holds, by its own path, against the
     /// component name it declares and whether it reserves an `ext` block.
     pub antora_components: BTreeMap<RepoPath, (String, bool)>,
@@ -605,6 +645,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         redirect_routes: BTreeMap::new(),
         sole_sites: BTreeMap::new(),
         sphinx_included: BTreeSet::new(),
+        fragment_pages: BTreeMap::new(),
         antora_components: BTreeMap::new(),
         source_suffixes: BTreeMap::new(),
         sphinx_configs: BTreeMap::new(),
@@ -1169,13 +1210,15 @@ pub(crate) fn followed(transclusions: &[Transclusion]) -> Vec<&Transclusion> {
 }
 
 /// The documents one document renders in place of its own includes, which is
-/// the edge the Sphinx walk follows to decide what a tree parses. A call a
-/// template answers names no file at all, so it is no edge here either; an
+/// the edge the Sphinx walk follows to decide what a tree parses, each read
+/// from beside `read_from` and marked when it carries no option block. A call
+/// a template answers names no file at all, so it is no edge here either; an
 /// option block still renders part of the named file, so that one is.
 pub(crate) fn included_documents(
     snapshot: &SnapshotDiscovery,
     document: &RepoPath,
-) -> Vec<RepoPath> {
+    read_from: &RepoPath,
+) -> Vec<(RepoPath, bool)> {
     let Some(DocumentStatus::Scanned(scanned)) = snapshot
         .document(document.as_bytes())
         .map(|record| &record.status)
@@ -1189,7 +1232,10 @@ pub(crate) fn included_documents(
     followed(&source.transclusions)
         .into_iter()
         .filter(|entry| entry.kind != Ok(TransclusionKind::Literal))
-        .filter_map(|entry| local_target(root.as_deref(), document, &entry.target))
+        .filter_map(|entry| {
+            local_target(root.as_deref(), read_from, &entry.target)
+                .map(|target| (target, entry.kind.is_ok()))
+        })
         .collect()
 }
 
