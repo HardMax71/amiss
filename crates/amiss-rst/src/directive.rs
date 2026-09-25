@@ -135,17 +135,18 @@ fn interpreted_text(line: &str, at: usize, found: &mut Vec<Reference>) {
             if let Some(start) = role.open.take() {
                 let body_at = start.saturating_add(role.opener.len());
                 let body = line.get(body_at..tick).unwrap_or_default();
-                let target = body
+                let written = body
                     .rsplit_once('<')
                     .and_then(|(_, tail)| tail.strip_suffix('>'))
-                    .unwrap_or(body)
-                    .trim();
+                    .unwrap_or(body);
+                // A role wrapped across lines folds its whitespace the way Docutils does.
+                let target = written.split_whitespace().collect::<Vec<_>>().join(" ");
                 let phrase_allowed = matches!(role.kind, ReferenceKind::RefRole);
                 let acceptable = !target.is_empty()
-                    && (phrase_allowed || !target.contains(char::is_whitespace))
+                    && (phrase_allowed || !target.contains(' '))
                     && !target.contains('`');
                 if acceptable {
-                    found.push(build(role.kind, target, at, start, tick.saturating_add(1)));
+                    found.push(build(role.kind, &target, at, start, tick.saturating_add(1)));
                 }
                 continue;
             }
@@ -170,7 +171,7 @@ fn interpreted_text(line: &str, at: usize, found: &mut Vec<Reference>) {
                     .get(start.saturating_add(1)..tick)
                     .and_then(|body| body.rsplit_once('<'))
                     .and_then(|(_, tail)| tail.strip_suffix('>'))
-                    .map(str::trim)
+                    .map(|uri| uri.split('\n').map(str::trim).collect::<String>())
                     .filter(|target| {
                         !target.is_empty()
                             && !target.contains(char::is_whitespace)
@@ -179,7 +180,7 @@ fn interpreted_text(line: &str, at: usize, found: &mut Vec<Reference>) {
             {
                 found.push(build(
                     ReferenceKind::InlineHyperlink,
-                    target,
+                    &target,
                     at,
                     start,
                     tick.saturating_add(2),
@@ -189,6 +190,33 @@ fn interpreted_text(line: &str, at: usize, found: &mut Vec<Reference>) {
             inline_open = Some(tick);
         }
     }
+}
+
+/// One document a `toctree` body lists, bare or as `Title <docname>`. Options,
+/// `self`, URLs and glob patterns name no single document and are passed over.
+#[must_use]
+pub fn toctree_entry(line: &str, at: usize) -> Option<Reference> {
+    let trimmed = line.trim();
+    if trimmed.is_empty()
+        || trimmed.starts_with(':')
+        || trimmed == "self"
+        || trimmed.contains("://")
+        || trimmed.contains(['*', '?', '['])
+    {
+        return None;
+    }
+    let target = trimmed
+        .strip_suffix('>')
+        .and_then(|head| head.rsplit_once('<'))
+        .map_or(trimmed, |(_title, docname)| docname.trim());
+    let start = line.rfind(target)?;
+    Some(build(
+        ReferenceKind::TocTreeEntry,
+        target,
+        at,
+        start,
+        start.saturating_add(target.len()),
+    ))
 }
 
 fn build(kind: ReferenceKind, target: &str, at: usize, start: usize, end: usize) -> Reference {

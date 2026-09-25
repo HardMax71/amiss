@@ -62,6 +62,8 @@ pub enum SourceConstruct {
     RstDocRole,
     #[strum(serialize = "rst-ref-role")]
     RstRefRole,
+    #[strum(serialize = "rst-toctree-entry")]
+    RstTocTreeEntry,
     #[strum(serialize = "markdown-link-reference-definition")]
     LinkReferenceDefinition,
     #[strum(serialize = "html-anchor")]
