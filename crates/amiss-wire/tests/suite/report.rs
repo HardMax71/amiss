@@ -176,12 +176,14 @@ fn error_routes_preserve_the_canonical_wire() {
         path: None,
         path_bytes: None,
         resource: None,
+        json_path: None,
     });
     let resources = ResourceName::all().map(|name| ErrorDetail {
         code: AnalysisErrorCode::ResourceLimitExceeded,
         path: None,
         path_bytes: None,
         resource: Some((name, 1, 2)),
+        json_path: None,
     });
     let rows: Vec<_> = ordinary
         .chain(resources)

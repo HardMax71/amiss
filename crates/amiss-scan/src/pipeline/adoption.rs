@@ -15,6 +15,7 @@ const fn mismatch() -> ErrorDetail {
         path: None,
         path_bytes: None,
         resource: None,
+        json_path: None,
     }
 }
 

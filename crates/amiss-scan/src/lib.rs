@@ -165,5 +165,6 @@ pub(crate) fn detail(error: &Error, path: Option<&RepoPath>) -> ErrorDetail {
         path: path.cloned(),
         path_bytes: None,
         resource,
+        json_path: None,
     }
 }

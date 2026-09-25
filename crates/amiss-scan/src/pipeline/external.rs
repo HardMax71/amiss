@@ -76,6 +76,7 @@ pub(super) fn external_gate(
                     path: None,
                     path_bytes: None,
                     resource: None,
+                    json_path: None,
                 },
             ));
         }

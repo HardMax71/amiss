@@ -5212,6 +5212,13 @@
           "maxLength": 400,
           "description": "The fixed engine-owned sentence for this code: what blocked the run and how to unblock it."
         },
+        "json_path": {
+          "type": "string",
+          "pattern": "^\\$[.\\[]",
+          "minLength": 2,
+          "maxLength": 4096,
+          "description": "The member of the JSON input the defect sits at, in dotted JSONPath from the document root, such as $.document_includes[0].kind. Present when a strict reader located the defect below the root."
+        },
         "path": {
           "$ref": "#/$defs/NullableRepoPath"
         },

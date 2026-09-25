@@ -25,6 +25,7 @@ fn projection_payload() -> amiss_wire::report::model::ReportPayload {
         path_bytes: None,
         phase: AnalysisPhase::Git,
         resource: None,
+        json_path: None,
     }];
     let mut first = payload.findings[0].clone();
     first.kind = FindingKind::ExplicitTargetMissing;

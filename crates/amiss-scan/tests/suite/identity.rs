@@ -58,6 +58,7 @@ fn unavailable_report_blocks_match_the_shared_models() {
                         path: None,
                         path_bytes: None,
                         resource: None,
+                        json_path: None,
                     }],
                 )
                 .unwrap();

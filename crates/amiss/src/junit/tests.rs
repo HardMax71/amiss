@@ -55,6 +55,7 @@ fn dispositions_and_analysis_errors_keep_their_report_meaning() {
         resource: None,
         configured_limit: None,
         observed_lower_bound: None,
+        json_path: None,
     }];
     payload.result.status = ReportStatus::Incomplete;
     let xml = render(payload);
