@@ -10,6 +10,7 @@ pub enum ReferenceKind {
     BlockImage,
     InlineImage,
     Include,
+    Url,
 }
 
 impl ReferenceKind {
@@ -22,6 +23,7 @@ impl ReferenceKind {
             Self::BlockImage => "asciidoc-block-image",
             Self::InlineImage => "asciidoc-inline-image",
             Self::Include => "asciidoc-include",
+            Self::Url => "asciidoc-url",
         }
     }
 
@@ -97,7 +99,9 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
             found.push(reference);
             continue;
         }
-        if let Some(reference) = macro_at(line, at, index, &mut brackets) {
+        if let Some(reference) = macro_at(line, at, index, &mut brackets)
+            .or_else(|| url_at(line, at, index, &mut brackets))
+        {
             index = reference.span.1.saturating_sub(at);
             found.push(reference);
             continue;
@@ -105,6 +109,46 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
         index = index.saturating_add(1);
     }
     found
+}
+
+/// The schemes Asciidoctor links when a URL is written directly, and the one
+/// it links only with an attribute list after it.
+const URL_SCHEMES: [&str; 4] = ["https://", "http://", "ftp://", "irc://"];
+const MAILTO: &str = "mailto:";
+
+/// A URL written directly: with an attribute list, `https://host[text]`, bare,
+/// or between angle brackets, which Asciidoctor links as it reads. A bare
+/// URL ends at whitespace or a bracket, and the trailing punctuation that
+/// closes a sentence is not part of it.
+fn url_at(line: &str, at: usize, index: usize, brackets: &mut Brackets<'_>) -> Option<Reference> {
+    let tail = line.get(index..)?;
+    let mailto = tail.starts_with(MAILTO);
+    let scheme = URL_SCHEMES.iter().find(|scheme| tail.starts_with(**scheme));
+    if !mailto && scheme.is_none() || !boundary(line, index) {
+        return None;
+    }
+    let length = tail
+        .find(|character: char| {
+            character.is_whitespace() || matches!(character, '[' | '<' | '>' | '"' | '`')
+        })
+        .unwrap_or(tail.len());
+    if tail.get(length..).is_some_and(|rest| rest.starts_with('[')) {
+        let (target, _text, end) = bracketed(line, index, brackets)?;
+        return Some(build(ReferenceKind::Url, target, at, index, end));
+    }
+    let scheme = scheme?;
+    let target = tail
+        .get(..length)?
+        .trim_end_matches(['.', ',', ';', ':', '!', '?', ')']);
+    (target.len() > scheme.len()).then(|| {
+        build(
+            ReferenceKind::Url,
+            target,
+            at,
+            index,
+            index.saturating_add(target.len()),
+        )
+    })
 }
 
 fn macro_at(line: &str, at: usize, index: usize, brackets: &mut Brackets<'_>) -> Option<Reference> {

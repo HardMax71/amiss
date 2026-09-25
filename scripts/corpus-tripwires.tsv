@@ -1,5 +1,5 @@
 repository	status	scanned	unsupported	resolved	declined	missing
-asciidoctor	pass	148	1	251	79	5
+asciidoctor	pass	148	1	274	46	6
 astro-docs	pass	2618	2	3471	10327	0
 awesome-go	pass	7	2	270	0	0
 awesome	pass	7	0	38	0	0
@@ -47,7 +47,7 @@ rust-book	pass	478	0	831	0	32
 rust-by-example	pass	204	0	407	0	0
 scrapy	pass	90	0	1006	6	42
 sphinx	pass	170	0	351	13	28
-spring-boot	pass	229	0	2897	0	1
+spring-boot	pass	229	0	3070	3	1
 starlight	pass	380	1	656	1491	1
 superset	pass	1211	5	839	877	62
 swr	pass	23	0	0	0	0
