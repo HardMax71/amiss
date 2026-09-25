@@ -29,6 +29,34 @@ fn an_ordinary_repository_opens_through_the_boundary() {
     );
 }
 
+/// The configuration names the object format, so a declaration it
+/// contradicts is refused at the open rather than surfacing later as a
+/// missing object or an invalid index. A configuration without the extension
+/// is SHA-1, and one that cannot be read contradicts nothing.
+#[test]
+fn a_declared_object_format_the_configuration_contradicts_is_refused() {
+    let dir = TempDir::new().unwrap();
+    repository(dir.path());
+    let config = dir.path().join(".git/config");
+    assert!(Repository::open(dir.path(), ObjectFormat::Sha256).is_ok());
+    fs::write(&config, "[core]\n\trepositoryformatversion = 0\n").unwrap();
+    assert!(Repository::open(dir.path(), ObjectFormat::Sha1).is_ok());
+    assert_eq!(
+        Repository::open(dir.path(), ObjectFormat::Sha256).unwrap_err(),
+        RepositoryOpenError
+    );
+    fs::write(
+        &config,
+        "[core]\n\trepositoryformatversion = 1\n[extensions]\n\tobjectFormat = sha256\n",
+    )
+    .unwrap();
+    assert!(Repository::open(dir.path(), ObjectFormat::Sha256).is_ok());
+    assert_eq!(
+        Repository::open(dir.path(), ObjectFormat::Sha1).unwrap_err(),
+        RepositoryOpenError
+    );
+}
+
 #[test]
 fn a_reparse_point_at_the_root_is_refused() {
     let dir = TempDir::new().unwrap();
