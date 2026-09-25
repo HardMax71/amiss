@@ -13,7 +13,9 @@ invocation prints the same grammar on stderr, and both outputs are trustworthy.
 
 ## Running it
 
-The binary comes from `cargo install --locked amiss`; prefer the exact version the
+The binary comes from `cargo install --locked amiss`, or, with no Rust toolchain at hand,
+from the release asset for the platform, such as `amiss-linux-x86_64` from
+`gh release download v<version> --repo HardMax71/amiss`; prefer the exact version the
 repository's CI pins. Both snapshot arguments are full commit IDs, never refs.
 
 The staged check reads the index, not the working tree, so stage your edits first. It
