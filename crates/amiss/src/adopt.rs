@@ -27,6 +27,24 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
         println!("amiss adopt: the evaluation could not be trusted; nothing recorded");
         return ExitCode::from(2);
     }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
+        });
+    if adoption.floor_digest == Digest::from([0_u8; 32]) {
+        println!(
+            "amiss adopt: --floor-digest must name the organization floor the debt binds to, \
+             not the all-zero digest; nothing recorded"
+        );
+        return ExitCode::from(2);
+    }
+    if adoption.expires_at.epoch_seconds() <= now {
+        println!(
+            "amiss adopt: --expires-at is already past, so every item would be expired debt; nothing recorded"
+        );
+        return ExitCode::from(2);
+    }
     if adoption.output.exists() {
         println!("amiss adopt: the output path already exists; nothing recorded");
         return ExitCode::FAILURE;
@@ -69,6 +87,10 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
         skipped.ineligible,
         skipped.factless,
         skipped.unrecordable,
+    );
+    println!(
+        "amiss adopt: only a provider lane's sealed request reads this snapshot, and check never \
+         does; until a lane does, gate new drift with --profile enforce-introduced"
     );
     ExitCode::SUCCESS
 }
