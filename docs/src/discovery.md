@@ -5,7 +5,9 @@ the exact lowercase suffix `.md` or `.markdown` are `structured-markdown`; `.mdx
 `structured-mdx`. Six exact extensionless basenames, `README`, `CONTRIBUTING`, `CHANGELOG`,
 `SECURITY`, `SUPPORT`, and `CODE_OF_CONDUCT`, are `extensionless-markdown` and use the
 Markdown adapter. `.cursorrules` and `llms.txt` are `plain-advisory`: they are scanned by an
-adapter that extracts no references. `.adoc` and `.asciidoc` are `structured-asciidoc`, and `.rst` is
+adapter that extracts no references, unless a policy include names one exactly and binds it
+to a grammar, which then reads it; a tree or suffix include keeps the built-in class.
+`llms.txt` is Markdown by its own proposal, so binding it to `markdown` checks its links. `.adoc` and `.asciidoc` are `structured-asciidoc`, and `.rst` is
 `structured-rst`. `.txt` stays off both lists: the suffix says nothing about what is inside.
 One file in the tree does say. A Sphinx `conf.py` names the suffixes that project reads, and
 Django's names `.txt`, so a file carrying a declared suffix under the directory holding that

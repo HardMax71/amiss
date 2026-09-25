@@ -777,6 +777,12 @@ fn record_document(
     declared: Option<DocumentClassification>,
 ) -> Result<(), Error> {
     let classification = match classify(path.as_bytes()).or(declared) {
+        // An advisory file extracts nothing, so an include naming it with a grammar reads it.
+        Some(DocumentClassification::PlainAdvisory)
+            if context.includes.document_bindings.contains_key(&path) =>
+        {
+            DocumentClassification::PolicyIncluded
+        }
         Some(native) => native,
         None if context.includes.matches(&path) => DocumentClassification::PolicyIncluded,
         None => {
