@@ -16,7 +16,8 @@ use amiss_wire::assessment::{AssessmentVerdict, Nullable};
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::locale::{
     LocaleCoverageAssessment, LocaleCoverageEvidence, LocaleCoveragePlan, LocaleCoverageReason,
-    LocaleFallbackRule, LocaleFallbackStatus, LocalePageRequirement, LocaleTargetOrigin, assess,
+    LocaleFallbackRule, LocaleFallbackStatus, LocaleLineageStatus, LocalePageRequirement,
+    LocaleTargetOrigin, assess,
 };
 use amiss_wire::model::{Digest, ObjectFormat, RepoPathText};
 
@@ -38,6 +39,7 @@ fn directories() -> LocaleTreeContext {
         target: side("docs/de-DE", "de-DE", None),
         documents: vec![".md".to_owned()],
         excluded: None,
+        lineage: None,
     }
 }
 
@@ -175,6 +177,7 @@ fn a_locale_suffix_in_the_filename_keys_the_same_page() {
         target: side("docs", "de-DE", Some("de-DE")),
         documents: vec![".md".to_owned()],
         excluded: None,
+        lineage: None,
     };
     let plan = plan(&chain, &context, |_plan| {});
 
@@ -283,6 +286,7 @@ fn a_context_the_plan_does_not_name_refuses() {
         target: side("docs/de-DE", "en", None),
         documents: vec![".md".to_owned()],
         excluded: None,
+        lineage: None,
     };
 
     assert_eq!(
@@ -397,4 +401,79 @@ fn the_documented_contexts_key_the_layouts_they_claim() {
             (owned(source), owned(target))
         );
     }
+}
+
+/// A translation that records the source commit it was made from carries
+/// that commit's source page as its lineage, so the assessment can tell a
+/// translation made from the page as it stands from one the source moved on
+/// from. A page naming no commit, or one the store does not hold, stays
+/// unproven rather than current.
+#[test]
+fn a_translation_names_the_source_commit_it_was_made_from() -> Result<(), Box<dyn std::error::Error>>
+{
+    let dir = tempfile::TempDir::new()?;
+    let root = dir.path();
+    let git = |args: &[&str]| amiss_fixtures::git(root, args);
+    git(&["init", "-q"])?;
+    std::fs::create_dir_all(root.join("docs/de-DE"))?;
+    std::fs::write(root.join("docs/index.md"), "# Home\n")?;
+    std::fs::write(root.join("docs/guide.md"), "# Guide\n")?;
+    git(&["add", "."])?;
+    git(&["commit", "-qm", "source"])?;
+    let made_from = git(&["rev-parse", "HEAD"])?.trim().to_owned();
+    let translated = |title: &str, commit: &str| {
+        format!("---\ntitle: {title}\nl10n:\n  sourceCommit: {commit}\n---\n# {title}\n")
+    };
+    std::fs::write(root.join("docs/guide.md"), "# Guide\n\nA new step.\n")?;
+    std::fs::write(
+        root.join("docs/de-DE/index.md"),
+        translated("Start", &made_from),
+    )?;
+    std::fs::write(
+        root.join("docs/de-DE/guide.md"),
+        translated("Anleitung", &made_from),
+    )?;
+    std::fs::create_dir_all(root.join("docs/de-DE/more"))?;
+    std::fs::write(root.join("docs/more.md"), "# More\n")?;
+    std::fs::write(root.join("docs/de-DE/more.md"), "# Mehr\n")?;
+    git(&["add", "."])?;
+    git(&["commit", "-qm", "translated"])?;
+    let commit = git(&["rev-parse", "HEAD"])?.trim().to_owned();
+    let tree = git(&["rev-parse", "HEAD^{tree}"])?.trim().to_owned();
+
+    let context = LocaleTreeContext {
+        lineage: Some(vec!["l10n".to_owned(), "sourceCommit".to_owned()]),
+        ..directories()
+    };
+    let mut plan = LocaleCoveragePlan::parse(PLAN)?.payload;
+    plan.docs.object_format = ObjectFormat::Sha1;
+    plan.docs.commit = commit.parse()?;
+    plan.docs.tree = tree.parse()?;
+    plan.producer = tree_producer(&context).map_err(|defect| format!("{defect:?}"))?;
+    plan.product = Nullable::Null;
+    plan.policy.required = LocalePageRequirement::AllSource {};
+    plan.policy.fallbacks = Vec::new();
+    plan.policy.require_target_lineage = true;
+    let plan = plan.emit()?;
+    let repo =
+        Repository::open(root, ObjectFormat::Sha1).map_err(|defect| format!("{defect:?}"))?;
+    let mut resources = GitResources::new(GitLimits::CONTRACT);
+    let evidence = tree_inventory(&repo, &mut resources, &plan, &context)
+        .map_err(|defect| format!("{defect:?}"))?;
+
+    let lineage: Vec<(String, LocaleLineageStatus)> = coverage(&plan, &evidence)
+        .coverage
+        .lineage
+        .into_iter()
+        .map(|row| (row.key, row.status))
+        .collect();
+    assert_eq!(
+        lineage,
+        [
+            ("guide.md".to_owned(), LocaleLineageStatus::Stale),
+            ("index.md".to_owned(), LocaleLineageStatus::Current),
+            ("more.md".to_owned(), LocaleLineageStatus::Unproven),
+        ]
+    );
+    Ok(())
 }
