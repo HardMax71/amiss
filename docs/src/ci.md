@@ -250,7 +250,12 @@ before executing it. It scans under `AMISS_PROFILE` (`observe` until the first r
 triaged, the same ramp as everywhere else). A merge request compares its diff base with its
 head, a merged-results or merge-train pipeline compares its merge commit with that commit's
 first parent, so drift already on the target is not charged to the merge request, and the
-default branch compares each push with the commit before it. It renders Code Quality and JUnit
+default branch compares each push with the commit before it; a project's first commit has none,
+so its checkout is read whole through `--index`. It declares the project's identity
+from GitLab's own variables, the server host and the lowercased project path with the `gitlab`
+dialect, the branch a merge request targets as `--ref`, and the default branch, so a URL into
+the project's own files is checked like a relative link rather than left external. It renders
+Code Quality and JUnit
 from that same validated report without a second scan, and uploads three artifacts: the
 exact JSON report, a
 [Code Quality report](https://docs.gitlab.com/ci/testing/code_quality/) rendered in the
