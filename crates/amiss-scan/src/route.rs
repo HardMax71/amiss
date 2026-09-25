@@ -625,6 +625,84 @@ fn served_under(url: &str) -> String {
     path.trim_matches('/').to_owned()
 }
 
+/// What one `conf.py` turns on beyond suffixes: the extensions it names, and
+/// whether `autosectionlabel` prefixes each title label with its docname.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SphinxConfig {
+    pub extensions: BTreeSet<String>,
+    pub prefix_document: bool,
+}
+
+const EXTENSIONS: &str = "extensions";
+const EXTENSION_BINDINGS: [&str; 4] = ["+=", ".append(", ".extend(", "="];
+const PREFIX_DOCUMENT: &[u8] = b"autosectionlabel_prefix_document";
+
+/// The extensions one `conf.py` turns on, read from every string literal in
+/// the list bound to `extensions` at the top level, or added to it with `+=`,
+/// `.append(` or `.extend(`, up to the bracket that closes it, and whether it
+/// assigns `autosectionlabel_prefix_document` true.
+#[must_use]
+pub(crate) fn sphinx_config(source: &[u8]) -> SphinxConfig {
+    let text = String::from_utf8_lossy(source);
+    let mut config = SphinxConfig::default();
+    for (at, _) in text.match_indices(EXTENSIONS) {
+        let opens_line = text
+            .get(..at)
+            .is_none_or(|before| before.is_empty() || before.ends_with('\n'));
+        let after = text
+            .get(at.saturating_add(EXTENSIONS.len())..)
+            .unwrap_or_default()
+            .trim_start_matches([' ', '\t']);
+        let Some((binding, body)) = EXTENSION_BINDINGS
+            .iter()
+            .find_map(|binding| after.strip_prefix(binding).map(|body| (*binding, body)))
+        else {
+            continue;
+        };
+        if opens_line {
+            let open = usize::from(binding.ends_with('('));
+            config.extensions.extend(literals(body, open));
+        }
+    }
+    config.prefix_document = amiss_md::lines::scan(source).any(|line| {
+        assigned(line.content(source), PREFIX_DOCUMENT)
+            .is_some_and(|value| value.trim_ascii() == b"True")
+    });
+    config
+}
+
+/// The string literals from the start of a Python expression to the bracket
+/// that closes the one it opens with, `open` brackets already consumed.
+fn literals(body: &str, open: usize) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut depth = open;
+    let mut quoted: Option<(char, String)> = None;
+    for character in body.chars() {
+        if let Some((quote, text)) = quoted.as_mut() {
+            if character == *quote {
+                found.push(std::mem::take(text));
+                quoted = None;
+            } else {
+                text.push(character);
+            }
+            continue;
+        }
+        match character {
+            '"' | '\'' => quoted = Some((character, String::new())),
+            '[' | '(' => depth = depth.saturating_add(1),
+            ']' | ')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    break;
+                }
+            }
+            '\n' if depth == 0 => break,
+            _ => {}
+        }
+    }
+    found
+}
+
 /// Which suffixes one `conf.py` says Sphinx reads as reStructuredText. A
 /// Python assignment binds a name at the top level, so the key opens the line
 /// the way a descriptor's does, and an indented call or a commented-out line
