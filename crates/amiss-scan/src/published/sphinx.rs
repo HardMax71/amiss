@@ -97,3 +97,20 @@ fn docname_suffixes<'a>(snapshot: &'a SnapshotDiscovery, root: &[u8]) -> Vec<&'a
 }
 
 const MYST_EXTENSIONS: [&str; 2] = ["myst_parser", "myst_nb"];
+
+/// The sources a Sphinx root builds the page a `.html` path names from: the
+/// stem under each suffix the root reads, since the build writes each page
+/// beside where its source sits.
+pub(super) fn page_sources(snapshot: &SnapshotDiscovery, path: &RepoPath) -> Vec<RepoPath> {
+    let raw = path.as_bytes();
+    let (Some(stem), Some(root)) = (
+        raw.strip_suffix(b".html"),
+        site_root(snapshot, raw, &SPHINX),
+    ) else {
+        return Vec::new();
+    };
+    docname_suffixes(snapshot, &root)
+        .into_iter()
+        .filter_map(|suffix| RepoPath::from_bytes([stem, suffix.as_bytes()].concat()))
+        .collect()
+}

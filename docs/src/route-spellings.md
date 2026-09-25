@@ -230,7 +230,9 @@ A docname is a file name without its suffix, so the dot in `/releases/1.1` is pa
 and that target is `docs/releases/1.1.rst`, while a trailing slash is normalized away before
 the name is looked up, the way `docname_join` does it, so `` :doc:`</ref/applications/>` `` is
 `docs/ref/applications.rst`. A plain hyperlink with a leading slash is still a site route,
-since Sphinx emits it as written. A `:doc:` target in a document with no `conf.py` above it is
+since Sphinx emits it as written. A relative one naming a page's `.html` under the same
+`conf.py` reaches the source Sphinx built that page from, under each suffix the root reads,
+since the build writes every page beside where its source sits. A `:doc:` target in a document with no `conf.py` above it is
 answered by the one source directory the tree declares, and stays the declared site route it
 was where the tree declares several.
 
