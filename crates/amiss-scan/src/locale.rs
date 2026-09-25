@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
+use amiss_git::{GitResources, ObjectKind, Repository, parse_commit, parse_tree};
 use amiss_wire::artifact_id;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{DOCUMENT_SUFFIX_BYTES, GitMode};
@@ -20,7 +20,7 @@ use crate::discovery::{WalkMode, discover_walk};
 
 pub const LOCALE_CONTEXT_BYTES: u64 = 65_536;
 pub const PRODUCER_IDENTITY: ArtifactId = artifact_id!("amiss-locale-tree");
-pub const PRODUCER_VERSION: &str = "1.1.0";
+pub const PRODUCER_VERSION: &str = "1.2.0";
 /// The fallback class a target page carries when its bytes are the source's.
 pub const SOURCE_IDENTICAL_CLASS: ArtifactId = artifact_id!("source-identical");
 const CONTEXT_DOMAIN: &str = "amiss/locale-tree-context-v1";
@@ -43,7 +43,9 @@ pub struct LocaleSide {
 /// owns, which file suffixes are pages at all, and the roots of the locales
 /// the audit leaves out, whose pages belong to neither side. A site that keeps
 /// its source locale at the content root holds every other locale under it,
-/// so those roots have to be named.
+/// so those roots have to be named. `lineage` names the front matter key a
+/// translation records the source commit it was made from under, one key or a
+/// key under one parent, the way MDN's `l10n.sourceCommit` is.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LocaleTreeContext {
@@ -51,6 +53,8 @@ pub struct LocaleTreeContext {
     pub target: LocaleSide,
     pub documents: Vec<String>,
     pub excluded: Option<Vec<RepoPathText>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lineage: Option<Vec<String>>,
 }
 
 /// The context's own grammar is its shape; what it claims is checked against
@@ -89,6 +93,7 @@ struct InventoryInput<'a> {
 #[derive(Default)]
 struct Pages {
     rows: BTreeMap<String, Digest>,
+    located: BTreeMap<String, (RepoPath, Oid)>,
     complete: bool,
 }
 
@@ -146,6 +151,12 @@ pub fn tree_inventory(
         std::mem::take(&mut target.rows),
         &context.documents,
     );
+    target.located = paired(
+        &source.rows,
+        std::mem::take(&mut target.located),
+        &context.documents,
+    );
+    let lineage = lineage(repo, git, context, &source, &target);
     let producer = tree_producer(context)?;
     let identical = SOURCE_IDENTICAL_CLASS;
     let evidence = LocaleCoverageEvidence {
@@ -177,7 +188,12 @@ pub fn tree_inventory(
                 .map(|(key, resource_digest)| LocaleTargetPage {
                     key: key.clone(),
                     resource_digest: *resource_digest,
-                    origin: origin(source.rows.get(key), *resource_digest, &identical),
+                    origin: origin(
+                        source.rows.get(key),
+                        *resource_digest,
+                        &identical,
+                        lineage.get(key),
+                    ),
                 })
                 .collect(),
         },
@@ -189,11 +205,11 @@ pub fn tree_inventory(
 /// an `.mdx`, and the generators pair the two by the path without that
 /// suffix. So a target key no source page carries takes the one source key
 /// sharing its stem, where no other target page claims that stem.
-fn paired(
+fn paired<V>(
     source: &BTreeMap<String, Digest>,
-    target: BTreeMap<String, Digest>,
+    target: BTreeMap<String, V>,
     documents: &[String],
-) -> BTreeMap<String, Digest> {
+) -> BTreeMap<String, V> {
     let stem = |key: &str| {
         documents
             .iter()
@@ -229,15 +245,112 @@ fn paired(
         .collect()
 }
 
-fn origin(source: Option<&Digest>, target: Digest, class: &ArtifactId) -> LocaleTargetOrigin {
+fn origin(
+    source: Option<&Digest>,
+    target: Digest,
+    class: &ArtifactId,
+    based_on: Option<&Digest>,
+) -> LocaleTargetOrigin {
     match source {
         Some(source) if *source == target => LocaleTargetOrigin::Fallback {
             class: class.clone(),
             source_resource_digest: target,
         },
         Some(_) | None => LocaleTargetOrigin::TargetResource {
-            based_on_source_digest: Nullable::Null,
+            based_on_source_digest: based_on
+                .map_or(Nullable::Null, |digest| Nullable::Value(*digest)),
         },
+    }
+}
+
+/// The source page each translation says it was made from, where the
+/// context names a lineage key: the commit the translation's front matter
+/// records, and the bytes the source page held at that commit, digested the
+/// way a current page is. A key a page does not carry, or a commit, tree, or
+/// page the object store does not hold, leaves that page's lineage unproven.
+fn lineage(
+    repo: &Repository,
+    git: &mut GitResources,
+    context: &LocaleTreeContext,
+    source: &Pages,
+    target: &Pages,
+) -> BTreeMap<String, Digest> {
+    let Some(key) = context.lineage.as_deref() else {
+        return BTreeMap::new();
+    };
+    let mut trees: BTreeMap<Oid, Vec<amiss_git::TreeEntry>> = BTreeMap::new();
+    target
+        .located
+        .iter()
+        .filter_map(|(page, (_, translation))| {
+            let (path, _) = source.located.get(page)?;
+            let body = repo
+                .read_expected(git, translation, ObjectKind::Blob)
+                .ok()?
+                .body;
+            let commit = Oid::new(
+                repo.object_format(),
+                declared_commit(&body, key)?.to_owned(),
+            )?;
+            let object = repo.read_expected(git, &commit, ObjectKind::Commit).ok()?;
+            let tree = parse_commit(repo.object_format(), &object.body).ok()?.tree;
+            let blob = blob_at(repo, git, &mut trees, tree, path)?;
+            Some((page.clone(), document_digest(RESOURCE_DOMAIN, &blob)?))
+        })
+        .collect()
+}
+
+/// The blob one path names in one tree, read a directory at a time with each
+/// tree read once however many pages walk through it.
+fn blob_at(
+    repo: &Repository,
+    git: &mut GitResources,
+    trees: &mut BTreeMap<Oid, Vec<amiss_git::TreeEntry>>,
+    mut tree: Oid,
+    path: &RepoPath,
+) -> Option<Oid> {
+    let mut components = path.as_bytes().split(|byte| *byte == b'/').peekable();
+    while let Some(component) = components.next() {
+        if !trees.contains_key(&tree) {
+            let object = repo.read_expected(git, &tree, ObjectKind::Tree).ok()?;
+            let entries = parse_tree(repo.object_format(), &object.body).ok()?;
+            trees.insert(tree.clone(), entries);
+        }
+        let entry = trees
+            .get(&tree)?
+            .iter()
+            .find(|entry| entry.name.as_slice() == component)?;
+        if components.peek().is_none() {
+            return (entry.mode == GitMode::RegularFile).then(|| entry.oid.clone());
+        }
+        tree = entry.oid.clone();
+    }
+    None
+}
+
+/// The commit a translation's front matter records under the lineage key: a
+/// scalar on a line of its own, or one indented under the parent key's line.
+fn declared_commit<'a>(body: &'a [u8], key: &[String]) -> Option<&'a str> {
+    let region = amiss_md::frontmatter::recognize(body)?;
+    let text = std::str::from_utf8(body.get(region.bom_bytes..region.suffix_offset)?).ok()?;
+    let value = |line: &'a str, name: &str| {
+        line.strip_prefix(name)?
+            .strip_prefix(':')
+            .map(|value| value.trim().trim_matches(['"', '\'']))
+    };
+    match key {
+        [name] => text.lines().find_map(|line| value(line, name)),
+        [parent, name] => {
+            let mut inside = false;
+            text.lines().find_map(|line| {
+                if !line.starts_with([' ', '\t']) {
+                    inside = line.trim_end().strip_suffix(':') == Some(parent.as_str());
+                    return None;
+                }
+                inside.then(|| value(line.trim_start(), name)).flatten()
+            })
+        }
+        _ => None,
     }
 }
 
@@ -300,6 +413,9 @@ fn walk(
             continue;
         }
         let digest = document_digest(RESOURCE_DOMAIN, oid).ok_or(InventoryError::Evidence)?;
+        pages
+            .located
+            .insert(key.clone(), (path.clone(), oid.clone()));
         pages.rows.insert(key, digest);
     }
     Ok((source, target))
@@ -374,6 +490,16 @@ fn validate(context: &LocaleTreeContext, plan: &LocaleCoveragePlan) -> Result<()
     if context.documents.is_empty() {
         return Err(InventoryError::Context);
     }
+    let lineage = context.lineage.as_deref().unwrap_or(&[]);
+    let named = lineage.iter().all(|segment| {
+        !segment.is_empty()
+            && segment
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    });
+    if context.lineage.is_some() && (!(1..=2).contains(&lineage.len()) || !named) {
+        return Err(InventoryError::Context);
+    }
     let excluded = context.excluded.as_deref().unwrap_or_default();
     if !excluded
         .iter()
@@ -399,6 +525,7 @@ impl Pages {
     fn new() -> Self {
         Self {
             rows: BTreeMap::new(),
+            located: BTreeMap::new(),
             complete: true,
         }
     }
