@@ -380,8 +380,15 @@ fn conclude(
     outcomes: &CandidateOutcomes,
     failures: &[ErrorDetail],
 ) -> Result<Built, Error> {
+    let refused = candidate.0.refused_routers.iter().map(|path| ErrorDetail {
+        code: AnalysisErrorCode::ConfigurationInvalid,
+        path: Some(path.clone()),
+        path_bytes: None,
+        resource: None,
+    });
+    let failures: Vec<ErrorDetail> = failures.iter().cloned().chain(refused).collect();
     if !failures.is_empty() {
-        return construct_incomplete(setup, failures);
+        return construct_incomplete(setup, &failures);
     }
     let mut candidate_side = candidate.1;
     let missing: Vec<&RepoPath> = candidate_side

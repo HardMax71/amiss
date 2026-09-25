@@ -467,25 +467,33 @@ pub(crate) fn antora_descriptor(source: &[u8]) -> Option<AntoraComponent> {
 
 /// What one `.amiss/router.yml` says about the directory it sits in: the
 /// router serving it, and the URL path that router serves it at. Each is a
-/// plain scalar on a line of its own, read the way a component descriptor is.
-/// A name no rule in the table carries is declined here, so a declaration
-/// reaches exactly the rules this engine already models, and a file naming no
-/// router declares nothing whatever else it holds.
+/// plain scalar on a line of its own, read the way a component descriptor is,
+/// among blank lines, comments and a document marker. Anything else declares
+/// nothing: a name no rule in the table carries, a base without its leading
+/// slash, another key, a repeated one, or no router line at all.
 #[must_use]
 pub(crate) fn declared_router(source: &[u8]) -> Option<(String, Option<String>)> {
+    let source = source.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(source);
     let mut router = None;
     let mut base = None;
     for line in amiss_md::lines::scan(source) {
         let content = line.content(source);
-        if let Some(value) = scalar(content, DECLARED_ROUTER)
-            .filter(|value| ROUTERS.iter().any(|rule| rule.name == *value))
-        {
-            router.get_or_insert_with(|| value.to_owned());
-        } else if let Some(value) = scalar(content, PUBLISHED_BASE).and_then(site_base) {
-            base.get_or_insert_with(|| value.to_owned());
+        let trimmed = content.trim_ascii();
+        if trimmed.is_empty() || trimmed.starts_with(b"#") || trimmed == b"---" {
+            continue;
+        }
+        let repeated = if let Some(value) = scalar(content, DECLARED_ROUTER) {
+            let rule = ROUTERS.iter().find(|rule| rule.name == value)?;
+            router.replace(rule.name).is_some()
+        } else {
+            let value = scalar(content, PUBLISHED_BASE).and_then(site_base)?;
+            base.replace(value.to_owned()).is_some()
+        };
+        if repeated {
+            return None;
         }
     }
-    router.map(|router| (router, base))
+    router.map(|router| (router.to_owned(), base))
 }
 
 /// The path prefix one base declares, which is what every site route the

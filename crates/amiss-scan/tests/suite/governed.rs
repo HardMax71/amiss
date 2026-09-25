@@ -189,6 +189,7 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
         source_suffixes: BTreeMap::new(),
         sphinx_configs: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
+        refused_routers: BTreeSet::new(),
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),

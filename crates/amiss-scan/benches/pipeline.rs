@@ -1,7 +1,7 @@
 #![expect(clippy::panic, reason = "bench fixture setup fails loudly")]
 
 use sha2::Digest as _;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use amiss_git::{GitLimits, GitResources};
@@ -227,12 +227,13 @@ fn resolve_repository_path(bencher: Bencher<'_, '_>, shape: ResolutionShape) {
         published_routes: BTreeMap::new(),
         redirect_routes: BTreeMap::new(),
         sole_sites: BTreeMap::new(),
-        sphinx_included: std::collections::BTreeSet::new(),
-        asciidoc_included: std::collections::BTreeSet::new(),
+        sphinx_included: BTreeSet::new(),
+        asciidoc_included: BTreeSet::new(),
         antora_components: BTreeMap::new(),
         source_suffixes: BTreeMap::new(),
         sphinx_configs: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
+        refused_routers: BTreeSet::new(),
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),
@@ -379,12 +380,13 @@ fn document_discovery(count: usize, status: &DocumentStatus) -> SnapshotDiscover
         published_routes: BTreeMap::new(),
         redirect_routes: BTreeMap::new(),
         sole_sites: BTreeMap::new(),
-        sphinx_included: std::collections::BTreeSet::new(),
-        asciidoc_included: std::collections::BTreeSet::new(),
+        sphinx_included: BTreeSet::new(),
+        asciidoc_included: BTreeSet::new(),
         antora_components: BTreeMap::new(),
         source_suffixes: BTreeMap::new(),
         sphinx_configs: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
+        refused_routers: BTreeSet::new(),
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),

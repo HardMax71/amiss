@@ -1,5 +1,5 @@
 use sha2::Digest as _;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 
 use amiss_git::{GitLimits, GitResources, Repository};
@@ -123,12 +123,13 @@ fn late_case_neighbor_latency_and_memory() {
         published_routes: BTreeMap::new(),
         redirect_routes: BTreeMap::new(),
         sole_sites: BTreeMap::new(),
-        sphinx_included: std::collections::BTreeSet::new(),
-        asciidoc_included: std::collections::BTreeSet::new(),
+        sphinx_included: BTreeSet::new(),
+        asciidoc_included: BTreeSet::new(),
         antora_components: BTreeMap::new(),
         source_suffixes: BTreeMap::new(),
         sphinx_configs: BTreeMap::new(),
         declared_routers: BTreeMap::new(),
+        refused_routers: BTreeSet::new(),
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),
