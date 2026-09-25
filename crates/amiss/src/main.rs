@@ -479,6 +479,7 @@ fn run(invocation: &Invocation, reserve: &mut BufWriter<Stdout>) -> ExitCode {
             invocation.object_format,
             &built,
             staged_snapshot.as_deref(),
+            invocation.profile,
         );
     }
     if let (Verb::Adopt, Some(adoption)) = (invocation.verb, &invocation.adoption) {

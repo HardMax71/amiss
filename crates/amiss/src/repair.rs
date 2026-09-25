@@ -7,8 +7,9 @@ use std::process::ExitCode;
 
 use amiss_git::{GitLimits, GitResources, Repository, parse_index_file};
 use amiss_scan::report::Built;
+use amiss_wire::controls::Profile;
 use amiss_wire::model::ObjectFormat;
-use amiss_wire::report::model::ReportPayload;
+use amiss_wire::report::model::{Attribution, ReportPayload};
 
 struct Fix {
     start: usize,
@@ -32,18 +33,26 @@ pub(crate) fn run(
     object_format: ObjectFormat,
     built: &Built,
     initial_index: Option<&[u8]>,
+    profile: Profile,
 ) -> ExitCode {
     if built.exit_code == 2 {
         println!("amiss fix: the evaluation could not be trusted; nothing applied");
         return ExitCode::from(2);
     }
     let payload = &built.envelope.payload;
-    let Ok((fixes, bare)) = collect(payload) else {
+    let Ok((fixes, bare, backlog)) = collect(payload, profile) else {
         println!("amiss fix: a fix carries an unrepresentable byte span; nothing applied");
         return ExitCode::from(2);
     };
+    let left = if backlog > 0 {
+        format!(
+            "; {backlog} pre-existing fixes left for --profile enforce, which --profile enforce-introduced does not charge"
+        )
+    } else {
+        String::new()
+    };
     if fixes.is_empty() {
-        println!("amiss fix: no fixes to apply; {bare} findings carry none");
+        println!("amiss fix: no fixes to apply; {bare} findings carry none{left}");
         return ExitCode::SUCCESS;
     }
     let Some(initial_index) = initial_index else {
@@ -87,7 +96,7 @@ pub(crate) fn run(
     }
     println!(
         "amiss fix: {applied} applied, {present} already present, {refused} refused, \
-         {bare} findings carry no fix"
+         {bare} findings carry no fix{left}"
     );
     if refused > 0 {
         ExitCode::FAILURE
@@ -96,13 +105,26 @@ pub(crate) fn run(
     }
 }
 
+/// The fixes by document, the findings carrying none, and the backlog left.
+type Collected = (BTreeMap<String, Vec<Fix>>, usize, usize);
+
+/// The fixes to apply, by document, with the count of findings carrying none
+/// and of pre-existing fixes the ramp leaves: `enforce-introduced` charges a
+/// change only with what it introduced, so its repair touches nothing else.
 fn collect<P, R, M, E>(
     payload: &ReportPayload<P, R, M, E>,
-) -> Result<(BTreeMap<String, Vec<Fix>>, usize), std::num::TryFromIntError> {
+    profile: Profile,
+) -> Result<Collected, std::num::TryFromIntError> {
     let mut fixes: BTreeMap<String, Vec<Fix>> = BTreeMap::new();
-    let mut bare = 0_usize;
+    let (mut bare, mut backlog) = (0_usize, 0_usize);
     for row in &payload.findings {
         match &row.fix {
+            Some(_)
+                if profile == Profile::EnforceIntroduced
+                    && row.attribution == Attribution::PreExisting =>
+            {
+                backlog = backlog.saturating_add(1);
+            }
             Some(fix) => {
                 fixes
                     .entry(fix.path.as_str().to_owned())
@@ -116,7 +138,7 @@ fn collect<P, R, M, E>(
             None => bare = bare.saturating_add(1),
         }
     }
-    Ok((fixes, bare))
+    Ok((fixes, bare, backlog))
 }
 
 fn staged_blobs(
