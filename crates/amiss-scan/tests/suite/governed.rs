@@ -194,6 +194,7 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),
+        starlight_roots: BTreeSet::new(),
         documents: vec![DocumentRecord {
             path,
             classification: DocumentClassification::StructuredMarkdown,

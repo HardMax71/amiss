@@ -317,6 +317,7 @@ fn declaring(path: &RepoPath) -> bool {
         || configures(path)
         || publishes(path)
         || binds_book(path)
+        || crate::route::declares(&crate::route::ASTRO, path)
 }
 
 fn configures(path: &RepoPath) -> bool {
@@ -332,6 +333,9 @@ fn binds_book(path: &RepoPath) -> bool {
 }
 
 /// What one descriptor's own bytes say, under the reading its name selects.
+/// The package an Astro configuration imports Starlight from.
+const STARLIGHT: &[u8] = b"@astrojs/starlight";
+
 fn record_declaration(
     discovery: &SnapshotDiscovery,
     declared: &mut Declared,
@@ -355,6 +359,15 @@ fn record_declaration(
         );
     } else if publishes(&path) {
         record_publication(discovery, declared, path, body);
+    } else if crate::route::declares(&crate::route::ASTRO, &path) {
+        if body
+            .windows(STARLIGHT.len())
+            .any(|window| window == STARLIGHT)
+        {
+            declared
+                .starlight_roots
+                .insert(directory(path.as_bytes()).to_vec());
+        }
     } else if binds_book(&path) {
         let root = directory(path.as_bytes());
         if let Some(source) = crate::route::book_source(root, body) {
@@ -437,6 +450,7 @@ struct Declared {
     published_roots: BTreeMap<Vec<u8>, Vec<(Vec<u8>, String)>>,
     bound_configs: BTreeMap<RepoPath, &'static [&'static str]>,
     book_sources: BTreeMap<Vec<u8>, Vec<u8>>,
+    starlight_roots: BTreeSet<Vec<u8>>,
 }
 
 /// Every document the seeds include through a parsed include, and every one
@@ -593,6 +607,9 @@ pub struct SnapshotDiscovery {
     /// The directory each mdBook reads its chapters from, by the directory
     /// holding its `book.toml`.
     pub book_sources: BTreeMap<Vec<u8>, Vec<u8>>,
+    /// Each Astro project whose configuration loads Starlight, by the
+    /// directory holding that configuration.
+    pub starlight_roots: BTreeSet<Vec<u8>>,
 }
 
 /// What the snapshot's documents say about one `.. _name:` label: the one
@@ -702,6 +719,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         published_roots: BTreeMap::new(),
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),
+        starlight_roots: BTreeSet::new(),
     }
 }
 
@@ -1030,6 +1048,7 @@ pub(crate) fn discover_walk(
         discovery.published_roots = declared.published_roots;
         discovery.bound_configs = declared.bound_configs;
         discovery.book_sources = declared.book_sources;
+        discovery.starlight_roots = declared.starlight_roots;
         let context = DocumentContext {
             repo,
             includes,
@@ -1101,6 +1120,7 @@ pub fn discover_index(
     discovery.published_roots = declared.published_roots;
     discovery.bound_configs = declared.bound_configs;
     discovery.book_sources = declared.book_sources;
+    discovery.starlight_roots = declared.starlight_roots;
     declared_documents(&context, git, scan, &mut discovery)?;
     settle_comments(&mut discovery);
     (discovery.published_routes, discovery.redirect_routes) = published_routes(&discovery);
