@@ -173,6 +173,7 @@ pub enum UnsupportedSemantics<P> {
     AttributeDependent,
     DuplicateLabel,
     ExternalInventory,
+    RepositoryRoot,
 }
 
 impl<P> UnsupportedSemantics<P> {
@@ -186,7 +187,8 @@ impl<P> UnsupportedSemantics<P> {
             | Self::NetworkPath
             | Self::AttributeDependent
             | Self::DuplicateLabel
-            | Self::ExternalInventory => false,
+            | Self::ExternalInventory
+            | Self::RepositoryRoot => false,
         }
     }
 }
@@ -206,6 +208,7 @@ pub enum UnsupportedSemanticsReason {
     Fragment,
     NetworkPath,
     Query,
+    RepositoryRoot,
     SiteRoute,
     UnmodelledRoute,
     #[strum(default, transparent)]
