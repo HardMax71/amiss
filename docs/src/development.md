@@ -166,7 +166,7 @@ mutant is a place where a lie would go unnoticed, to be judged against whether t
 value is observable through real behavior, not a score to raise.
 
 Three agent lanes sit beside the gates, none of them gating, written as
-[gh-aw](https://githubnext.github.io/gh-aw/) workflows whose agents hold no write token at
+[gh-aw](https://github.github.io/gh-aw/) workflows whose agents hold no write token at
 all: they run read-only on DeepSeek inside the repository's runners, and a separate harness
 job posts what their structured outputs request, nothing else. A new issue gets its premise
 checked against the tree before a maintainer reads it, whoever opened it. Every push to a
