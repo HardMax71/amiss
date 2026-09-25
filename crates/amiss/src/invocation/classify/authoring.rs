@@ -200,6 +200,7 @@ fn include_row(
         projection_assertions: Some(Vec::new()),
         protected_inventory: Vec::new(),
         finding_dispositions: Vec::new(),
+        default_branch_aliases: None,
     };
     if let Err(error) = policy.validate() {
         refusals.insert(invalid(format!(

@@ -137,6 +137,7 @@ pub(crate) fn forge_context(dialect: ForgeDialect) -> ForgeContext {
         .unwrap(),
         candidate_ref: Some(BranchRef::try_from(candidate_ref.to_owned()).unwrap()),
         default_ref: Some(branch_ref!("refs/heads/main")),
+        default_aliases: Vec::new(),
     }
 }
 
@@ -392,6 +393,7 @@ fn ambiguous_trusted_splits_have_unknown_version_scope() {
         .unwrap(),
         candidate_ref: Some(branch_ref!("refs/heads/a")),
         default_ref: Some(branch_ref!("refs/heads/a/b")),
+        default_aliases: Vec::new(),
     };
     let (intent, row) = bed
         .run_as(

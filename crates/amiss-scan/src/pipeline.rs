@@ -373,6 +373,25 @@ fn document_claims(
     Ok(())
 }
 
+/// The forge identity a run reads same-repository URLs under: the one the
+/// runner claims, with the old default-branch names the candidate policy
+/// declares. Both sides are read under the candidate's names, the way they
+/// are read under its router declarations, so the commit that declares one is
+/// not charged with the links it makes readable.
+#[must_use]
+fn aliased(
+    forge: Option<&ForgeContext>,
+    candidate: &crate::policy::PolicySide,
+) -> Option<ForgeContext> {
+    let mut context = forge?.clone();
+    context.default_aliases = candidate
+        .policy
+        .as_ref()
+        .and_then(|policy| policy.default_branch_aliases.clone())
+        .unwrap_or_default();
+    Some(context)
+}
+
 /// The shell reissued with the floor-effective error ceiling, so every
 /// fatal projection built downstream honors it.
 fn effective_shell(shell: &SetupShell, limits: &ScanLimits) -> SetupShell {

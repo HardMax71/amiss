@@ -1,7 +1,7 @@
 use amiss_wire::controls::ScannerPolicy;
 use amiss_wire::controls::{
-    BlobLineSelection, DOCUMENT_SUFFIX_BYTES, ProjectionKind, ProjectionSource,
-    SOURCE_MARKER_BYTES, check_projection_source,
+    BlobLineSelection, DEFAULT_BRANCH_ALIASES, DOCUMENT_SUFFIX_BYTES, ProjectionKind,
+    ProjectionSource, SOURCE_MARKER_BYTES, check_projection_source,
 };
 use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
@@ -451,5 +451,45 @@ fn a_tree_suffix_is_one_bounded_exact_selector() {
         ScannerPolicy::parse(duplicate.as_bytes()).unwrap_err().kind,
         ErrorKind::DuplicateMember,
         "suffix does not mint a second selector identity at one root"
+    );
+}
+
+/// The old names a policy declares for its default branch are full branch
+/// refs, sorted, unique and bounded, and a policy without the key reads the
+/// way it always did.
+#[test]
+fn default_branch_aliases_are_a_bounded_sorted_set_of_refs() {
+    let policy = |aliases: &str| {
+        format!(
+            r#"{{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":[],"finding_dispositions":[],"default_branch_aliases":[{aliases}]}}"#
+        )
+    };
+    let kind = |text: String| {
+        ScannerPolicy::parse(text.as_bytes())
+            .err()
+            .map(|defect| defect.kind)
+    };
+    assert_eq!(
+        kind(policy(r#""refs/heads/master","refs/heads/trunk""#)),
+        None
+    );
+    assert_eq!(
+        kind(policy(r#""refs/heads/trunk","refs/heads/master""#)),
+        Some(ErrorKind::UnsortedSet)
+    );
+    assert_eq!(
+        kind(policy(r#""refs/heads/master","refs/heads/master""#)),
+        Some(ErrorKind::DuplicateMember)
+    );
+    assert!(
+        kind(policy(r#""master""#)).is_some(),
+        "an alias is a full ref"
+    );
+    let many: Vec<String> = (0..=DEFAULT_BRANCH_ALIASES)
+        .map(|index| format!(r#""refs/heads/old-{index:02}""#))
+        .collect();
+    assert_eq!(
+        kind(policy(&many.join(","))),
+        Some(ErrorKind::LimitExceeded)
     );
 }

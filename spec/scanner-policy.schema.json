@@ -64,9 +64,27 @@
    "items": {
     "$ref": "#/$defs/FindingDisposition"
    }
+  },
+  "default_branch_aliases": {
+   "type": "array",
+   "maxItems": 16,
+   "description": "Old names of the default branch, read as the default branch in same-repository URLs. Sort by UTF-8 bytes.",
+   "x-amiss-order": [
+    "BranchRef"
+   ],
+   "uniqueItems": true,
+   "items": {
+    "$ref": "#/$defs/BranchRef"
+   }
   }
  },
  "$defs": {
+  "BranchRef": {
+   "type": "string",
+   "minLength": 12,
+   "maxLength": 266,
+   "pattern": "^refs/heads/(?!/)(?![\\s\\S]*\\.\\.)(?![\\s\\S]*@\\{)(?![\\s\\S]*[~^:?*\\[\\\\\\u0000-\\u001f\\u007f ])(?!\\.)(?![\\s\\S]*/\\.)(?![^/]*\\.lock(?:/|$))(?![\\s\\S]*/[^/]*\\.lock(?:/|$))(?![\\s\\S]*//)(?![\\s\\S]*/$)(?![\\s\\S]*\\.$).+$"
+  },
   "RepoPath": {
    "type": "string",
    "minLength": 1,
