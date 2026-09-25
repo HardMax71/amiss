@@ -80,6 +80,9 @@ amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss locale-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss locale-inventory --repo <path> --plan <path> --context <path>
                        [--format <human|json>]
+amiss locale-plan --report <path> --context <path> --site <name> --channel <name>
+                  [--scope-version <label>] [--fallback <class>] [--require-lineage]
+                  [--format <human|json>]
 amiss render --report <path>
              (--format human [--full] | --format <sarif|codequality|junit>)
 amiss refs --report <path>
@@ -123,7 +126,12 @@ trust them when the short form reads ambiguous.
 | `--report` | path | the report file the plan, render, or refs form reads; foreign to every other form |
 | `--plan` | path | the plan file the assessment form judges; foreign to every other form |
 | `--evidence` | path | the external observations `external-assess` judges, or the normalized specialist input `record-set` turns into a semantic template; foreign to every other form |
-| `--context` | path | the locale layout `locale-inventory` reads a tree under: each locale's root, claimed locale, optional filename suffix, and the document suffixes that count as pages; foreign to every other form |
+| `--context` | path | the locale layout `locale-inventory` reads a tree under: each locale's root, claimed locale, optional filename suffix, and the document suffixes that count as pages; `locale-plan` takes the producer and both locales from it; foreign to every other form |
+| `--site` | artifact identity | the documentation site a `locale-plan` scope names |
+| `--channel` | artifact identity | the release channel a `locale-plan` scope names |
+| `--scope-version` | label | the optional version a `locale-plan` scope names, compared exactly and never ordered |
+| `--fallback` | artifact identity | the one fallback class a `locale-plan` allows on every source page, such as `source-identical` |
+| `--require-lineage` | none | makes a `locale-plan` require exact lineage on every target-owned page |
 | `--target` | repo-relative path | the text path whose candidate references `refs` returns |
 | `--target-bytes-hex` | lowercase hex | the raw-byte path whose candidate references `refs` returns; exclusive with `--target` |
 | `--help` | none | prints the canonical closed grammar; stands alone, with no verb or other flag |

@@ -8,8 +8,8 @@ use std::path::PathBuf;
 
 use amiss_wire::controls::{Profile, ScannerPolicy};
 use amiss_wire::model::{
-    BranchRef, Digest, ForgeDialect, ObjectFormat, Oid, OwnerId, RepoPath, RepoPathText,
-    RepositoryIdentity, UtcInstant,
+    ArtifactId, BranchRef, Digest, ForgeDialect, ObjectFormat, Oid, OwnerId, RepoPath,
+    RepoPathText, RepositoryIdentity, UtcInstant,
 };
 use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
 
@@ -56,6 +56,9 @@ amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss locale-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss locale-inventory --repo <path> --plan <path> --context <path>
                        [--format <human|json>]
+amiss locale-plan --report <path> --context <path> --site <name> --channel <name>
+                  [--scope-version <label>] [--fallback <class>] [--require-lineage]
+                  [--format <human|json>]
 amiss render --report <path>
              (--format human [--full] | --format <sarif|codequality|junit>)
 amiss refs --report <path>
@@ -78,6 +81,7 @@ pub(crate) enum Verb {
     ExternalAssess,
     LocaleAssess,
     LocaleInventory,
+    LocalePlan,
     Render,
     Refs,
     PolicyInclude,
@@ -123,6 +127,21 @@ pub(crate) struct InventoryInvocation {
     pub(crate) repo: PathBuf,
     pub(crate) plan: PathBuf,
     pub(crate) context: PathBuf,
+    pub(crate) format: OutputFormat,
+}
+
+/// The locale plan form's shape: the report whose candidate the audit binds,
+/// the locale layout whose producer it accepts, the scope it names, and the
+/// policy the flags choose.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct LocalePlanInvocation {
+    pub(crate) report: PathBuf,
+    pub(crate) context: PathBuf,
+    pub(crate) site: ArtifactId,
+    pub(crate) channel: ArtifactId,
+    pub(crate) version: Option<String>,
+    pub(crate) fallback: Option<ArtifactId>,
+    pub(crate) require_lineage: bool,
     pub(crate) format: OutputFormat,
 }
 
@@ -185,6 +204,7 @@ pub(crate) enum Command {
     Assess(AssessInvocation),
     LocaleAssess(AssessInvocation),
     LocaleInventory(InventoryInvocation),
+    LocalePlan(LocalePlanInvocation),
     Render(RenderInvocation),
     Refs(RefsInvocation),
     PolicyInclude(PolicyIncludeInvocation),
