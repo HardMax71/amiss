@@ -734,6 +734,53 @@ pub(crate) fn inventory(payload: &amiss_wire::locale::LocaleCoverageEvidence) {
     );
 }
 
+pub(crate) fn locale_plan(
+    document: &amiss_wire::envelope::Envelope<amiss_wire::locale::LocaleCoveragePlan>,
+) {
+    let mut out = Channel {
+        out: std::io::stdout(),
+        open: true,
+    };
+    let payload = &document.payload;
+    let scope = &payload.scope;
+    line(
+        &mut out,
+        format_args!(
+            "amiss locale-plan: {} to {} for {} on {}",
+            scope.source_locale,
+            scope.target_locale,
+            scope.site.as_str(),
+            scope.channel.as_str(),
+        ),
+    );
+    let fallbacks: Vec<&str> = payload
+        .policy
+        .fallbacks
+        .iter()
+        .map(|rule| rule.class.as_str())
+        .collect();
+    let lineage = if payload.policy.require_target_lineage {
+        "required"
+    } else {
+        "not required"
+    };
+    line(
+        &mut out,
+        format_args!(
+            "every source page required, fallbacks allowed: {}, lineage {lineage}",
+            if fallbacks.is_empty() {
+                "none".to_owned()
+            } else {
+                fallbacks.join(", ")
+            },
+        ),
+    );
+    line(
+        &mut out,
+        format_args!("plan payload {}", document.payload_digest),
+    );
+}
+
 pub(crate) fn assessment(payload: &amiss_wire::external::ExternalAssessment) {
     use amiss_wire::external::ExternalVerdict;
     let mut out = Channel {

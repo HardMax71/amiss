@@ -149,6 +149,7 @@ fn main() -> ExitCode {
             invocation::Command::LocaleInventory(inventory) => {
                 locale::run(&locale::Form::Inventory(&inventory))
             }
+            invocation::Command::LocalePlan(plan) => locale::run_plan(&plan),
             invocation::Command::Render(render) => render::run(&render, &mut reserve),
             invocation::Command::Refs(refs) => references::run(&refs),
             invocation::Command::PolicyInclude(include) => policy_include::run(&include),
