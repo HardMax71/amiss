@@ -125,7 +125,9 @@ entries at or below that root whose raw path ends in those exact bytes. There ar
 wildcards, regexes, excludes, normalization, or case folding, and built-in classifications still
 win. The stable selector identity remains `(path, kind)`, so changing the suffix, removing it, or
 replacing it with a broader tree reports policy weakening instead of disguising the old selector
-as a new one.
+as a new one. It also means one directory takes one suffix: a second tree include on the same path
+is a repeated member, and the refusal names its index. A directory whose documents carry two
+suffixes takes a plain tree include instead, or one suffixed include per subdirectory.
 
 [`amiss policy-include`](invocation.md) prints a validated canonical row for the suffixed-tree form
 without touching the policy file. Its optional staged-index preview applies this same matching
