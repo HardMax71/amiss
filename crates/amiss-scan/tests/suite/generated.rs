@@ -426,3 +426,62 @@ fn the_myst_rows_name_the_file_the_route_table_reads() {
     assert_eq!(routed, declared, "the Sphinx declaration is one file");
     assert!(!routed.is_empty(), "the route table declares Sphinx");
 }
+
+/// Docusaurus reads a bare Markdown link on a translated page under the
+/// locale's content path and then the default one, so a page the locale has
+/// not translated is still reached, and it reads a Markdown link opening with
+/// `/` from its content paths and an image opening with `/` from `static`
+/// where it sits there, rather than either as a URL. A `./` link stays beside
+/// the page.
+#[test]
+fn a_docusaurus_link_falls_back_to_the_default_content() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("docusaurus.config.js", "export default {title: 'x'};\n"),
+            ("docs/guides/other.md", "# Other\n\n## Deep\n"),
+            ("static/img/logo.png", "png\n"),
+            (
+                "docs/intro.md",
+                "# Intro\n\n[x](/guides/other.md)\n\n[y](/guides/gone.md)\n\n![l](/img/logo.png)\n\n![g](/img/gone.png)\n",
+            ),
+            (
+                "i18n/fr/docusaurus-plugin-content-docs/current/intro.md",
+                "# Intro FR\n\n[a](guides/other.md)\n\n[b](guides/other.md#deep)\n\n[c](./guides/other.md)\n\n[d](/guides/other.md)\n",
+            ),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    let translated = "i18n/fr/docusaurus-plugin-content-docs/current/intro.md";
+    for (document, line) in [
+        (translated, 3),
+        (translated, 5),
+        (translated, 9),
+        ("docs/intro.md", 3),
+    ] {
+        assert_eq!(
+            blob(answer(&rows, document, line)),
+            Some("docs/guides/other.md"),
+            "{document}:{line}"
+        );
+    }
+    assert_eq!(
+        blob(answer(&rows, "docs/intro.md", 7)),
+        Some("static/img/logo.png")
+    );
+    assert!(matches!(
+        answer(&rows, "docs/intro.md", 9),
+        Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute)
+    ));
+    for (document, line) in [(translated, 7), ("docs/intro.md", 5)] {
+        assert!(
+            matches!(
+                answer(&rows, document, line),
+                Resolution::Missing(Missing::PathNotFound { .. })
+            ),
+            "{document}:{line}: {:?}",
+            answer(&rows, document, line)
+        );
+    }
+}

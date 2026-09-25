@@ -143,7 +143,14 @@ tree holding one such file and no other. `@site/blog/img/output.png` is
 `blog/img/output.png` under that directory, for a link and for an image. A bare `.md` or
 `.mdx` destination, one starting with neither `./`, `../` nor `/`, is tried beside the
 document first, then under the plugin content path the document sits in, then under the
-site directory. `[static folder](static-assets.mdx)` in `docs/api/themes/configuration.mdx`
+site directory. On a translated page under `i18n/<locale>/docusaurus-plugin-content-docs/`
+that content path is the locale's copy and then the plugin's own, which is how a page the
+locale has not translated is still reached. A `.md` or `.mdx` destination opening with `/`
+is tried under the same content paths and the site directory, never beside the document,
+rather than read as a URL, and an image opening with `/` reaches the file the `static`
+directory beside the configuration holds. Both hold for a page under one of the default content
+paths, since a plugin path or static directory a configuration adds is not read here; anywhere
+else they stay site routes. `[static folder](static-assets.mdx)` in `docs/api/themes/configuration.mdx`
 reaches `docs/static-assets.mdx` that way. The content paths read are the plugin defaults,
 `docs`, `blog`, `src/pages` and `versioned_docs/<version>`, under the site directory and,
 for a document outside it, under the directory holding the site, which is where a site in

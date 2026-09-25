@@ -855,6 +855,44 @@ pub(crate) fn content_root(site: &[u8], document: &[u8]) -> Option<Vec<u8>> {
     plugin_path(site, document).or_else(|| plugin_path(directory(site), document))
 }
 
+/// The content paths a translated page is read under: its locale's copy of a
+/// plugin's content path, then that plugin's own content path, which
+/// Docusaurus falls back to for a page the locale has not translated.
+pub(crate) fn translated_content(site: &[u8], document: &[u8]) -> Vec<Vec<u8>> {
+    let Some(relative) = (if site.is_empty() {
+        Some(document)
+    } else {
+        document
+            .strip_prefix(site)
+            .and_then(|rest| rest.strip_prefix(b"/"))
+    }) else {
+        return Vec::new();
+    };
+    let segments: Vec<&[u8]> = relative.split(|byte| *byte == b'/').collect();
+    let (Some(&b"i18n"), Some(locale), Some(plugin), Some(next)) = (
+        segments.first(),
+        segments.get(1),
+        segments.get(2),
+        segments.get(3),
+    ) else {
+        return Vec::new();
+    };
+    let localized = join(site, &[b"i18n".as_slice(), locale, plugin].join(&b'/'));
+    let (localized, default) = match (*plugin, *next) {
+        (b"docusaurus-plugin-content-docs", b"current") => {
+            (join(&localized, b"current"), b"docs".to_vec())
+        }
+        (b"docusaurus-plugin-content-docs", version) if version.starts_with(b"version-") => (
+            join(&localized, version),
+            [b"versioned_docs/".as_slice(), version].concat(),
+        ),
+        (b"docusaurus-plugin-content-blog", _) => (localized, b"blog".to_vec()),
+        (b"docusaurus-plugin-content-pages", _) => (localized, b"src/pages".to_vec()),
+        _ => return Vec::new(),
+    };
+    vec![localized, join(site, &default)]
+}
+
 fn plugin_path(site: &[u8], document: &[u8]) -> Option<Vec<u8>> {
     let relative = document.strip_prefix(site)?;
     let relative = if site.is_empty() {

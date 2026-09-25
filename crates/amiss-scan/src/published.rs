@@ -31,6 +31,7 @@ use crate::route::normalized_path_under;
 use crate::route::output_extension;
 use crate::route::page_route;
 use crate::route::rooted_docname;
+use crate::route::translated_content;
 use crate::route::under_base;
 use crate::route::within;
 use amiss_wire::controls::GitMode;
@@ -416,9 +417,15 @@ fn antora_module<'a>(
 /// A Docusaurus destination under its site directory: the `@site/` alias
 /// names a path from that directory, and a bare Markdown path is tried beside
 /// the document, then under the plugin content path the document sits in,
-/// then under the site directory, which is the order `resolveMarkdownLink`
-/// tries them. A `./` or `../` path is beside the document alone, and a URL
-/// is not a local path whatever its last segment spells.
+/// its locale's copy first on a translated page, then under the site
+/// directory, which is the order `resolveMarkdownLinkPathname` tries them. A
+/// Markdown path opening with `/` is tried the same way except beside the
+/// document, and an image opening with `/` is read from the `static`
+/// directory where it sits there, as `transformImage` reads it; both hold
+/// only for a page of a content path the site reads by default, since a
+/// plugin path or static directory the configuration adds is not read here.
+/// A `./` or `../` path is beside the document alone, and a URL is not a local
+/// path whatever its last segment spells.
 fn docusaurus_anchors(
     snapshot: &SnapshotDiscovery,
     document: &RepoPath,
@@ -434,9 +441,25 @@ fn docusaurus_anchors(
     if let Some(relative) = path_part.strip_prefix(SITE_ALIAS) {
         return vec![(site, relative.to_owned())];
     }
-    let bare = !path_part.starts_with('/')
-        && !path_part.starts_with("./")
-        && !path_part.starts_with("../");
+    let raw = document.as_bytes();
+    let owned = content_root(&site, raw).is_some() || !translated_content(&site, raw).is_empty();
+    let rooted = path_part.strip_prefix('/').filter(|_| owned);
+    let relative = rooted.unwrap_or(path_part);
+    let asset = join(&join(&site, b"static"), relative.as_bytes());
+    let served = RepoPath::from_bytes(asset).is_some_and(|asset| {
+        matches!(
+            snapshot.locate(&asset),
+            Some(Located::Entry(
+                GitMode::RegularFile | GitMode::ExecutableFile,
+                _
+            ))
+        )
+    });
+    if is_image && served && rooted.is_some_and(|image| !image.starts_with('/')) {
+        return vec![(join(&site, b"static"), relative.to_owned())];
+    }
+    let bare =
+        !relative.starts_with('/') && !path_part.starts_with("./") && !path_part.starts_with("../");
     let markdown = path_part.rsplit('/').next().is_some_and(|last| {
         let last = last.to_ascii_lowercase();
         last.as_bytes().ends_with(b".md") || last.as_bytes().ends_with(b".mdx")
@@ -444,16 +467,16 @@ fn docusaurus_anchors(
     if is_image || !bare || !markdown {
         return Vec::new();
     }
-    let mut out = vec![(
-        directory(document.as_bytes()).to_vec(),
-        path_part.to_owned(),
-    )];
-    for root in content_root(&site, document.as_bytes())
+    let beside = rooted.is_none().then(|| directory(raw).to_vec());
+    let mut out: Vec<(Vec<u8>, String)> = Vec::new();
+    for root in beside
         .into_iter()
+        .chain(content_root(&site, raw))
+        .chain(translated_content(&site, raw))
         .chain([site])
     {
         if !out.iter().any(|(held, _)| *held == root) {
-            out.push((root, path_part.to_owned()));
+            out.push((root, relative.to_owned()));
         }
     }
     out
