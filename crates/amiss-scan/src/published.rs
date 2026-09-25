@@ -20,6 +20,7 @@ use crate::route::NEXTJS_APP;
 use crate::route::PAGE_SUFFIXES;
 use crate::route::ROUTERS;
 use crate::route::SITE_ALIAS;
+use crate::route::STARLIGHT_CONTENT;
 use crate::route::Spelling;
 use crate::route::UNROUTED_OPENING;
 use crate::route::ZOLA;
@@ -161,7 +162,10 @@ fn declared_site_anchor(
         .find_map(|(root, base)| served_page(snapshot, root, &base, is_image, route))
 }
 
-/// The page one base serves a route from, where the tree holds it.
+/// The page one base serves a route from, where the tree holds it: the page
+/// published at that route first, so a directory answers with its index. A
+/// Starlight site serves a page nowhere but its published route, so there
+/// a route no page claims is left to the build.
 fn served_page(
     snapshot: &SnapshotDiscovery,
     root: Vec<u8>,
@@ -170,7 +174,21 @@ fn served_page(
     route: &str,
 ) -> Option<(Vec<u8>, String)> {
     let page = under_base(base, route).map(|under| under.strip_suffix('/').unwrap_or(under))?;
-    (!page.is_empty() && tracked_page(snapshot, &root, is_image, page))
+    let served = if page.is_empty() {
+        root.clone()
+    } else {
+        join(&root, page.as_bytes())
+    };
+    if let Some(published) =
+        RepoPath::from_bytes(served).and_then(|served| snapshot.published_routes.get(&served))
+    {
+        return published.as_str().map(|path| (Vec::new(), path.to_owned()));
+    }
+    let starlight = snapshot
+        .starlight_roots
+        .iter()
+        .any(|project| join(project, STARLIGHT_CONTENT.as_bytes()) == root);
+    (!starlight && !page.is_empty() && tracked_page(snapshot, &root, is_image, page))
         .then(|| (root, page.to_owned()))
 }
 

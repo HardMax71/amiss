@@ -32,6 +32,7 @@ use crate::route::normalized_native_path;
 use crate::route::normalized_path_under;
 use crate::route::page_route;
 use crate::route::sole_claims;
+use crate::route::within;
 use crate::scan::{replay_scan_charges, scan_bytes};
 use crate::scanned::Scanned;
 use crate::scanned::ScannedOccurrence;
@@ -364,9 +365,14 @@ fn record_declaration(
             .windows(STARLIGHT.len())
             .any(|window| window == STARLIGHT)
         {
-            declared
-                .starlight_roots
-                .insert(directory(path.as_bytes()).to_vec());
+            let project = directory(path.as_bytes()).to_vec();
+            if let Some(base) = crate::route::astro_base(body) {
+                let root = join(&project, crate::route::STARLIGHT_CONTENT.as_bytes());
+                declared
+                    .published_roots
+                    .insert(project.clone(), vec![(root, base)]);
+            }
+            declared.starlight_roots.insert(project);
         }
     } else if binds_book(&path) {
         let root = directory(path.as_bytes());
@@ -1379,7 +1385,7 @@ pub(crate) fn published_routes(
     let redirects = published_by(snapshot, &DIRECTORY_PAGES);
     let mut published: Vec<(RepoPath, RepoPath)> = Vec::new();
     let mut moved: Vec<(RepoPath, RepoPath)> = Vec::new();
-    if !names && !redirects {
+    if !names && !redirects && snapshot.starlight_roots.is_empty() {
         return (sole_claims(published), sole_claims(moved));
     }
     for record in &snapshot.documents {
@@ -1389,10 +1395,7 @@ pub(crate) fn published_routes(
         if !matches!(record.adapter, Some(Adapter::Markdown | Adapter::Mdx)) {
             continue;
         }
-        if names
-            && let Some(route) =
-                published_route(snapshot, &record.path, scanned.declared_name.as_deref())
-        {
+        if let Some(route) = published_route(snapshot, &record.path, scanned, names) {
             published.push((route, record.path.clone()));
         }
         if redirects {
@@ -1430,16 +1433,45 @@ fn moved_from(
         .collect()
 }
 
-/// Where one document is published: the name it declares in place of its own
-/// file name, that name under the content root it sits in when it opens with
-/// a slash, and the route its own path spells when it declares nothing.
+/// Where one document is published. A Starlight page is served at the
+/// `slug` it declares under its content root, and a Docusaurus page at the
+/// name it declares in place of its own file name, which is `slug` before
+/// `id`, or at that name under its content root when it opens with a slash.
+/// Either is served at the route its own path spells when it declares
+/// nothing. Starlight's loader reads no file whose name opens with `_`.
 fn published_route(
     snapshot: &SnapshotDiscovery,
     document: &RepoPath,
-    declared: Option<&str>,
+    scanned: &Scanned,
+    docusaurus: bool,
 ) -> Option<RepoPath> {
     let raw = document.as_bytes();
-    let Some(name) = declared else {
+    if let Some(root) = snapshot
+        .starlight_roots
+        .iter()
+        .map(|project| join(project, crate::route::STARLIGHT_CONTENT.as_bytes()))
+        .find(|root| within(raw, root))
+    {
+        let partial = raw
+            .rsplit(|byte| *byte == b'/')
+            .next()
+            .is_some_and(|name| name.starts_with(b"_"));
+        return match scanned.declared_slug.as_deref() {
+            _ if partial => None,
+            Some(slug) => {
+                RepoPath::from_bytes(join(&root, slug.trim_start_matches('/').as_bytes()))
+            }
+            None => RepoPath::from_bytes(page_route(raw, false)),
+        };
+    }
+    if !docusaurus {
+        return None;
+    }
+    let Some(name) = scanned
+        .declared_slug
+        .as_ref()
+        .or(scanned.declared_id.as_ref())
+    else {
         return RepoPath::from_bytes(page_route(raw, false));
     };
     let Some(absolute) = name.strip_prefix('/') else {

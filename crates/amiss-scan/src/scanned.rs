@@ -68,7 +68,8 @@ pub struct Scanned {
     pub opaque: Opaque,
     pub governed: Vec<GovernedSource>,
     pub declared_anchors: Vec<String>,
-    pub declared_name: Option<String>,
+    pub declared_slug: Option<String>,
+    pub declared_id: Option<String>,
     pub declared_redirects: Vec<String>,
     /// Where an `AsciiDoc` document's image macros resolve from.
     pub images_dir: amiss_adoc::ImagesDir,
