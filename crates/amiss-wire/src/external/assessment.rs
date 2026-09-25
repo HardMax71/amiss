@@ -22,10 +22,20 @@ pub enum AssessDefect {
     Plan(#[from] Error),
     #[error("external evidence is invalid: {0}")]
     Evidence(#[from] EvidenceDefect),
+    #[error("the evidence binds plan {bound}, not this plan {plan}")]
+    ForeignPlan { bound: Digest, plan: Digest },
+    #[error("evidence row {row} names {destination}, which the plan did not introduce")]
+    UnplannedDestination { row: usize, destination: String },
+    #[error("evidence row {row} repeats {destination}, which an earlier row already answered")]
+    RepeatedDestination { row: usize, destination: String },
     #[error(
-        "the evidence binds another plan, repeats a destination, names one the plan did not introduce, or resolves a tail the plan's shape does not carry"
+        "evidence row {row} answers {destination} through a forge API, but the plan introduced it as a plain URL"
     )]
-    UnboundEvidence,
+    NotAForgeDestination { row: usize, destination: String },
+    #[error(
+        "evidence row {row} resolves a tail of {destination}, but the plan's shape for it carries none"
+    )]
+    UnplannedTail { row: usize, destination: String },
     #[error(transparent)]
     Assessment(#[from] AssessmentDefect),
 }
@@ -161,7 +171,7 @@ pub enum ExternalReason {
 pub enum AssessmentDefect {
     #[error(transparent)]
     Wire(Error),
-    #[error("external assessment violates its contract: {0}")]
+    #[error("external assessment violates its contract: {0:?}")]
     Contract(wary::Report),
 }
 
@@ -205,7 +215,10 @@ pub fn assess(
     let evidence_digest = transcoded_digest(EVIDENCE_SCHEMA, evidence_bytes)
         .ok_or_else(|| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
     if evidence.plan_payload_digest != plan.payload_digest {
-        return Err(AssessDefect::UnboundEvidence);
+        return Err(AssessDefect::ForeignPlan {
+            bound: evidence.plan_payload_digest,
+            plan: plan.payload_digest,
+        });
     }
     let observed = bound_rows(&plan, &evidence)?;
     let verdicts = verdict_rows(&plan, &observed);
@@ -237,25 +250,37 @@ fn bound_rows<'e>(
         .map(|row| (row.destination.as_str(), row))
         .collect();
     let mut observed = BTreeMap::new();
-    for row in &evidence.rows {
+    for (index, row) in evidence.rows.iter().enumerate() {
         let destination = match row {
             ExternalEvidenceRow::HttpProbe { destination, .. }
             | ExternalEvidenceRow::ForgeApi { destination, .. } => destination.as_str(),
         };
-        let planned = introduced
-            .get(destination)
-            .ok_or(AssessDefect::UnboundEvidence)?;
+        let (row_number, named) = (index.saturating_add(1), destination.to_owned());
+        let Some(planned) = introduced.get(destination) else {
+            return Err(AssessDefect::UnplannedDestination {
+                row: row_number,
+                destination: named,
+            });
+        };
         if let ExternalEvidenceRow::ForgeApi { tail, .. } = row {
-            let repository = planned
-                .repository
-                .as_ref()
-                .ok_or(AssessDefect::UnboundEvidence)?;
+            let Some(repository) = planned.repository.as_ref() else {
+                return Err(AssessDefect::NotAForgeDestination {
+                    row: row_number,
+                    destination: named,
+                });
+            };
             if tail.is_some() && repository.tail.is_none() {
-                return Err(AssessDefect::UnboundEvidence);
+                return Err(AssessDefect::UnplannedTail {
+                    row: row_number,
+                    destination: named,
+                });
             }
         }
         if observed.insert(destination, row).is_some() {
-            return Err(AssessDefect::UnboundEvidence);
+            return Err(AssessDefect::RepeatedDestination {
+                row: row_number,
+                destination: named,
+            });
         }
     }
     Ok(observed)
