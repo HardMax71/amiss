@@ -341,7 +341,14 @@ identity it names belongs to whichever page renders the file, and one partial ma
 into several. [What a documentation router serves](route-spellings.md) holds the names a content
 path excludes and what stays a path there. So does a
 MkDocs snippet line, `--8<-- "path"`, under a tree that declares MkDocs, resolved from the
-directory holding that declaration rather than from beside the document. A generator
+directory holding that declaration rather than from beside the document. Each include line is
+also a reference of its own, since both generators expand it before Markdown reads the page,
+in a fence as much as in prose: the snippet line under that declaration, and an mdBook
+`{{#include}}`, `{{#rustdoc_include}}` or `{{#playground}}` in a page of the book's source
+directory, read beside the page. So a deleted or renamed listing is a missing target, and one
+that changes under unchanged prose is a check. A selector after the path, a line range or an
+anchor name, stays in the written target and is not evaluated, so the whole file is what the
+reference depends on, and a backslash before an mdBook command leaves it text. A generator
 instruction under the same declaration, `::: pydantic.config`, is an edge this engine reads
 and cannot follow, because what it pulls in is built by a program rather than held by the
 tree, so the page keeps the identities it writes itself and absence in it stays undecided.

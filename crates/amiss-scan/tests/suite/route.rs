@@ -338,6 +338,67 @@ fn an_antora_component_anchors_resource_ids_at_the_family_directory() {
     assert_eq!(outcomes(&chain), want);
 }
 
+/// An mdBook include is a reference beside the page inside the book's source
+/// directory and plain text outside it, and an mkdocs snippet is read from the
+/// directory holding `mkdocs.yml` and is plain text where nothing declares
+/// mkdocs.
+#[test]
+fn preprocessor_includes_are_read_where_their_generator_expands_them() {
+    use amiss_fixtures::Staged;
+    let chain = amiss_fixtures::staged_repository(&[
+        ("book/book.toml", Staged::File(b"[book]\ntitle = \"t\"\n")),
+        ("book/src/listing.rs", Staged::File(b"fn main() {}\n")),
+        (
+            "book/src/ch1.md",
+            Staged::File(
+                b"# One\n\n```rust\n{{#include listing.rs}}\n```\n\n{{#include gone.rs:2}}\n",
+            ),
+        ),
+        (
+            "book/README.md",
+            Staged::File(b"# Book\n\n{{#include nowhere.rs}}\n"),
+        ),
+        ("site/mkdocs.yml", Staged::File(b"site_name: s\n")),
+        ("site/includes/abbr.md", Staged::File(b"*[HTML]: markup\n")),
+        (
+            "site/docs/page.md",
+            Staged::File(b"# Page\n\n--8<-- \"includes/abbr.md\"\n\n--8<-- \"includes/gone.md\"\n"),
+        ),
+        (
+            "plain/page.md",
+            Staged::File(b"# Plain\n\n--8<-- \"includes/abbr.md\"\n"),
+        ),
+    ])
+    .expect("the fixture stages");
+    let want = expected(vec![
+        row(
+            "book/src/ch1.md",
+            Some("book/src/listing.rs"),
+            ResolutionTag::Resolved,
+            Some("book/src/listing.rs"),
+        ),
+        row(
+            "book/src/ch1.md",
+            Some("book/src/gone.rs"),
+            ResolutionTag::Missing,
+            Some("book/src/gone.rs"),
+        ),
+        row(
+            "site/docs/page.md",
+            Some("site/includes/abbr.md"),
+            ResolutionTag::Resolved,
+            Some("site/includes/abbr.md"),
+        ),
+        row(
+            "site/docs/page.md",
+            Some("site/includes/gone.md"),
+            ResolutionTag::Missing,
+            Some("site/includes/gone.md"),
+        ),
+    ]);
+    assert_eq!(outcomes(&chain), want);
+}
+
 /// A component is assembled from every source root whose `antora.yml` spells
 /// its name, so a module coordinate is answered by whichever of them holds
 /// the resource while the finding still names the root the author wrote

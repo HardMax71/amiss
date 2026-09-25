@@ -66,6 +66,10 @@ pub enum SourceConstruct {
     RstTocTreeEntry,
     #[strum(serialize = "markdown-link-reference-definition")]
     LinkReferenceDefinition,
+    #[strum(serialize = "markdown-mdbook-include")]
+    MdbookInclude,
+    #[strum(serialize = "markdown-mkdocs-snippet")]
+    MkdocsSnippet,
     #[strum(serialize = "html-anchor")]
     HtmlAnchor,
     #[strum(serialize = "html-image")]

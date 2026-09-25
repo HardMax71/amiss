@@ -13,6 +13,7 @@ use crate::policy::Includes;
 use crate::resources::{ScanIdentity, ScanMemo, ScanResources, crossing};
 use crate::route::DIRECTORY_PAGES;
 use crate::route::DOCUSAURUS;
+use crate::route::MDBOOK_PAGES;
 use crate::route::ROUTER_DECLARATION;
 use crate::route::ROUTERS;
 use crate::route::RouteRule;
@@ -96,13 +97,46 @@ fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> 
         .iter()
         .map(|record| section_labels(discovery, record))
         .collect();
+    let expanded: Vec<(bool, bool)> = discovery
+        .documents
+        .iter()
+        .map(|record| {
+            let raw = record.path.as_bytes();
+            let book = site_root(discovery, raw, &MDBOOK_PAGES)
+                .and_then(|root| discovery.book_sources.get(&root))
+                .is_some_and(|source| {
+                    raw.strip_prefix(source.as_slice())
+                        .is_some_and(|rest| rest.starts_with(b"/"))
+                });
+            (
+                book,
+                snippet_root(discovery, Adapter::Markdown, &record.path).is_some(),
+            )
+        })
+        .collect();
     let SnapshotDiscovery {
         documents, labels, ..
     } = discovery;
-    for ((record, governed), sections) in documents.iter_mut().zip(governed).zip(sections) {
+    for (((record, governed), sections), (book, snippets)) in documents
+        .iter_mut()
+        .zip(governed)
+        .zip(sections)
+        .zip(expanded)
+    {
         let DocumentStatus::Scanned(scanned) = &mut record.status else {
             continue;
         };
+        // An include line is plain text outside the generator that expands it.
+        let unexpanded = |entry: &ScannedOccurrence| {
+            let construct = entry.occurrence.construct;
+            (construct == SourceConstruct::MdbookInclude && !book)
+                || (construct == SourceConstruct::MkdocsSnippet && !snippets)
+        };
+        if scanned.occurrences.iter().any(unexpanded) {
+            Arc::make_mut(scanned)
+                .occurrences
+                .retain(|entry| !unexpanded(entry));
+        }
         let reads_roles = match scanned.adapter {
             Adapter::Rst => true,
             Adapter::Markdown => governed,
@@ -277,8 +311,7 @@ fn publishes(path: &RepoPath) -> bool {
 }
 
 fn binds_book(path: &RepoPath) -> bool {
-    crate::route::declares(&crate::route::MDBOOK_PAGES, path)
-        && !excluded_by_built_in(path.as_bytes())
+    crate::route::declares(&MDBOOK_PAGES, path) && !excluded_by_built_in(path.as_bytes())
 }
 
 /// What one descriptor's own bytes say, under the reading its name selects.
