@@ -58,10 +58,12 @@ suppression comments, no severity downgrades, no hooks. The absence is the point
 The predecessor investigation compared the design with several neighboring approaches and
 recorded where each one wins.
 
-Swimm wins wherever docs are authored inside its platform: its auto-sync can repair a renamed
-token without a human. Amiss never edits prose because a structural observation does not
-authorize a semantic rewrite. Swimm sees documents authored for its platform; Amiss reads
-supported document classes already present in the repository.
+Swimm won wherever docs were authored inside its platform: its auto-sync could repair a
+renamed token without a human. It has since moved to code modernization, and its site no longer
+offers documentation sync, but the comparison still holds for any tool of that shape. Amiss
+never edits prose because a structural observation does not authorize a semantic rewrite. A
+platform like that sees documents authored for it; Amiss reads supported document classes
+already present in the repository.
 
 Fiberplane's drift is the closest mechanism, and for a small set of hand-placed anchors it
 can be the right amount of tool: an authored `@path#Symbol` precisely states what should be

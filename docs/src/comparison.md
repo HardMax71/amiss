@@ -49,7 +49,16 @@ are where Amiss lives:
 
 The smaller checkers sit on the same side of the line as lychee with less reach:
 markdown-link-check and linkinator examine files one state at a time from JavaScript,
-and mdbook-linkcheck is scoped to mdBook books. None of them compares snapshots.
+and mdbook-linkcheck is scoped to mdBook books and was last released in 2022. None of them
+compares snapshots. markdownlint's MD052 reports a full or collapsed reference link whose
+label nothing defines, which renders as bracketed text rather than a link.
+
+Documentation generators check their own links while they build: Docusaurus through
+`onBrokenLinks` and `onBrokenMarkdownLinks`, MkDocs through its `validation` settings, Sphinx
+under `-n -W`. Each sees only its own pages, reports built routes rather than source lines,
+and runs only when the site is built, so none of them says which change broke a link. They
+catch what this engine declines, slash-rooted routes and generated pages above all, which is
+why a site wants both.
 
 For a repository with a published site the honest answer is both tools: lychee for the
 web, Amiss for the tree. For a repository whose documentation points mostly at itself,
