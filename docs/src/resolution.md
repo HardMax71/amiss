@@ -182,7 +182,10 @@ A tree whose site is built somewhere else keeps no such configuration, so it nam
 router in `.amiss/router.yml` instead. That turns on the spellings that reach files the tree
 already holds, and no others. The same file says where the directory is published, and a
 slash-rooted route opening with that base is read as a path under it. A route reaching no file
-keeps the boundary it had, so the base can resolve a destination and cannot claim one.
+keeps the boundary it had, so the base can resolve a destination and cannot claim one. The one
+exception runs the other way: when the base side served a route from a page the candidate no
+longer holds, the candidate reads that route under the base's anchoring, so deleting the page is
+the missing target it is rather than a reference that seems to have left.
 
 [What a documentation router serves](route-spellings.md) holds the spellings, the routers
 they were harvested from, the generator rules and what selects each, and what the union costs.
