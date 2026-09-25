@@ -206,6 +206,30 @@ impl<'a> Resolver<'a> {
                 semantic,
             );
         }
+        if matches!(
+            occurrence.occurrence.construct,
+            SourceConstruct::MarkdownUndefinedReference
+                | SourceConstruct::MarkdownUndefinedImageReference
+        ) {
+            let intent = Intent {
+                kind: IntentKind::Label,
+                commit_oid: None,
+                repository_path: None,
+                target_kind: None,
+                external_scheme: None,
+                query: None,
+                fragment: Some(occurrence.occurrence.semantic_destination.clone()),
+            };
+            // mkdocs-autorefs answers a label from the site's own inventory, which no page holds.
+            let autorefs =
+                crate::discovery::snippet_root(self.snapshot, adapter, document_path).is_some();
+            let resolution = if autorefs {
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
+            } else {
+                Resolution::Missing(Missing::LabelNotDeclared)
+            };
+            return Ok((intent, resolution, None));
+        }
         let is_image = occurrence.occurrence.construct.is_image();
         let (intent, mut resolution) = resolve_destination(
             self,

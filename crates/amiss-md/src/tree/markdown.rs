@@ -1,9 +1,12 @@
+use std::collections::HashSet;
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
 use amiss_wire::extraction::{Fault, HeadingSource};
 use linkify::{LinkFinder, LinkKind};
 use pulldown_cmark::{Event, LinkType, Options, Parser, RefDefs, Tag, TagEnd};
+
+mod labels;
 
 use super::{Definition, Kind, Node, Reference, ReferenceForm};
 
@@ -41,6 +44,9 @@ pub(crate) fn from_markdown(suffix: &str, options: Options) -> Result<Node, Faul
     let definitions = definitions(suffix, options, &winners)?;
     let mut builder = Builder {
         suffix,
+        // A template can write the definitions Markdown then reads, so a templated page proves none absent.
+        defined: (!suffix.contains("{{") && !suffix.contains("{%"))
+            .then(|| winners.iter().map(|(label, _)| folded(label)).collect()),
         definitions: definitions.into_iter().peekable(),
         frames: vec![Frame {
             node: Node::leaf(Kind::Root, (0, suffix.len())),
@@ -244,6 +250,7 @@ struct Frame {
 
 struct Builder<'a> {
     suffix: &'a str,
+    defined: Option<HashSet<String>>,
     definitions: Peekable<IntoIter<Node>>,
     frames: Vec<Frame>,
     run: Vec<Piece>,
@@ -345,17 +352,30 @@ impl Builder<'_> {
             return Ok(());
         };
         let span = (first.span.0, last.span.1);
-        let literals = if self.sealed == 0 {
+        let mut found: Vec<(usize, usize, Kind)> = if self.sealed == 0 {
             literals(self.suffix, span, &pieces)
+                .into_iter()
+                .map(|(start, end, url)| (start, end, Kind::Link { url }))
+                .collect()
         } else {
             Vec::new()
         };
+        if let Some(defined) = self.defined.as_ref().filter(|_| self.sealed == 0) {
+            for (start, end, label, image) in
+                labels::undefined_references(self.suffix, span, &pieces, defined)
+            {
+                if !found.iter().any(|(from, to, _)| *from < end && start < *to) {
+                    found.push((start, end, Kind::UndefinedReference { label, image }));
+                }
+            }
+            found.sort_by_key(|(start, _, _)| *start);
+        }
         let top = self.top()?;
         let mut cursor = span.0;
-        for (start, end, url) in literals {
+        for (start, end, kind) in found {
             top.node.children.extend(text(&pieces, cursor, start));
             top.node.children.push(Node {
-                kind: Kind::Link { url },
+                kind,
                 span: (start, end),
                 children: text(&pieces, start, end).into_iter().collect(),
             });
@@ -693,6 +713,16 @@ fn without_entity_trailer(suffix: &str, start: usize, end: usize) -> usize {
 
 /// The byte before a match is an escape backslash exactly when no piece covers
 /// it; the escape consumed the character a literal would have started on.
+/// A label the way `CommonMark` matches one: case folded and every run of
+/// whitespace one space.
+fn folded(label: &str) -> String {
+    label
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
 fn escaped(suffix: &str, pieces: &[Piece], start: usize) -> bool {
     let Some(before) = start.checked_sub(1) else {
         return false;

@@ -273,6 +273,7 @@ fn text_content(node: &Node) -> String {
             | Kind::Link { .. }
             | Kind::LinkReference(_)
             | Kind::Footnote { .. }
+            | Kind::UndefinedReference { .. }
             | Kind::Other => stack.extend(current.children.iter().rev()),
         }
     }

@@ -2952,6 +2952,8 @@
         "markdown-liquid-link",
         "markdown-liquid-url",
         "markdown-hugo-ref",
+        "markdown-undefined-reference",
+        "markdown-undefined-image-reference",
         "html-anchor",
         "html-image"
       ]
@@ -2992,6 +2994,8 @@
         "markdown-liquid-link",
         "markdown-liquid-url",
         "markdown-hugo-ref",
+        "markdown-undefined-reference",
+        "markdown-undefined-image-reference",
         "html-anchor",
         "html-image"
       ]
