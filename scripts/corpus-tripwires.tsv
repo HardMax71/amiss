@@ -1,5 +1,5 @@
 repository	status	scanned	unsupported	resolved	declined	missing
-asciidoctor	pass	148	1	274	28	6
+asciidoctor	pass	148	1	251	94	5
 astro-docs	pass	2618	2	3471	10327	0
 awesome-go	pass	7	2	270	0	0
 awesome	pass	7	0	38	0	0
@@ -11,7 +11,7 @@ click	pass	53	0	45	957	0
 cncf-glossary	pass	963	0	2239	419	4
 comprehensive-rust	pass	584	0	700	0	7
 containerd.io	pass	9	0	7	3	1
-content	pass	14649	0	4600	54863	8
+content	pass	14649	0	1951	54863	2659
 django	pass	686	0	2347	10	31
 docsify	pass	29	0	105	5	10
 docusaurus	pass	1545	0	5914	852	33
@@ -31,7 +31,7 @@ k8s-community	pass	963	4	2094	957	254
 mdbook	pass	50	0	111	0	0
 minimal-mistakes	pass	125	0	91	21	11
 mkdocs	pass	21	0	331	0	1
-mkdocs-material	pass	103	0	1042	5	3
+mkdocs-material	pass	103	0	1039	5	4
 myst-parser	pass	32	0	196	29	3
 nextra	pass	243	2	20	224	5
 numpy	pass	627	0	722	7	16
@@ -47,7 +47,7 @@ rust-book	pass	478	0	831	0	32
 rust-by-example	pass	204	0	407	0	0
 scrapy	pass	90	0	1006	6	42
 sphinx	pass	170	0	351	13	28
-spring-boot	pass	229	0	3070	3	1
+spring-boot	pass	229	0	2897	0	1
 starlight	pass	380	1	656	1491	1
 superset	pass	1211	5	839	877	62
 swr	pass	23	0	0	0	0
