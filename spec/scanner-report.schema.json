@@ -2954,6 +2954,7 @@
         "markdown-hugo-ref",
         "markdown-undefined-reference",
         "markdown-undefined-image-reference",
+        "markdown-agent-import",
         "html-anchor",
         "html-image"
       ]
@@ -2996,6 +2997,7 @@
         "markdown-hugo-ref",
         "markdown-undefined-reference",
         "markdown-undefined-image-reference",
+        "markdown-agent-import",
         "html-anchor",
         "html-image"
       ]

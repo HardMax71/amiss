@@ -18,7 +18,12 @@ linked worktree too, reading that worktree's own index, so agents running in wor
 isolation keep the same gate. If the repository keeps an
 `AGENTS.md`, paste this section into it. A repository that keeps a `CLAUDE.md` instead
 takes the same block there, or bridges the two the way this repository does, with a
-`CLAUDE.md` whose whole body is `@AGENTS.md`:
+`CLAUDE.md` whose whole body is `@AGENTS.md`. That line is an import, and the check reads it
+as a reference: a `@path` line alone in a `CLAUDE.md`, `CLAUDE.local.md` or `GEMINI.md` names
+the file beside it that Claude Code or Gemini CLI loads, so renaming `AGENTS.md` breaks it
+visibly instead of leaving the agent without its instructions. Rule files in `.cursor/rules`
+are read once a policy include binds them, `{"kind": "tree", "path": ".cursor/rules",
+"suffix": ".mdc", "adapter": "markdown"}`. The block to paste:
 
 ```markdown
 ## Documentation checks

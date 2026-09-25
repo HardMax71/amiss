@@ -290,6 +290,7 @@ impl Sweep<'_> {
                 self.declared.extend(heading::glossary_terms(node));
                 directive_declarations(self, span, path, *owners);
                 self.headings.extend(heading::definition_terms(node));
+                self.agent_imports(span, path, *owners);
             }
             Kind::Link { url } => {
                 let children_end = node.children.last().map(|child| child.span.1);
@@ -309,23 +310,13 @@ impl Sweep<'_> {
                     *owners,
                 );
             }
-            Kind::LinkReference(reference) => {
-                self.reference(
-                    reference_link(reference.form),
-                    reference.key,
-                    span,
-                    path,
-                    *owners,
-                )?;
-            }
-            Kind::ImageReference(reference) => {
-                self.reference(
-                    reference_image(reference.form),
-                    reference.key,
-                    span,
-                    path,
-                    *owners,
-                )?;
+            Kind::LinkReference(reference) | Kind::ImageReference(reference) => {
+                let construct = if matches!(node.kind, Kind::ImageReference(_)) {
+                    reference_image(reference.form)
+                } else {
+                    reference_link(reference.form)
+                };
+                self.reference(construct, reference.key, span, path, *owners)?;
             }
             Kind::UndefinedReference { label, image } => {
                 self.undefined(label, *image, span, path, *owners);
@@ -470,6 +461,18 @@ impl Sweep<'_> {
             path,
             owners,
         );
+    }
+
+    /// The agent imports a paragraph writes, each at its own ordinal.
+    fn agent_imports(&mut self, span: (usize, usize), path: &[usize], owners: Owners) {
+        let construct = SourceConstruct::MarkdownAgentImport;
+        for (within, (at, target)) in source::agent_imports(self.suffix, span)
+            .into_iter()
+            .enumerate()
+        {
+            let import_path = [path, &[within]].concat();
+            self.push(construct, target.clone(), target, at, &import_path, owners);
+        }
     }
 
     fn orphan(&mut self, node: &Node, path: &[usize], owners: Owners) {

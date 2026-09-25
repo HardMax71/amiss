@@ -75,6 +75,10 @@ pub struct DocumentRecord {
     pub raw_digest: Option<amiss_wire::model::Digest>,
 }
 
+/// The agent instruction files whose `@path` lines import another file:
+/// Claude Code's two and Gemini CLI's.
+const AGENT_IMPORTERS: [&[u8]; 3] = [b"CLAUDE.md", b"CLAUDE.local.md", b"GEMINI.md"];
+
 /// What a Sphinx declaration decides once the walk is over: which documents
 /// read a cross-reference role, and whose declared names join the label table
 /// a role is answered from. Neither question can be asked during the walk,
@@ -136,11 +140,14 @@ fn settle_roles(scan: &mut ScanResources, discovery: &mut SnapshotDiscovery) -> 
         let DocumentStatus::Scanned(scanned) = &mut record.status else {
             continue;
         };
-        // An include line is plain text outside the generator that expands it.
+        let file = record.path.as_bytes().rsplit(|byte| *byte == b'/').next();
+        let agent = file.is_some_and(|name| AGENT_IMPORTERS.contains(&name));
+        // An include or import line is plain text outside what expands it.
         let unexpanded = |entry: &ScannedOccurrence| {
             let construct = entry.occurrence.construct;
             (construct == SourceConstruct::MdbookInclude && !book)
                 || (construct == SourceConstruct::MkdocsSnippet && !snippets)
+                || (construct == SourceConstruct::MarkdownAgentImport && !agent)
         };
         if scanned.occurrences.iter().any(unexpanded) {
             Arc::make_mut(scanned)

@@ -2,7 +2,9 @@
 
 Parsing turns each document into a list of occurrences: inline links and images, reference
 style links, autolinks, and any reference definition no reference in the document consumes,
-since an orphaned `[api]: ./guide.md` still maintains a destination someone will trust.
+since an orphaned `[api]: ./guide.md` still maintains a destination someone will trust. In an
+agent instruction file, `CLAUDE.md`, `CLAUDE.local.md` or `GEMINI.md`, a line holding only
+`@path` to a named file is an import the agent loads, and it is read as a reference too.
 Each occurrence keeps two spellings of its destination. The raw one is the exact bytes from
 the source. The semantic one is what those bytes mean after the format's own decoding. So `[a](&amp;b)` records both `&amp;b` and `&b`, and a change to
 either the spelling or the meaning is visible later.
