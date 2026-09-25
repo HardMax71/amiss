@@ -7,6 +7,122 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.0](https://github.com/HardMax71/amiss/compare/v0.35.0...v0.36.0) - 2026-09-25
+
+### Changes
+
+- warn when a declared translation falls behind its source
+- write a locale coverage plan from a report so no digest is sealed by hand
+- read a translation's lineage from the source commit its front matter names
+- check the part of a file an include selects
+- let a policy pin Markdown headings to the renderers that publish them
+- read a renamed default branch's old names from the policy
+- load the skill from the Agent Skills paths Codex and Copilot read
+- default the Action to enforce-introduced and gate the merge queue
+- annotate a displayed Check as a notice at its citing line
+- repair a link to a file the change moved whole
+- repair a reference-style link at its definition
+- let a locale context leave other locales out
+- let an exact policy binding read an advisory file
+- let amiss fix follow the profile it is given
+- say why a refs target with a fragment matches nothing
+- declare the SARIF column unit
+- give the Action summary a backlog window and escape control bytes
+- print a raw path byte as \xhh, apart from the character it matches
+- run every documented amiss command through the real grammar
+- author a claim for a line holding both quotes
+- name the repeated or unsorted member a canonical array refuses
+- refuse adoption debt that could never apply, and name the next step
+- lead each SARIF, Code Quality and JUnit row with its own words
+- name the evidence row an external assessment refuses
+- decline one oversized destination instead of its document
+- let the pre-commit hook pass before the first commit
+- declare the project's identity in the GitLab template
+- name the staged documents whose working copies moved on
+- repair a document checked out with CRLF line endings
+- name the policy member a strict read failed at
+- let the change that repairs an invalid base policy complete
+- list a failing row with unknown attribution as a fix
+- name the same-repository URLs a declared identity left unread
+- refuse a router declaration that declares nothing
+- name the label or fragment a missing target did not publish
+- print the rename hint wherever a missing path is shown
+- name the reason when a machine format refuses an invocation
+- spell an unresolved snapshot side unavailable, not its commit as its tree
+- decline links to the repository root instead of calling them invalid
+- resolve footnote anchors under six renderers' spellings
+- check a pull request's links as the branch it merges into
+- count an adopt row the debt file cannot hold instead of aborting
+- leave base-located rows out of SARIF and Code Quality
+- read the index Git names in GIT_INDEX_FILE for the staged check
+- refuse an object format the repository's config contradicts
+- read the index and pack states Git writes and name the ones it cannot
+- project a whole file or one TOML or JSON key, and check a block contains it
+- read Hugo routes in lowercase and reach a directory's page
+- read a Starlight site's routes from its Astro configuration
+- keep record_declaration's doc on its function
+- resolve Starlight's #_top on its pages
+- read zensical.toml as a MkDocs declaration
+- read an agent instruction file's @path imports
+- report a reference whose label nothing defines
+- pair locale pages across suffixes and keep dotted names
+- read Docusaurus fallback and slash-rooted links as Docusaurus does
+- let a Sphinx page's .html link reach its source
+- resolve #top on every page, as the HTML standard does
+- read an AsciiDoc title's attributes before naming the section
+- read MyST's file directives and download role under Sphinx
+- read an Antora partial's references from its page's module
+- read an included Sphinx file's paths from the page that includes it
+- find a docname under every suffix its Sphinx root reads
+- read Jekyll and Hugo template destinations
+- read Sphinx :term: roles against the glossary terms
+- read a Sphinx directive's slash path from the source root
+- read GitHub raw self-links as this repository
+- report deleting a hand-written page a build could have supplied
+- report deleting a page a site route reaches
+- read a shared Hugo configuration that leaves baseURL unset
+- say which ceiling ends a flood of broken-link findings
+- count every reference the run declined as unsupported
+- read an AsciiDoc image where its imagesdir puts it
+- count the member locations a finding row cannot point to
+- keep a same-page reference out of the stale-dependency check
+- let one oversized target or line range cost itself, not the run
+- check a literalinclude selection the way a line fragment is checked
+- read an AsciiDoc link or include without an extension as a file
+- read the reStructuredText forms that name a file or a label
+- track the file behind a fragment or query the run cannot answer
+- read mdBook includes and mkdocs snippets as references
+- let a broken claim's fix follow its words to the line they moved to
+- leave Zola's @/ links to Zola under a declared router
+- read a Next.js app page's links from the route it is served at
+- read the labels a Sphinx configuration's extensions declare
+- decline an anchor on a Zola page whose heading Zola transliterates
+- answer Antora version and component coordinates from the tree
+- decline a fragment an included AsciiDoc chapter does not hold
+- declare every AsciiDoc id form Asciidoctor publishes
+- publish MDN's heading and term identities under its own rule
+- accept either kind for GitHub and GitLab blob and tree URLs
+- answer Sphinx's own genindex, modindex and search labels
+- read Sphinx toctree entries and roles wrapped across lines
+- keep a policy lookup crossing's resource on its error row
+- judge an absolute URL as the URL a browser requests for it
+- declare a path beneath a symlink or submodule instead of calling it missing
+- look up a missing path's case neighbor instead of walking the tree
+- generate Asciidoctor section ids the way Asciidoctor does
+- keep a paired failure pre-existing through edits around it
+- walk the semantic intake ceilings from the limit itself
+- prove the output ceiling at its exact byte instead of past 256 MiB
+- read MkDocs admonition bodies as Markdown
+- end a Markdown line at a bare CR, as CommonMark does
+- read a Markdown document after its BOM
+- read an AsciiDoc URL written directly as a link
+- read an AsciiDoc line in one forward pass
+- read only the AsciiDoc text Asciidoctor renders as markup
+- read AsciiDoc two-line titles and includes inside verbatim blocks
+- read reStructuredText literal bodies as shown text, not references
+- follow instant meta refreshes and offer retargets only onto live pages
+- list each bootstrap wrapper scenario as its own test
+
 ## [0.35.0](https://github.com/HardMax71/amiss/compare/v0.34.0...v0.35.0) - 2026-09-24
 
 ### Changes
