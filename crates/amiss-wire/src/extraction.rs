@@ -48,6 +48,8 @@ pub enum SourceConstruct {
     AsciidocInlineImage,
     #[strum(serialize = "asciidoc-include")]
     AsciidocInclude,
+    #[strum(serialize = "asciidoc-url")]
+    AsciidocUrl,
     #[strum(serialize = "rst-inline-hyperlink")]
     RstInlineHyperlink,
     #[strum(serialize = "rst-named-target")]

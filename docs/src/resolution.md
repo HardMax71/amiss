@@ -26,7 +26,10 @@ injection is opaque in every dialect: AsciiDoc passthrough blocks and reStructur
 `raw` directives inject output the parser cannot read and count as opaque regions too.
 Markdown and MDX draw the line wider and treat every raw HTML region as opaque, comments
 included, while AsciiDoc and reStructuredText code blocks, literal blocks, and comments
-render as visible text or not at all and are never opaque.
+render as visible text or not at all and are never opaque. An AsciiDoc URL written directly
+is a link the way Asciidoctor reads it, with an attribute list, `https://host/page[text]`,
+bare, or between angle brackets, a bare one ending before the punctuation that closes its
+sentence, and a `mailto:` only with an attribute list.
 
 Each destination then passes through the generic
 [resolver](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve.rs);

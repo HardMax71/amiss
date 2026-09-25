@@ -98,7 +98,8 @@ fn occurrence(reference: &Reference, within: usize) -> Occurrence {
         | ReferenceKind::Link
         | ReferenceKind::BlockImage
         | ReferenceKind::InlineImage
-        | ReferenceKind::Include => reference.target.clone(),
+        | ReferenceKind::Include
+        | ReferenceKind::Url => reference.target.clone(),
     };
     Occurrence {
         construct: construct(reference.kind),
@@ -125,5 +126,6 @@ const fn construct(kind: ReferenceKind) -> SourceConstruct {
         ReferenceKind::BlockImage => SourceConstruct::AsciidocBlockImage,
         ReferenceKind::InlineImage => SourceConstruct::AsciidocInlineImage,
         ReferenceKind::Include => SourceConstruct::AsciidocInclude,
+        ReferenceKind::Url => SourceConstruct::AsciidocUrl,
     }
 }
