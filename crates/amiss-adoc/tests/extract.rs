@@ -49,19 +49,48 @@ fn a_span_selects_the_whole_macro_and_nothing_around_it() {
     );
 }
 
+/// Asciidoctor renders none of these as markup: verbatim blocks, a paragraph
+/// a verbatim, passthrough or comment style names, even across a blank line,
+/// a line comment, and each inline passthrough.
 #[test]
 fn code_is_never_a_reference() {
     for source in [
         "----\nxref:guide.adoc[Guide]\n----\n",
         "....\nlink:guide.adoc[Guide]\n....\n",
-        "A `xref:guide.adoc[Guide]` span.\n",
+        "[source,ruby]\nxref:guide.adoc[Guide]\n",
+        "[literal]\n\nlink:guide.adoc[Guide]\n",
+        "[pass]\nlink:guide.adoc[Guide]\n",
+        "[comment]\nlink:guide.adoc[Guide]\n",
+        "// link:guide.adoc[Guide]\n",
+        "A `+xref:guide.adoc[Guide]+` span.\n",
         "An +link:guide.adoc[Guide]+ passthrough.\n",
+        "An ++link:guide.adoc[Guide]++ passthrough.\n",
+        "A +++link:guide.adoc[Guide]+++ passthrough.\n",
+        "A $$link:guide.adoc[Guide]$$ passthrough.\n",
+        "A pass:[link:guide.adoc[Guide]] passthrough.\n",
         "An escaped \\xref:guide.adoc[Guide].\n",
         "The word prefixxref:guide.adoc[Guide].\n",
         "A bare xref:guide.adoc without brackets.\n",
         "A spaced xref:not a target[x].\n",
     ] {
         assert!(kinds(source).is_empty(), "{source:?} produced a reference");
+    }
+}
+
+/// Monospace is not a passthrough: Asciidoctor still renders a macro written
+/// between backticks, and a third slash leaves a line uncommented.
+#[test]
+fn monospace_and_a_triple_slash_still_read_references() {
+    for source in [
+        "A `xref:guide.adoc[Guide]` span.\n",
+        "///xref:guide.adoc[Guide]\n",
+        "[quote]\nxref:guide.adoc[Guide]\n",
+    ] {
+        assert_eq!(
+            kinds(source),
+            vec![(ReferenceKind::CrossReference, "guide.adoc".to_owned())],
+            "{source:?}"
+        );
     }
 }
 
@@ -168,10 +197,14 @@ fn an_inline_anchor_declares_an_identity_without_taking_the_line() {
         kinds("* [[remove-refs]]Remove them, see xref:tips.adoc[tips].\n"),
         vec![(ReferenceKind::CrossReference, "tips.adoc".to_owned())]
     );
+    assert_eq!(
+        extract(b"A `[[quoted]]` anchor.\n").expect("utf-8").anchors,
+        vec!["quoted"]
+    );
     for line in [
         "A substitution [[fig-$1]] is no anchor.\n",
         "An escaped \\[[escaped]] anchor.\n",
-        "A `[[quoted]]` anchor.\n",
+        "A `+[[quoted]]+` anchor.\n",
     ] {
         assert!(
             extract(line.as_bytes()).expect("utf-8").anchors.is_empty(),

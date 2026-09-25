@@ -86,7 +86,7 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
         found.push(reference);
         return found;
     }
-    let skips = verbatim_spans(line);
+    let skips = passthrough_spans(line);
     let bytes = line.as_bytes();
     let mut index = 0;
     while index < line.len() {
@@ -189,27 +189,45 @@ fn target_of(rest: &str) -> Option<(&str, &str, usize)> {
     ))
 }
 
-/// The byte intervals a macro name cannot start in: monospace spans and inline
-/// passthrough, which is where a document quoting `AsciiDoc` syntax puts it.
-fn verbatim_spans(line: &str) -> Vec<(usize, usize)> {
+/// The byte intervals a macro name cannot start in: the inline passthroughs,
+/// `+++text+++`, `$$text$$`, `++text++`, `+text+` and `pass:[text]`, which is
+/// where a document quoting `AsciiDoc` syntax puts it. Monospace alone hides
+/// nothing, since Asciidoctor still reads a macro written between backticks.
+fn passthrough_spans(line: &str) -> Vec<(usize, usize)> {
     let mut spans = Vec::new();
-    for fence in ['`', '+'] {
-        let mut open: Option<usize> = None;
-        for (index, character) in line.char_indices() {
-            if character != fence {
-                continue;
+    let mut index = 0;
+    while let Some(tail) = line.get(index..) {
+        let Some(first) = tail.chars().next() else {
+            break;
+        };
+        let fence = PASSTHROUGH_FENCES
+            .iter()
+            .find(|fence| tail.starts_with(**fence));
+        let closed = match fence {
+            Some(fence) => tail
+                .get(fence.len()..)
+                .and_then(|rest| rest.find(fence))
+                .map(|close| close.saturating_add(fence.len().saturating_mul(2))),
+            None if tail.starts_with("pass:") && boundary(line, index) => {
+                tail.find('[').and_then(|open| {
+                    let close = tail.get(open..)?.find(']')?;
+                    open.checked_add(close)?.checked_add(1)
+                })
             }
-            match open {
-                Some(start) => {
-                    spans.push((start, index.saturating_add(1)));
-                    open = None;
-                }
-                None => open = Some(index),
+            None => None,
+        };
+        match closed {
+            Some(length) => {
+                spans.push((index, index.saturating_add(length)));
+                index = index.saturating_add(length);
             }
+            None => index = index.saturating_add(first.len_utf8()),
         }
     }
     spans
 }
+
+const PASSTHROUGH_FENCES: [&str; 4] = ["+++", "$$", "++", "+"];
 
 /// A macro name only opens a macro at the start of a word. Without this,
 /// prose ending in a word that happens to close with the name would open one.
@@ -247,7 +265,7 @@ pub fn declared_anchors(line: &str) -> Vec<String> {
     if let Some(alone) = block_anchor(line) {
         return vec![alone];
     }
-    let skips = verbatim_spans(line);
+    let skips = passthrough_spans(line);
     let mut found = Vec::new();
     let mut index = 0;
     while let Some(open) = line.get(index..).and_then(|tail| tail.find("[[")) {
