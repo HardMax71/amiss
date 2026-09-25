@@ -97,6 +97,7 @@ impl Resolver<'_> {
                         .0,
                 ),
                 observed: observed.to_vec(),
+                moved: moved(body, claim.expected.as_bytes(), claim.line),
             })
         }
     }
@@ -274,6 +275,27 @@ pub(crate) fn named_region_bytes<'a>(
 }
 
 /// One line without the terminator that ended it.
+/// Where a claim's expected words sit now, read off every other line of the
+/// target.
+fn moved(body: &[u8], expected: &[u8], claimed: u64) -> crate::claim::Moved {
+    use crate::claim::Moved;
+    let mut found = Moved::Nowhere;
+    for (number, line) in (1_u64..).zip(scan(body)) {
+        let words = line_content(body.get(line.start..line.end).unwrap_or_default());
+        if number == claimed || words != expected {
+            continue;
+        }
+        found = match found {
+            Moved::Nowhere => Moved::To {
+                line: number,
+                words: words.to_vec(),
+            },
+            Moved::To { .. } | Moved::Ambiguous => return Moved::Ambiguous,
+        };
+    }
+    found
+}
+
 fn line_content(selected: &[u8]) -> &[u8] {
     selected
         .strip_suffix(b"\r\n")

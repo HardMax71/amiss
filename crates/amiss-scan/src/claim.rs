@@ -10,8 +10,19 @@ pub enum ClaimVerdict {
     Broken {
         observed_digest: Digest,
         observed: Vec<u8>,
+        moved: Moved,
     },
     TargetMissing(ClaimMissingReason),
+}
+
+/// Where a broken claim's expected words sit in its target now: on one other
+/// line, which is where the claimed line moved to, on several, which names no
+/// one line, or nowhere, which means the value itself changed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Moved {
+    Nowhere,
+    To { line: u64, words: Vec<u8> },
+    Ambiguous,
 }
 
 /// Why a claim's target could not answer at all.

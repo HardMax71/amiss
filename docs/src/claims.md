@@ -88,7 +88,12 @@ way governed boundaries already aggregate.
 
 A `claim-broken` finding standing alone carries a machine-applicable `fix`: the whole
 carrier respelled with the observed line as its expected words, marker included, the
-byte span of the carrier to replace, and the document that holds it. The engine emits
+byte span of the carrier to replace, and the document that holds it. The expected words
+are looked for first. A line inserted or removed above the claimed one moves them, so
+where exactly one other line of the target holds them, the fix follows them there: the
+line number is respelled and the words are kept. Where several lines hold them, nothing
+says which one is meant and the field stays null. Only where no line holds them does the
+fix take up the changed value. The engine emits
 the fix only when it can prove it: the rewritten carrier is parsed back through the
 real extractor for its own format and must classify to the identical claim with the
 new expected words, so an
