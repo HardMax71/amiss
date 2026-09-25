@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
-use amiss_wire::resolution::Resolution;
+use amiss_wire::resolution::{Resolution, TaggedBlobTarget, UnsupportedSemantics};
 
 pub(crate) use components::unique_path_pairs;
 use components::{ObservationPool, correlation_components};
@@ -252,23 +252,11 @@ fn derive(
             Resolution::Resolved {
                 target: right_target,
             },
-        ) => {
-            let (Some(left_projection), Some(right_projection)) = (
-                left_target.projection_digest(),
-                right_target.projection_digest(),
-            ) else {
-                return (TargetChange::NotComparable, Impact::NotApplicable);
-            };
-            if left_projection == right_projection {
-                return (TargetChange::Equal, equal_impact);
-            }
-            let impact = if source_changed {
-                Impact::DependencyAndSubjectCochanged
-            } else {
-                Impact::DependencyChangedSubjectUnchanged
-            };
-            (TargetChange::Changed, impact)
-        }
+        ) => compared(
+            left_target.projection_digest(),
+            right_target.projection_digest(),
+            source_changed,
+        ),
         (Resolution::Missing(left_missing), Resolution::Missing(right_missing)) => {
             if left_missing == right_missing {
                 (TargetChange::Equal, equal_impact)
@@ -300,6 +288,13 @@ fn derive(
                 (TargetChange::NotComparable, Impact::NotApplicable)
             }
         }
+        (Resolution::UnsupportedSemantics(left), Resolution::UnsupportedSemantics(right)) => {
+            compared(
+                located_projection(left),
+                located_projection(right),
+                source_changed,
+            )
+        }
         (Resolution::Missing(_) | Resolution::TypeMismatch { .. }, Resolution::Resolved { .. }) => {
             (TargetChange::NewlyResolved, Impact::ReferenceResolved)
         }
@@ -326,5 +321,54 @@ fn derive(
             | Resolution::Invalid { .. }
             | Resolution::External { .. },
         ) => (TargetChange::NotComparable, Impact::NotApplicable),
+    }
+}
+
+/// The whole-file projection a declined reference still located: a fragment,
+/// query or line range this run did not judge leaves its target read, so a
+/// change to that file still reaches the prose that cites it.
+fn located_projection(semantics: &UnsupportedSemantics<RepoPath>) -> Option<Digest> {
+    match semantics {
+        UnsupportedSemantics::Query(target) | UnsupportedSemantics::CodeFragment(target) => {
+            target.projection_digest()
+        }
+        UnsupportedSemantics::Fragment(TaggedBlobTarget::Blob(blob)) => {
+            blob.content.projection_digest()
+        }
+        UnsupportedSemantics::SiteRoute
+        | UnsupportedSemantics::UnmodelledRoute
+        | UnsupportedSemantics::NetworkPath
+        | UnsupportedSemantics::AttributeDependent
+        | UnsupportedSemantics::DuplicateLabel
+        | UnsupportedSemantics::ExternalInventory => None,
+    }
+}
+
+/// The story two sides' projections of one located target tell, beside
+/// whether the block citing it changed.
+fn compared(
+    left: Option<Digest>,
+    right: Option<Digest>,
+    source_changed: bool,
+) -> (TargetChange, Impact) {
+    match (left, right) {
+        (Some(left), Some(right)) if left == right => (
+            TargetChange::Equal,
+            if source_changed {
+                Impact::SubjectChanged
+            } else {
+                Impact::None
+            },
+        ),
+        (Some(_), Some(_)) if source_changed => {
+            (TargetChange::Changed, Impact::DependencyAndSubjectCochanged)
+        }
+        (Some(_), Some(_)) => (
+            TargetChange::Changed,
+            Impact::DependencyChangedSubjectUnchanged,
+        ),
+        (Some(_) | None, None) | (None, Some(_)) => {
+            (TargetChange::NotComparable, Impact::NotApplicable)
+        }
     }
 }

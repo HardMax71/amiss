@@ -11,7 +11,8 @@ use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
 use amiss_wire::resolution::Resolution;
 use amiss_wire::resolution::{
-    BlobContent, BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, Missing, Target,
+    BlobContent, BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, Missing,
+    TaggedBlobTarget, Target, UnsupportedSemantics,
 };
 use sha2::Digest as _;
 
@@ -297,6 +298,47 @@ fn different_immutable_commits_are_different_correlation_targets() {
     assert!(
         got.iter()
             .any(|row| row.source_change == SourceChange::Added)
+    );
+}
+
+/// A fragment this run did not judge still located its file, so a change to
+/// that file reaches the prose citing it, the same story the reference
+/// tells without the fragment.
+#[test]
+fn a_declined_fragment_keeps_tracking_its_file() {
+    let declined = |body: &[u8]| {
+        let Resolution::Resolved {
+            target: Target::Blob(blob),
+        } = resolved("t.rs", body)
+        else {
+            panic!("a blob target");
+        };
+        Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(TaggedBlobTarget::Blob(
+            blob,
+        )))
+    };
+    let mut base = basic("d.md", "t.rs", "see [x](t.rs#symbol)");
+    base.resolution = declined(b"fn symbol() {}");
+    let mut edited = base.clone();
+    edited.resolution = declined(b"fn symbol() { changed() }");
+    let got = run(
+        &side(vec![observation(&base)]),
+        &side(vec![observation(&edited)]),
+    );
+    assert_eq!(
+        got.first().map(|row| (row.target_change, row.impact)),
+        Some((
+            TargetChange::Changed,
+            Impact::DependencyChangedSubjectUnchanged
+        ))
+    );
+    let got = run(
+        &side(vec![observation(&base)]),
+        &side(vec![observation(&base)]),
+    );
+    assert_eq!(
+        got.first().map(|row| (row.target_change, row.impact)),
+        Some((TargetChange::Equal, Impact::None))
     );
 }
 
