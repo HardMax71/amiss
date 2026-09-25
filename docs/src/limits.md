@@ -107,9 +107,11 @@ an observation and nothing else. Declined references went the same way later: a 
 reference, each with its own copy of that reference's observation, was 58% of MDN's content
 report, and those rows now fold to one per document and kind. fastapi serializes 29 MB and
 Docusaurus 41 MB, both of which would have fitted the old reservation. What the reservation buys now is headroom rather
-than admission. `complete-findings` allows 100,000 findings, and at the leanest finding this
-engine builds a hundred thousand of them fit under the reservation, so that counter is what
-stops a findings flood and the reservation backstops anything heavier.
+than admission. `complete-findings` allows 100,000 findings, and only the leanest finding this
+engine builds fits a hundred thousand times under the reservation. A broken-link finding carries
+the evidence of its occurrences and weighs several kilobytes, so a flood of those meets the
+reservation first, at some tens of thousands of findings, and ends as `OUTPUT_LIMIT_EXCEEDED`.
+Either ceiling ends the run incomplete, and neither ever ships a findings array cut short.
 
 `aggregate-document-bytes-per-snapshot` is the third, and it was held at 33,554,432 by an
 ordering bug rather than by a measurement. The report used to be spelled into memory before
