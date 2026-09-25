@@ -29,9 +29,17 @@ amiss:
         base="$CI_COMMIT_BEFORE_SHA"
         case "$base" in *[!0]*) ;; *) base="$parent" ;; esac
       fi
+      # a root commit has no parent to compare, so its checkout is read whole
+      set -- --candidate "$CI_COMMIT_SHA"
+      if [ "$base" = "$CI_COMMIT_SHA" ]; then set -- --index; fi
+      # links are read as the branch they merge into; the identity is lowercase, as the flags require
+      project="$(printf '%s' "$CI_PROJECT_PATH" | tr '[:upper:]' '[:lower:]')"
+      target="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-$CI_COMMIT_BRANCH}"
       set +e
       ./amiss-linux-x86_64 check --repo . --object-format "${AMISS_OBJECT_FORMAT:-sha1}" \
-        --base "$base" --candidate "$CI_COMMIT_SHA" \
+        --base "$base" "$@" \
+        --repository "$CI_SERVER_HOST/$project" --forge gitlab \
+        --ref "refs/heads/$target" --default-branch-ref "refs/heads/$CI_DEFAULT_BRANCH" \
         --profile "${AMISS_PROFILE:-observe}" --format json > amiss-report.json
       status=$?
       set -e
