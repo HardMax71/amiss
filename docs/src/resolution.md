@@ -254,13 +254,17 @@ the resource ID Antora reads it as and anchored at the family directory of its m
 `xref:index.adoc[]` in `modules/api/nav.adoc` names `modules/api/pages/index.adoc`. The
 component is every source root whose `antora.yml` spells the same name, and one reserving the
 `ext` block is assembled by an extension, so a resource it does not hold is undecided rather
-than absent. A heading anchor on an AsciiDoc target resolves through the Asciidoctor rule in
+than absent. Outside Antora an image joins `imagesdir`, which is empty unless a document sets
+it, so a document that sets none reads its images beside itself, the way Asciidoctor and a
+forge's preview both do, and one whose header sets a single literal directory reads them under
+it. A document another includes takes its includer's value, and one that sets it anywhere past
+the header, twice, or through an attribute leaves its images undecided. A heading anchor on an AsciiDoc target resolves through the Asciidoctor rule in
 [What thirteen renderers call a heading](anchor-rules.md), the only rule whose identities all
 carry a prefix.
 
 An AsciiDoc destination that needs the build's own state is declined as attribute-dependent
-rather than guessed: one holding an unexpanded `{attribute}`, an image path no generator
-anchors, since `imagesdir` is an attribute too, and a cross reference to an extensionless name,
+rather than guessed: one holding an unexpanded `{attribute}`, an image whose `imagesdir` the
+run cannot know, since it is an attribute too, and a cross reference to an extensionless name,
 which is a page identity a site catalogue answers. A link or an include is read as written,
 so `link:LICENSE[]` names that file, `include::NOTICE[]` is missing when the tree lacks it, and
 a climb out of the tree is a traversal, and an image at a URL is external.
