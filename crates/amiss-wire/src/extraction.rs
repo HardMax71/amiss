@@ -181,8 +181,9 @@ pub struct Occurrence {
     pub block_span: (usize, usize),
     /// The document byte range of the destination's fragment text, present
     /// only when the adapter located the raw destination verbatim exactly
-    /// once inside the reference and nothing a decoder could alter sits in
-    /// the fragment. Absent means no edit may claim those bytes.
+    /// once inside the reference, or inside the definition that writes a
+    /// reference form's destination, and nothing a decoder could alter sits
+    /// in the fragment. Absent means no edit may claim those bytes.
     pub fragment_span: Option<(usize, usize)>,
     /// The document byte range of the destination's path part, under the
     /// same certainty rules. Absent means no edit may claim those bytes.

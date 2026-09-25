@@ -124,6 +124,17 @@ fn a_case_drifted_path_is_repaired_in_place() {
     assert!(stdout.contains("0 applied, 1 already present"), "{stdout}");
 }
 
+/// A reference link's destination is written in its definition, so the
+/// repair edits the definition, once, however many references share it.
+#[test]
+fn a_reference_link_is_repaired_at_its_definition() {
+    let (dir, base) = staged_repo("[a][s] and [b][s]\n\n[s]: Sections.md\n");
+    let (code, stdout) = run_fix(dir.path(), &base);
+    assert_eq!(code, 0, "{stdout}");
+    let repaired = fs::read(dir.path().join("guide.md")).unwrap();
+    assert_eq!(repaired, b"[a][s] and [b][s]\n\n[s]: sections.md\n");
+}
+
 /// A worktree that moved past the staged bytes is refused whole, exits 1,
 /// and keeps its bytes.
 #[test]

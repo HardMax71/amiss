@@ -54,12 +54,10 @@ pub(super) fn reference_fact(
 }
 
 /// Only a missing resolution reaches a structural finding, so the match is
-/// the kind gate.
+/// the kind gate. One edit repairs a group only where every member needs that
+/// same edit, which is what references sharing one definition need.
 pub(super) fn missing_fix(candidates: &[&Observation]) -> Option<FindingFix> {
-    let [observation] = candidates else {
-        return None;
-    };
-    match &observation.resolution {
+    let fix = |observation: &Observation| match &observation.resolution {
         Resolution::Missing(Missing::HeadingAnchorNotFound {
             near: Some(near), ..
         }) => anchor_fix(observation, near),
@@ -75,7 +73,12 @@ pub(super) fn missing_fix(candidates: &[&Observation]) -> Option<FindingFix> {
         | Resolution::UnsupportedVersion { .. }
         | Resolution::Invalid { .. }
         | Resolution::External { .. } => None,
-    }
+    };
+    let (first, rest) = candidates.split_first()?;
+    let edit = fix(first)?;
+    rest.iter()
+        .all(|other| fix(other).as_ref() == Some(&edit))
+        .then_some(edit)
 }
 
 fn anchor_fix(observation: &Observation, near: &str) -> Option<FindingFix> {
