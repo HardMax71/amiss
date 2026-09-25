@@ -131,7 +131,7 @@ that composite under `--profile enforce`. A minimal adjacent-commit direct invoc
 - run: cargo install --locked --registry crates-io --version '=<reviewed-version>' amiss
 - env:
     REPOSITORY: ${{ github.repository }}
-    BRANCH: ${{ github.head_ref || github.ref_name }}
+    BRANCH: ${{ github.base_ref || github.ref_name }}
     DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
   run: |
     amiss check --repo . --object-format sha1 \
@@ -147,6 +147,9 @@ Replace `<reviewed-version>` with the exact release you reviewed. The leading `=
 Cargo requirement exact, Cargo checks the crate archive against the crates.io index checksum,
 and `--locked` refuses to recompute the packaged lockfile, so the command pins both the
 released crate and its dependency graph. The placeholder is deliberately release-independent.
+In a pull request `--ref` names the branch it merges into: the candidate is what that branch
+will hold after the merge, so a link pinned to it resolves against the candidate, and a
+link that breaks fails the pull request rather than the merge.
 Repository and branch names travel through environment variables because a branch can be
 named anything and text pasted into a shell script becomes code; the owner is lowercased in
 shell because GitHub hands it over with its registered capitals and Amiss refuses anything
@@ -246,7 +249,8 @@ read an empty file as a clean run; the JUnit report carries the error instead. T
 rendering, not the trust lane: a blocking run still fails the job by exit class, and the
 provider-verified gate is [the GitLab policy lane](provider-gitlab.md).
 
-On Gitea and Forgejo the published Action runs unchanged. Gitea Actions resolves
+On Gitea and Forgejo the published Action runs unchanged, and it reads the Gitea URL
+dialect there, since both runners say which they are. Gitea Actions resolves
 `uses:` references through github.com by default, so the same two steps shown at the top
 of this page work in a `.gitea/workflows/` file verbatim: verified on Gitea 1.24.7 with
 act_runner 0.6.1, where a broken reference failed the job with the engine's exit class
