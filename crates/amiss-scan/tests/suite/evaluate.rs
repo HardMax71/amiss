@@ -10,7 +10,7 @@ use amiss_scan::observe::{ObservationIdentity, observation_input};
 use amiss_scan::policy::{Effects, TimeContext, WaiverContext};
 use amiss_scan::resolve::Intent;
 use amiss_scan::scanned::{ScannedOccurrence, SpanDisplay};
-use amiss_wire::controls::{Profile, TargetKind};
+use amiss_wire::controls::{GitMode, Profile, TargetKind};
 use amiss_wire::envelope::document_digest;
 use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
@@ -559,6 +559,103 @@ fn unknown_attribution_needs_unequal_facts_on_one_key() {
         Attribution::Unknown,
         "multiplicity one versus two is an unequal fact body"
     );
+}
+
+/// A reference the correlator pairs keeps its failure pre-existing when the
+/// block around it is reworded, its hint moves, or its target is edited: one
+/// row, never a resolved row beside an introduced one.
+#[test]
+fn a_paired_failure_stays_pre_existing_across_edits_around_it() {
+    let mut base = missing_spec("d.md", "absent.md");
+    base.block = "see [x](absent.md) for details".to_owned();
+    let mut reworded = missing_spec("d.md", "absent.md");
+    reworded.block = "read [x](absent.md) for the details".to_owned();
+    let mut hinted = missing_spec("d.md", "absent.md");
+    hinted.resolution = Resolution::Missing(Missing::PathNotFound {
+        path: repo_path("absent.md"),
+        near: Some(repo_path("absent2.md")),
+        same_object_at: Some(repo_path("docs/absent.md")),
+    });
+    let edited = |body: &[u8]| {
+        spec(
+            "d.md",
+            "t.md",
+            Resolution::TypeMismatch {
+                target: Target::Blob(available_blob("t.md", body)),
+            },
+        )
+    };
+    let cases = [
+        (base, reworded),
+        (missing_spec("d.md", "absent.md"), hinted),
+        (edited(b"before"), edited(b"after")),
+    ];
+    for (base, candidate) in &cases {
+        let findings = evaluate(
+            &[],
+            &comparisons(vec![observation(base)], vec![observation(candidate)]),
+            Profile::EnforceIntroduced,
+        )
+        .expect("finding evaluation");
+        let structural: Vec<_> = findings
+            .iter()
+            .filter(|finding| {
+                matches!(
+                    finding.key_input.finding_kind,
+                    FindingKind::ExplicitTargetMissing | FindingKind::ExplicitTargetTypeMismatch
+                )
+            })
+            .collect();
+        assert_eq!(structural.len(), 1, "one row for {:?}", candidate.block);
+        assert_eq!(structural[0].attribution, Attribution::PreExisting);
+        assert!(structural[0].base_fact.is_some() && structural[0].candidate_fact.is_some());
+    }
+}
+
+#[test]
+fn a_renamed_document_keeps_its_failures_pre_existing() {
+    let content = (
+        GitMode::RegularFile,
+        amiss_wire::model::Digest::from([7; 32]),
+    );
+    let side = |from: &Spec| Side {
+        observations: vec![observation(from)],
+        documents: std::collections::BTreeMap::from([(from.document.clone(), content)]),
+    };
+    let renamed = correlate(
+        side(&missing_spec("old.md", "absent.md")),
+        side(&missing_spec("new.md", "absent.md")),
+    )
+    .expect("correlate");
+    let finding = only(
+        evaluate(&[], &renamed, Profile::EnforceIntroduced).expect("finding evaluation"),
+        FindingKind::ExplicitTargetMissing,
+    );
+    assert_eq!(finding.attribution, Attribution::PreExisting);
+    assert_eq!(finding.location.path, Some(repo_path("new.md")));
+}
+
+#[test]
+fn a_failure_that_changes_shape_is_not_pre_existing() {
+    let anchor = spec(
+        "d.md",
+        "t.md",
+        Resolution::Missing(Missing::HeadingAnchorNotFound {
+            path: repo_path("t.md"),
+            near: None,
+        }),
+    );
+    let deleted = spec("d.md", "t.md", path_not_found("t.md"));
+    let finding = only(
+        evaluate(
+            &[],
+            &comparisons(vec![observation(&anchor)], vec![observation(&deleted)]),
+            Profile::EnforceIntroduced,
+        )
+        .expect("finding evaluation"),
+        FindingKind::ExplicitTargetMissing,
+    );
+    assert_eq!(finding.attribution, Attribution::Unknown);
 }
 
 #[test]

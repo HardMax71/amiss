@@ -162,7 +162,8 @@ The `key_input` that produced the finding's identity is included too, so an exte
 system can recompute any finding's identity from the report alone.
 
 A row is one finding key, and the key's scope decides how much one row covers. A missing or
-mistyped target keys on the document and the exact target, so a link a page repeats is one row.
+mistyped target keys on the document, the exact target, and the block holding the reference, so
+a link one block repeats is one row, and each block that repeats it has a row of its own.
 The four records that answer for a single reference, `target-declared-untracked`,
 `unsupported-reference-semantics`, `unsupported-target-kind`, and `unsupported-version-scope`,
 key on the document alone. That makes one row per document and kind: `aggregation.member_count`

@@ -4,7 +4,10 @@ A finding is one fact the scan established, and four of its parts carry the stor
 kind says what happened. The attribution says whose change it is: `introduced` by this
 candidate, `pre-existing` before it, `resolved` by it, `not-applicable` when the
 before-and-after framing does not apply, or `unknown` when the match-up could not be
-decided without guessing. The disposition says what the run does about it, and it comes
+decided without guessing. A failing reference that the correlator pairs with a base
+occurrence failing the same way stays `pre-existing` when its block is reworded, its document
+is renamed, or its target is edited; it stops being pre-existing only when the failure changes
+shape or count. The disposition says what the run does about it, and it comes
 twice on every row: configured is what the rules asked, effective is what happened, and
 only the effective one decides the exit. `record` is noted, `warn` is shown, `fail`
 blocks. The location says where, down to byte offsets. The full row carries more,

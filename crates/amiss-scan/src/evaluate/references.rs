@@ -14,6 +14,7 @@ use amiss_wire::report::model::{
     ReportFindingKeyInput, RepositoryIntentPath,
 };
 use amiss_wire::report::{Disposition, FindingKind};
+use amiss_wire::resolution::{MissingTag, Resolution, ResolutionTag, TargetTag};
 
 use crate::correlate::{Comparison, Impact, Observation, Outcome};
 use crate::observe;
@@ -68,9 +69,9 @@ fn collect_structural<'a>(
     groups: &mut BTreeMap<Digest, KeyGroup<'a>>,
     observation: &'a Observation,
     is_base: bool,
-) -> Result<(), crate::Error> {
+) -> Result<Option<Digest>, crate::Error> {
     let Some(kind) = resolution_kinds(&observation.resolution).structural else {
-        return Ok(());
+        return Ok(None);
     };
     let intent = &observation.intent;
     let key = ReportFindingKeyInput {
@@ -123,13 +124,79 @@ fn collect_structural<'a>(
     } else {
         group.candidate.push(observation);
     }
-    Ok(())
+    Ok(Some(digest))
 }
 
-/// Step three: structural kinds aggregate independently by key across both
-/// sides, one finding per key with at least one included side. Attribution
-/// follows fact presence and equality, and a base-only projection is forced
-/// to record so a deletion cannot retain an old blocking failure.
+/// Both sides fail the same way when as many occurrences fail in the same
+/// shape. Hints and the target's content are evidence about a failure, so a
+/// new suggestion or an edited target leaves a broken reference as broken as
+/// it was.
+fn same_failure(base: &[&Observation], candidate: &[&Observation]) -> bool {
+    base.len() == candidate.len()
+        && base
+            .first()
+            .zip(candidate.first())
+            .is_some_and(|(left, right)| {
+                failure_shape(&left.resolution) == failure_shape(&right.resolution)
+            })
+}
+
+fn failure_shape(
+    resolution: &Resolution<RepoPath>,
+) -> (ResolutionTag, Option<MissingTag>, Option<TargetTag>) {
+    (
+        ResolutionTag::from(resolution),
+        if let Resolution::Missing(missing) = resolution {
+            Some(MissingTag::from(missing))
+        } else {
+            None
+        },
+        if let Resolution::TypeMismatch { target } = resolution {
+            Some(TargetTag::from(target))
+        } else {
+            None
+        },
+    )
+}
+
+/// The side a group reports from, its members' sorted ids and count, and the
+/// location of its first member.
+fn reported_members(group: &KeyGroup<'_>) -> (Vec<Digest>, u64, Location) {
+    let (members, side) = if group.candidate.is_empty() {
+        (&group.base, LocationSide::Base)
+    } else {
+        (&group.candidate, LocationSide::Candidate)
+    };
+    let mut ids: Vec<Digest> = members.iter().map(|observation| observation.id).collect();
+    ids.sort_unstable();
+    let location = members
+        .iter()
+        .min_by(|left, right| {
+            (&left.document, left.span, left.id).cmp(&(&right.document, right.span, right.id))
+        })
+        .map_or(
+            Location {
+                side,
+                path: None,
+                span: None,
+                display: None,
+            },
+            |observation| observation_location(observation, side),
+        );
+    (
+        ids,
+        u64::try_from(members.len()).unwrap_or(u64::MAX),
+        location,
+    )
+}
+
+/// Step three: structural kinds aggregate by key across both sides, one
+/// finding per key with at least one included side. A base occurrence the
+/// correlator paired with a candidate failing the same way joins that
+/// candidate's key, so a reworded block or a renamed document keeps its
+/// failure pre-existing. Attribution follows fact presence and the failure's
+/// shape, and a base-only projection is forced to record so a deletion cannot
+/// retain an old blocking failure.
 pub(super) fn structural_findings(
     comparisons: &[Comparison],
     profile: Profile,
@@ -137,14 +204,29 @@ pub(super) fn structural_findings(
 ) -> Result<(), crate::Error> {
     let mut groups: BTreeMap<Digest, KeyGroup<'_>> = BTreeMap::new();
     for comparison in comparisons {
-        for observation in comparison
+        let continued = comparison
             .candidate
-            .iter()
-            .chain(&comparison.alternatives_candidate)
-        {
+            .as_ref()
+            .map(|observation| collect_structural(&mut groups, observation, false))
+            .transpose()?
+            .flatten()
+            .filter(|_| matches!(comparison.outcome, Outcome::Exact | Outcome::Candidate));
+        for observation in &comparison.alternatives_candidate {
             collect_structural(&mut groups, observation, false)?;
         }
-        for observation in comparison.base.iter().chain(&comparison.alternatives_base) {
+        if let Some(base) = &comparison.base {
+            let kind = resolution_kinds(&base.resolution).structural;
+            match continued
+                .and_then(|digest| groups.get_mut(&digest))
+                .filter(|group| Some(group.key.finding_kind) == kind)
+            {
+                Some(group) => group.base.push(base),
+                None => {
+                    collect_structural(&mut groups, base, true)?;
+                }
+            }
+        }
+        for observation in &comparison.alternatives_base {
             collect_structural(&mut groups, observation, true)?;
         }
     }
@@ -167,7 +249,9 @@ pub(super) fn structural_findings(
         let attribution = match (&base_fact, &candidate_fact) {
             (None, Some(_)) => Attribution::Introduced,
             (Some(_), None) => Attribution::Resolved,
-            (Some(left), Some(right)) if left == right => Attribution::PreExisting,
+            (Some(_), Some(_)) if same_failure(&group.base, &group.candidate) => {
+                Attribution::PreExisting
+            }
             (Some(_), Some(_)) => Attribution::Unknown,
             (None, None) => Attribution::NotApplicable,
         };
@@ -175,34 +259,7 @@ pub(super) fn structural_findings(
             continue;
         }
 
-        let members = if group.candidate.is_empty() {
-            &group.base
-        } else {
-            &group.candidate
-        };
-        let mut ids: Vec<Digest> = members.iter().map(|observation| observation.id).collect();
-        ids.sort_unstable();
-        let member_count = u64::try_from(members.len()).unwrap_or(u64::MAX);
-        let representative = members
-            .iter()
-            .min_by(|left, right| {
-                (&left.document, left.span, left.id).cmp(&(&right.document, right.span, right.id))
-            })
-            .copied();
-        let side = if group.candidate.is_empty() {
-            LocationSide::Base
-        } else {
-            LocationSide::Candidate
-        };
-        let location = representative.map_or(
-            Location {
-                side,
-                path: None,
-                span: None,
-                display: None,
-            },
-            |observation| observation_location(observation, side),
-        );
+        let (ids, member_count, location) = reported_members(&group);
 
         let configured = if attribution == Attribution::Resolved {
             Disposition::Record
