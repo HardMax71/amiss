@@ -43,7 +43,8 @@ pub fn aliased(forge: Option<&ForgeContext>, candidate: &PolicySide) -> Option<F
 /// classification row five and overrides built-in exclusion. Bindings are not
 /// a union: one grammar per path per evaluation, taken from the candidate
 /// policy so both sides extract comparably, or from the base policy when the
-/// candidate carries none.
+/// candidate carries none. The heading renderers a Markdown page is read
+/// under are the candidate's pin alone, for the same reason.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Includes {
     pub documents: BTreeSet<RepoPath>,
@@ -52,6 +53,7 @@ pub struct Includes {
     pub document_bindings: BTreeMap<RepoPath, Adapter>,
     pub tree_bindings: BTreeMap<RepoPath, Adapter>,
     pub suffix_bindings: BTreeMap<RepoPath, (String, Adapter)>,
+    pub renderers: Option<BTreeSet<String>>,
 }
 
 impl Includes {
@@ -104,6 +106,11 @@ impl Includes {
                 }
             }
         }
+        merged.renderers = candidate
+            .policy
+            .as_ref()
+            .and_then(|policy| policy.anchor_renderers.as_ref())
+            .map(|names| names.iter().cloned().collect());
         merged
     }
 
@@ -318,6 +325,14 @@ pub fn acquire_entry(
         Ok((policy, digest))
     }) {
         Ok((policy, digest)) => {
+            let unknown = policy.anchor_renderers.iter().flatten().any(|name| {
+                !crate::anchor::RULES
+                    .iter()
+                    .any(|rule| rule.name == name.as_str())
+            });
+            if unknown {
+                return Err(invalid(Vec::new()));
+            }
             let entries = [
                 policy.document_includes.len(),
                 policy.projection_assertions.as_ref().map_or(0, Vec::len),

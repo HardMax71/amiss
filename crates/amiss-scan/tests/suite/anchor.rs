@@ -123,7 +123,7 @@ fn every_rendered_document_reproduces_its_identities() {
         };
         let (headings, anchors, declared) = parsed(adapter, &source);
         if document.get("covers").and_then(Value::as_str) == Some("union") {
-            let union = anchor_set(&headings, &anchors, &declared);
+            let union = anchor_set(&headings, &anchors, &declared, None);
             for identity in &want {
                 assert!(
                     union.contains(identity),
@@ -144,7 +144,7 @@ fn every_rendered_document_reproduces_its_identities() {
 fn the_union_holds_every_rule_and_every_html_anchor() {
     let source = "## Setup & Config\n\n<a name=\"html-declared\"></a>\n\n[](){#block-declared}\n";
     let (headings, anchors, declared) = headings(source);
-    let union = anchor_set(&headings, &anchors, &declared);
+    let union = anchor_set(&headings, &anchors, &declared, None);
     assert!(union.contains("setup--config"), "the github family is in");
     assert!(
         union.contains("setup-config"),

@@ -132,7 +132,14 @@ fn anchor_resolution(
         *slot = match charged {
             Ok(()) => retained_source(resolver.snapshot, path, adapter)
                 .map(|source| {
-                    expanded_anchors(resolver.snapshot, resolver.scan, path, adapter, source)
+                    expanded_anchors(
+                        resolver.snapshot,
+                        resolver.scan,
+                        path,
+                        adapter,
+                        source,
+                        resolver.renderers,
+                    )
                 })
                 .or_else(|| {
                     crate::scan::parse(adapter, body, allowance)
@@ -150,6 +157,7 @@ fn anchor_resolution(
                                     declared_anchors: &extraction.declared_anchors,
                                     transclusions: &extraction.transclusions,
                                 },
+                                resolver.renderers,
                             )
                         })
                 })
@@ -190,12 +198,14 @@ fn expanded_anchors(
     path: &RepoPath,
     adapter: Adapter,
     source: Source<'_>,
+    pin: Option<&BTreeSet<String>>,
 ) -> Anchors {
     let expanded = expand(snapshot, scan, path, adapter, source);
     let identities = AnchorIndex::new(anchor_set(
         expanded.headings.as_ref(),
         expanded.html_anchors.as_ref(),
         expanded.declared_anchors.as_ref(),
+        pin.filter(|_| matches!(adapter, Adapter::Markdown | Adapter::Mdx)),
     ));
     if expanded.complete
         && !unrouted(snapshot, adapter, path)

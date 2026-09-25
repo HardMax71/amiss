@@ -9,18 +9,23 @@ use super::{
     Normalize, RULES, RawHtml, Runs, Separators, Terms, Trim, Typography,
 };
 
-/// Every identity the known renderers would publish for one document, plus the
-/// anchors the document declares itself, in raw HTML or in an attribute block,
-/// plus the definition-list terms one renderer publishes beside its headings.
+/// Every identity the known renderers would publish for one document, or the
+/// renderers a repository pins it to, plus the anchors the document declares
+/// itself, in raw HTML or in an attribute block, plus the definition-list terms
+/// one renderer publishes beside its headings.
 #[must_use]
 pub fn anchor_set(
     headings: &[Heading],
     html_anchors: &[String],
     declared_anchors: &[String],
+    pin: Option<&BTreeSet<String>>,
 ) -> BTreeSet<String> {
     let mut set: BTreeSet<String> = html_anchors.iter().cloned().collect();
     set.extend(declared_anchors.iter().cloned());
-    for rule in &RULES {
+    for rule in RULES
+        .iter()
+        .filter(|rule| pin.is_none_or(|pin| pin.contains(rule.name)))
+    {
         set.extend(identities(rule, headings));
     }
     set.extend(identities(&DEFINITION_TERMS, headings));

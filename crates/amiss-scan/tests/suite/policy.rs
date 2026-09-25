@@ -150,6 +150,7 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
         protected_inventory,
         finding_dispositions: Vec::new(),
         default_branch_aliases: None,
+        anchor_renderers: None,
     })
 }
 
@@ -173,6 +174,7 @@ fn a_projection_selector_change_keeps_identity_and_removal_weakens() {
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
             default_branch_aliases: None,
+            anchor_renderers: None,
         })
     };
     let base = side(1);
@@ -226,6 +228,7 @@ fn the_union_carries_both_suffixes_but_the_candidate_binding() {
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
             default_branch_aliases: None,
+            anchor_renderers: None,
         })
     };
     let base = side(".txt", amiss_wire::model::Adapter::Rst);
@@ -257,6 +260,7 @@ fn disposition_side(rows: &[(PromotableFindingKind, PolicyDisposition)]) -> Poli
         protected_inventory: Vec::new(),
         finding_dispositions,
         default_branch_aliases: None,
+        anchor_renderers: None,
     })
 }
 
@@ -587,6 +591,7 @@ fn a_binding_drop_or_change_weakens_and_an_addition_does_not() {
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
             default_branch_aliases: None,
+            anchor_renderers: None,
         })
     };
     let removed = |got: &amiss_scan::policy::Effects| {
@@ -631,6 +636,7 @@ fn suffix_selector_changes_keep_their_stable_root_identity() {
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
             default_branch_aliases: None,
+            anchor_renderers: None,
         })
     };
     let absent = PolicySide::default();
@@ -676,6 +682,7 @@ fn a_dropped_default_branch_alias_weakens_and_an_addition_does_not() {
             protected_inventory: Vec::new(),
             finding_dispositions: Vec::new(),
             default_branch_aliases: Some(aliases.to_vec()),
+            anchor_renderers: None,
         })
     };
     let removed = |got: &amiss_scan::policy::Effects| -> Vec<(String, Option<String>)> {
@@ -717,4 +724,47 @@ fn a_dropped_default_branch_alias_weakens_and_an_addition_does_not() {
         removed(&added).is_empty(),
         "declaring another name is not weakening"
     );
+}
+
+/// A renderer pin the candidate drops, or widens by a name the base's pin did
+/// not hold, lets identities back in on both sides and weakens the policy,
+/// while narrowing a pin or adding one where there was none does not.
+#[test]
+fn a_dropped_or_widened_renderer_pin_weakens_and_a_narrower_one_does_not() {
+    let side = |names: Option<&[&str]>| {
+        policy_side(ScannerPolicy {
+            schema: ScannerPolicySchema::Current,
+            document_includes: Vec::new(),
+            projection_assertions: Some(Vec::new()),
+            protected_inventory: Vec::new(),
+            finding_dispositions: Vec::new(),
+            default_branch_aliases: None,
+            anchor_renderers: names
+                .map(|names| names.iter().map(|name| (*name).to_owned()).collect()),
+        })
+    };
+    let widened = |base: Option<&[&str]>, candidate: Option<&[&str]>| {
+        let scanned: fn(&str) -> InventoryState = |_| InventoryState::Scanned;
+        effects(&side(base), &side(candidate), &scanned)
+            .controls
+            .iter()
+            .filter(|row| row.rule_id == "policy/anchor-renderers-widened")
+            .count()
+    };
+    assert_eq!(
+        widened(Some(&["github"]), None),
+        1,
+        "dropping the pin weakens"
+    );
+    assert_eq!(
+        widened(Some(&["github"]), Some(&["github", "mdit-vue"])),
+        1,
+        "adding a renderer weakens"
+    );
+    assert_eq!(
+        widened(Some(&["github", "mdit-vue"]), Some(&["github"])),
+        0,
+        "narrowing is raise-only"
+    );
+    assert_eq!(widened(None, Some(&["github"])), 0, "pinning is raise-only");
 }

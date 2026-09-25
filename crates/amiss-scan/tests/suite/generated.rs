@@ -12,7 +12,7 @@ use amiss_scan::anchor::DECLARATIONS;
 use amiss_scan::pipeline::commit_pair;
 use amiss_scan::route::{ROUTERS, Spelling};
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
-use amiss_wire::report::model::occurrences;
+use amiss_wire::report::model::{AnalysisErrorCode, occurrences};
 use amiss_wire::resolution::{
     Missing, MissingTag, Resolution, ResolutionTag, Target, UnsupportedSemantics,
     UnsupportedSemanticsTag,
@@ -425,4 +425,80 @@ fn the_myst_rows_name_the_file_the_route_table_reads() {
         .collect();
     assert_eq!(routed, declared, "the Sphinx declaration is one file");
     assert!(!routed.is_empty(), "the route table declares Sphinx");
+}
+
+const PINNED_GUIDE: [(&str, &str); 3] = [
+    ("guide.md", "# Setup & Config\n"),
+    ("guide.rst", "Setup & Config\n==============\n"),
+    (
+        "README.md",
+        "[a](guide.md#setup--config)\n\n[b](guide.md#setup-config)\n\n[c](guide.rst#setup-config)\n",
+    ),
+];
+
+/// A repository rendered by one site can pin its Markdown headings to that
+/// renderer, so a spelling only another renderer publishes stops passing: the
+/// `VitePress` spelling `setup-config` misses under a GitHub pin while GitHub's own
+/// `setup--config` still resolves. The pin reads Markdown alone, so an RST
+/// page keeps the identity docutils gives it, and without a pin every
+/// renderer's spelling passes as before.
+#[test]
+fn a_renderer_pin_narrows_markdown_headings_to_that_renderer() -> std::io::Result<()> {
+    let policy = (
+        ".amiss/scanner-policy.json",
+        "{\"schema\":\"amiss/scanner-policy\",\"document_includes\":[],\"protected_inventory\":[],\
+         \"finding_dispositions\":[],\"anchor_renderers\":[\"github\"]}\n",
+    );
+    let mut pinned = PINNED_GUIDE.to_vec();
+    pinned.push(policy);
+    let rows = answers(&amiss_fixtures::commit_chain(&[("base", &pinned)])?);
+    assert!(matches!(
+        answer(&rows, "README.md", 1),
+        Resolution::Resolved { .. }
+    ));
+    assert!(matches!(
+        answer(&rows, "README.md", 3),
+        Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+    ));
+    assert!(matches!(
+        answer(&rows, "README.md", 5),
+        Resolution::Resolved { .. }
+    ));
+
+    let open = answers(&amiss_fixtures::commit_chain(&[("base", &PINNED_GUIDE)])?);
+    assert!(matches!(
+        answer(&open, "README.md", 3),
+        Resolution::Resolved { .. }
+    ));
+    Ok(())
+}
+
+/// A pin naming no renderer this engine knows would silently empty the set a
+/// page publishes, so the policy holding it is refused whole and the run is
+/// left incomplete at the policy file.
+#[test]
+fn a_pin_naming_an_unknown_renderer_refuses_the_policy() -> Result<(), Box<dyn std::error::Error>> {
+    let mut files = PINNED_GUIDE.to_vec();
+    files.push((
+        ".amiss/scanner-policy.json",
+        "{\"schema\":\"amiss/scanner-policy\",\"document_includes\":[],\"protected_inventory\":[],\
+         \"finding_dispositions\":[],\"anchor_renderers\":[\"nonesuch\"]}\n",
+    ));
+    let chain = amiss_fixtures::commit_chain(&[("base", &files)])?;
+    let commit = chain
+        .commits
+        .first()
+        .ok_or("the fixture holds one commit")?;
+    let oid = Oid::new(ObjectFormat::Sha1, commit.id.clone()).ok_or("a SHA-1 commit name")?;
+    let repo = Repository::open(chain.root(), ObjectFormat::Sha1)
+        .map_err(|defect| format!("{defect:?}"))?;
+    let built = commit_pair(&repo, &engine(), None, &bare_shell(), &oid, &oid)
+        .map_err(|defect| format!("{defect:?}"))?;
+    let payload = &built.envelope.payload;
+    assert!(!payload.result.complete);
+    assert!(payload.errors.iter().any(|row| {
+        row.code == AnalysisErrorCode::ConfigurationInvalid
+            && row.path.as_ref().and_then(RepoPath::as_str) == Some(".amiss/scanner-policy.json")
+    }));
+    Ok(())
 }

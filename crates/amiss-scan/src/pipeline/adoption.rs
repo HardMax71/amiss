@@ -52,6 +52,10 @@ pub(super) fn reproduce(
     let policy = crate::policy::acquire(repo, git, &mut scan, &tree)
         .map_err(|details| details.into_iter().next().unwrap_or_else(mismatch))?;
     let forge = crate::policy::aliased(forge, &policy);
+    let renderers: Option<BTreeSet<String>> = policy
+        .policy
+        .and_then(|policy| policy.anchor_renderers)
+        .map(|names| names.into_iter().collect());
     let includes = crate::policy::Includes::default();
     let discovery =
         crate::discovery::discover_scoped(repo, git, &mut scan, &includes, &tree, &documents)
@@ -68,6 +72,7 @@ pub(super) fn reproduce(
                 labels: semantic.labels.as_ref(),
                 routes: None,
             },
+            renderers: renderers.as_ref(),
         },
         &discovery,
         None,
