@@ -318,8 +318,20 @@ impl Resolver<'_> {
             fragment: Some(label.to_owned()),
         };
         let mut external_destination = None;
-        let resolution = match label_target(self, label)? {
+        let term = label.strip_prefix("term:");
+        let declared = match (label_target(self, label)?, term) {
+            (None, Some(term)) => label_target(self, term)?,
+            (declared, _) => declared,
+        };
+        // A `conf.py` that mentions intersphinx anywhere may bring in another project's terms.
+        let foreign_terms = declared_root(self.snapshot, document.as_bytes(), SPHINX.declared_by)
+            .and_then(|root| self.snapshot.sphinx_configs.get(&root))
+            .is_some_and(|config| config.intersphinx);
+        let resolution = match declared {
             Some(declared) => declared,
+            None if term.is_some() && !foreign_terms => {
+                Resolution::Missing(Missing::LabelNotDeclared)
+            }
             None if label.contains(':') => {
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
             }

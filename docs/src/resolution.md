@@ -311,10 +311,14 @@ A reStructuredText heading anchor resolves through the Docutils rule in
 [What thirteen renderers call a heading](anchor-rules.md), and the labels a document declares
 outright with `.. _name:` resolve as themselves. The Sphinx roles that name a document, a file
 or a label are modelled by name, which is why the grammar profile says
-`docutils-rst-sphinx-refs`: `:doc:`, `:download:`, `:ref:` and `:numref:`. A `:download:` names
-a file as written, beside its document, or under the directory holding `conf.py` when it opens
-with a slash, and so do the paths an `image`, `figure`, `include` or `literalinclude` names,
-since Sphinx reads each of them the same way. A `:numref:` is a label the way a `:ref:` is. An image a substitution
+`docutils-rst-sphinx-refs`: `:doc:`, `:download:`, `:ref:`, `:numref:` and `:term:`. A
+`:download:` names a file as written, beside its document, or under the directory holding
+`conf.py` when it opens with a slash, and so do the paths an `image`, `figure`, `include` or
+`literalinclude` names, since Sphinx reads each of them the same way. A `:numref:` is a label
+the way a `:ref:` is. A `:term:` names a term some `glossary` directive in the tree declares,
+compared without case, and a term nobody declares is missing unless `conf.py` mentions
+intersphinx anywhere, which can bring in another project's glossary through an extension
+that never names it. An image a substitution
 definition names, `.. |logo| image:: logo.png`, is an image like any other, and the link an
 image or figure opens, its `:target:` option, is a destination of its own. A relative
 `:doc:` target resolves beside its document, read under the suffix its root reads and again
@@ -351,7 +355,7 @@ are answered the same way. `` {doc}`quickstart` `` is the docname `:doc:` names,
 rather than `.rst`, and `` {ref}`install-step` `` is the label `:ref:` names, looked up in the
 same table, which a MyST document fills through `(name)=`, its attribute blocks, the
 `:name:` a directive carries, the terms of a `{.glossary}` list and the object a
-`domain:type` directive describes. The `myst-link` rule in
+`domain:type` directive describes. `` {term}`environment` `` is answered the way `:term:` is. The `myst-link` rule in
 [What thirteen renderers call a heading](anchor-rules.md) points a plain link
 at that same table: `[text](name)` where the tree holds no such file, and `[text](#name)` where
 the document itself publishes no such identity, are looked up as labels before either is

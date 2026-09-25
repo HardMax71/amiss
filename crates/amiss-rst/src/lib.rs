@@ -66,6 +66,7 @@ pub enum ReferenceKind {
     DownloadRole,
     RefRole,
     NumrefRole,
+    TermRole,
     TocTreeEntry,
     TargetOption,
 }
@@ -82,6 +83,7 @@ impl ReferenceKind {
             Self::DocRole => "rst-doc-role",
             Self::DownloadRole => "rst-download-role",
             Self::RefRole => "rst-ref-role",
+            Self::TermRole => "rst-term-role",
             Self::NumrefRole => "rst-numref-role",
             Self::TocTreeEntry => "rst-toctree-entry",
             Self::TargetOption => "rst-target-option",
@@ -216,6 +218,7 @@ fn read_block(
     let mut previous: Option<(usize, &str)> = None;
     let mut literal: Option<(usize, bool)> = None;
     let mut toctree: Option<usize> = None;
+    let mut glossary: Option<Glossary> = None;
     let mut read_until = 0_usize;
     for raw in body.split_inclusive('\n') {
         let text_at = offset;
@@ -264,14 +267,13 @@ fn read_block(
                 previous = (!line.trim().is_empty()).then_some((text_at, line));
             }
         }
-        if let Some(label) = target_definition(line) {
-            extraction.anchors.push(label);
-        }
-        if block.kind == Kind::Directive
-            && let Some(name) = amiss_wire::extraction::directive_name_option(line)
-        {
-            extraction.anchors.push(name);
-        }
+        declare(
+            &mut extraction.anchors,
+            &mut glossary,
+            line,
+            indent,
+            block.kind == Kind::Directive,
+        );
         let chunk = if text_at >= read_until {
             let joined = wrapped(body, text_at, line);
             read_until = text_at.saturating_add(joined.len());
@@ -308,6 +310,67 @@ fn read_block(
             toctree = Some(indent);
         }
     }
+}
+
+/// The names one line declares: a `.. _label:` target, a directive's `:name:`
+/// option, and a glossary term, with the glossary a line opens read on the
+/// lines after it.
+fn declare(
+    anchors: &mut Vec<String>,
+    glossary: &mut Option<Glossary>,
+    line: &str,
+    indent: usize,
+    in_directive: bool,
+) {
+    anchors.extend(target_definition(line));
+    if in_directive {
+        anchors.extend(amiss_wire::extraction::directive_name_option(line));
+    }
+    anchors.extend(glossary_term(glossary, line, indent));
+    if directive_name(line.trim_start()) == Some("glossary") {
+        *glossary = Some(Glossary {
+            opened: indent,
+            terms_at: None,
+        });
+    }
+}
+
+/// A `glossary` body being read: the opener's indent, and the indent its
+/// first term set, which every later term shares.
+#[derive(Clone, Copy)]
+struct Glossary {
+    opened: usize,
+    terms_at: Option<usize>,
+}
+
+/// The term one line of a glossary body declares. Options come before the
+/// first term, a definition sits deeper than the terms, and a line back at the
+/// opener's indent ends the body.
+fn glossary_term(glossary: &mut Option<Glossary>, line: &str, indent: usize) -> Option<String> {
+    let state = (*glossary)?;
+    if line.trim().is_empty() {
+        return None;
+    }
+    if indent <= state.opened {
+        *glossary = None;
+        return None;
+    }
+    if state.terms_at.is_none() && line.trim_start().starts_with(':') {
+        return None;
+    }
+    let terms_at = state.terms_at.unwrap_or(indent);
+    *glossary = Some(Glossary {
+        opened: state.opened,
+        terms_at: Some(terms_at),
+    });
+    // A term may carry classifiers after ` : `, which name no part of it.
+    (indent == terms_at).then(|| {
+        line.trim()
+            .split(" : ")
+            .next()
+            .unwrap_or_default()
+            .replace('`', "")
+    })
 }
 
 /// The line, or when its backticks do not balance, the line and as many of the

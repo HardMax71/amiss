@@ -469,6 +469,7 @@ fn role_occurrence(entry: &ScannedOccurrence) -> bool {
             | SourceConstruct::RstDownloadRole
             | SourceConstruct::RstRefRole
             | SourceConstruct::RstNumrefRole
+            | SourceConstruct::RstTermRole
             | SourceConstruct::RstTocTreeEntry
     )
 }
