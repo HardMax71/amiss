@@ -247,12 +247,10 @@ the first, because a docname names one file. So `` :doc:`/ref/models/querysets` 
 tree is `docs/ref/models/querysets.txt`, and the same declaration is what makes those files
 documents at all, which [Discovery](discovery.md) states.
 
-A relative `:doc:` target keeps `.rst` whatever the root declares. The adapter spells that one
-while it parses, before anything knows which root the document sits under, and rewriting it
-afterwards would guess at a name the author never wrote. Django writes four relative targets in
-677 pages and all four name another project's inventory, so the boundary costs it nothing;
-a tree that writes relative docnames under another suffix would see them reported missing under
-`.rst`, which is the honest reading of what this rule does not do yet.
+A relative `:doc:` target and a `toctree` entry take the same suffix. The adapter keeps the
+docname as the author wrote it, and resolution adds the suffix of the root the document sits
+under, or `.rst` when no `conf.py` sits above it, so Django's relative `toctree` entries reach
+its `.txt` pages.
 
 Each of the spellings above widens what resolves and nothing else, like the three: an anchored
 destination is looked up in the tree and is missing when the tree does not hold it, so

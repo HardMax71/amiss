@@ -360,7 +360,9 @@ fn sphinx_included(discovery: &SnapshotDiscovery) -> BTreeSet<RepoPath> {
 fn role_occurrence(entry: &ScannedOccurrence) -> bool {
     matches!(
         entry.occurrence.construct,
-        SourceConstruct::RstDocRole | SourceConstruct::RstRefRole
+        SourceConstruct::RstDocRole
+            | SourceConstruct::RstRefRole
+            | SourceConstruct::RstTocTreeEntry
     )
 }
 
