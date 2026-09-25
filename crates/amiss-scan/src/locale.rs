@@ -20,7 +20,7 @@ use crate::discovery::{WalkMode, discover_walk};
 
 pub const LOCALE_CONTEXT_BYTES: u64 = 65_536;
 pub const PRODUCER_IDENTITY: ArtifactId = artifact_id!("amiss-locale-tree");
-pub const PRODUCER_VERSION: &str = "1.0.0";
+pub const PRODUCER_VERSION: &str = "1.1.0";
 /// The fallback class a target page carries when its bytes are the source's.
 pub const SOURCE_IDENTICAL_CLASS: ArtifactId = artifact_id!("source-identical");
 const CONTEXT_DOMAIN: &str = "amiss/locale-tree-context-v1";
@@ -136,7 +136,12 @@ pub fn tree_inventory(
     if plan.payload.docs.tree != tree {
         return Err(InventoryError::Plan);
     }
-    let (source, target) = walk(repo, git, context, &tree)?;
+    let (source, mut target) = walk(repo, git, context, &tree)?;
+    target.rows = paired(
+        &source.rows,
+        std::mem::take(&mut target.rows),
+        &context.documents,
+    );
     let producer = tree_producer(context)?;
     let identical = SOURCE_IDENTICAL_CLASS;
     let evidence = LocaleCoverageEvidence {
@@ -174,6 +179,50 @@ pub fn tree_inventory(
         },
     };
     evidence.emit().map_err(|_defect| InventoryError::Evidence)
+}
+
+/// A translation may carry another page suffix than its source, a `.md` for
+/// an `.mdx`, and the generators pair the two by the path without that
+/// suffix. So a target key no source page carries takes the one source key
+/// sharing its stem, where no other target page claims that stem.
+fn paired(
+    source: &BTreeMap<String, Digest>,
+    target: BTreeMap<String, Digest>,
+    documents: &[String],
+) -> BTreeMap<String, Digest> {
+    let stem = |key: &str| {
+        documents
+            .iter()
+            .filter(|suffix| key.ends_with(suffix.as_str()))
+            .max_by_key(|suffix| suffix.len())
+            .and_then(|suffix| key.strip_suffix(suffix.as_str()))
+            .map(str::to_owned)
+    };
+    let mut sources: BTreeMap<String, Vec<&String>> = BTreeMap::new();
+    for key in source.keys() {
+        sources
+            .entry(stem(key).unwrap_or_default())
+            .or_default()
+            .push(key);
+    }
+    let mut targets: BTreeMap<String, usize> = BTreeMap::new();
+    for key in target.keys() {
+        let count = targets.entry(stem(key).unwrap_or_default()).or_default();
+        *count = count.saturating_add(1);
+    }
+    target
+        .into_iter()
+        .map(|(key, digest)| {
+            let stemmed = stem(&key).unwrap_or_default();
+            let partner = match sources.get(&stemmed).map(Vec::as_slice) {
+                Some([only]) if !source.contains_key(&key) && targets.get(&stemmed) == Some(&1) => {
+                    Some((*only).clone())
+                }
+                Some(_) | None => None,
+            };
+            (partner.unwrap_or(key), digest)
+        })
+        .collect()
 }
 
 fn origin(source: Option<&Digest>, target: Digest, class: &ArtifactId) -> LocaleTargetOrigin {
@@ -266,12 +315,13 @@ fn assign(context: &LocaleTreeContext, path: &str) -> Option<(Owner, String)> {
             (Owner::Target, &context.target),
         ]
     };
-    order
-        .into_iter()
-        .find_map(|(owner, side)| keyed(side, &context.documents, path).map(|key| (owner, key)))
+    let filenames = context.source.root == context.target.root;
+    order.into_iter().find_map(|(owner, side)| {
+        keyed(side, filenames, &context.documents, path).map(|key| (owner, key))
+    })
 }
 
-fn keyed(side: &LocaleSide, documents: &[String], path: &str) -> Option<String> {
+fn keyed(side: &LocaleSide, filenames: bool, documents: &[String], path: &str) -> Option<String> {
     let relative = path
         .strip_prefix(side.root.as_str())
         .and_then(|rest| rest.strip_prefix('/'))?;
@@ -285,9 +335,9 @@ fn keyed(side: &LocaleSide, documents: &[String], path: &str) -> Option<String> 
             .strip_suffix(locale.as_str())
             .and_then(|head| head.strip_suffix('.'))
             .map(|head| format!("{head}{document}")),
-        None => {
-            (!stem.rsplit('/').next().unwrap_or(stem).contains('.')).then(|| relative.to_owned())
-        }
+        // Only where both locales share a root can a dotted name carry the other's token.
+        None => (!filenames || !stem.rsplit('/').next().unwrap_or(stem).contains('.'))
+            .then(|| relative.to_owned()),
     }
 }
 
