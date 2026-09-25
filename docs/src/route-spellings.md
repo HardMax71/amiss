@@ -94,6 +94,7 @@ is how sphinx's own repository carries 176 `conf.py` and declares one site.
 | `mdbook-pages` | `book.toml` | `book-route`, `built-page` |
 | `zola` | `config.toml` | `content-root` |
 | `astro` | `astro.config.ts`, `astro.config.mts`, `astro.config.js`, `astro.config.mjs`, `astro.config.cjs` | `built-route` |
+| `nextjs-app` | `next.config.js`, `next.config.mjs`, `next.config.ts`, `next.config.cjs`, `next.config.mts` | `page-directory` |
 | `eleventy` | `eleventy.config.ts`, `eleventy.config.js`, `eleventy.config.mjs`, `eleventy.config.cjs`, `.eleventy.js` | `built-route` |
 | `hugo` | `hugo.toml`, `hugo.yaml`, `hugo.json`, `config.toml`, `config.yaml`, `config.json`, `config/_default/hugo.toml`, `config/_default/hugo.yaml`, `config/_default/hugo.json`, `config/_default/config.toml`, `config/_default/config.yaml`, `config/_default/config.json` | `built-route` |
 | `jekyll` | `_config.yml` | `built-route` |
@@ -465,6 +466,7 @@ component descriptor is read for its `name`.
 | `mkdocs` | `directory-url` |
 | `sphinx` | `source-root` |
 | `zola` | `content-root` |
+| `nextjs-app` | `page-directory` |
 | `directory-pages` | `page-url` |
 <!-- amiss-doc-contract:declarable-routers:end -->
 
@@ -476,6 +478,18 @@ way every spelling is. It can move a destination onto a file the tree already ho
 cannot clear a destination the tree lacks, so declaring `hugo` or `jekyll` or `astro` turns on
 no spelling at all. There is still no ignore file and no way to silence a finding. The `base`
 key below is the other half of the file and is read whichever router the line above it names.
+
+`nextjs-app` is the Next.js app router, which serves `app/docs/guide/page.mdx` (or
+`page.md`) at `/docs/guide`, with no trailing slash. `page-directory` reaches that file from
+the route it is served at, so `guide` is `guide/page.mdx`. A link in such a page is read the
+way a browser reads it, from the page's URL, which is the directory holding the page with no
+trailing slash, so `../other` in `app/docs/guide/page.mdx` is `app/other/page.mdx` rather than
+`app/docs/other`. A route names its page and not its directory, so a route directory holding no
+page is missing, which is the 404 the site serves, while a destination whose last segment
+carries an extension stays the file it names. An image stays beside the file, because the MDX
+loader turns it into a module import. nextra's own documentation had five links reported missing that its site serves, all
+read one directory too deep, and a site setting `trailingSlash` or grouping routes in `(group)`
+directories is not modelled.
 
 `page-url` is the row a declaration exists for. A site of that shape publishes a page at a
 directory of its own name and rewrites no destination, so a relative destination resolves
