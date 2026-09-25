@@ -247,7 +247,8 @@ fn located_projection(resolution: &Resolution<RepoPath>) -> Option<Digest> {
             | UnsupportedSemantics::AttributeDependent
             | UnsupportedSemantics::DuplicateLabel
             | UnsupportedSemantics::ExternalInventory
-            | UnsupportedSemantics::RepositoryRoot,
+            | UnsupportedSemantics::RepositoryRoot
+            | UnsupportedSemantics::OversizedDestination,
         )
         | Resolution::Missing(_)
         | Resolution::DeclaredUntracked(_)

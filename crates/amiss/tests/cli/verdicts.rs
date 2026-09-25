@@ -373,12 +373,11 @@ fn a_document_it_cannot_decode_costs_that_document_and_not_the_report() {
     );
 }
 
-/// A destination past `raw-link-destination-bytes` is the same shape of fact: a
-/// ceiling measured against one file and crossed by one line of it. That document
-/// is unsupported, the rest of the repository is reported, and the snapshot totals
-/// on the same page still end a run they cannot finish.
+/// A destination past `raw-link-destination-bytes` is a ceiling crossed by one
+/// reference, so it costs that reference: it is declined with its own reason,
+/// its document is still scanned and every other reference in it is checked.
 #[test]
-fn a_document_over_a_per_document_ceiling_is_unsupported_and_the_run_completes() {
+fn a_destination_over_its_ceiling_is_declined_and_its_document_still_read() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     git(root, &["init", "-q"]);
@@ -392,7 +391,7 @@ fn a_document_over_a_per_document_ceiling_is_unsupported_and_the_run_completes()
     let encoded = "A".repeat(20_000);
     fs::write(
         root.join("docs/embedded.md"),
-        format!("# Embedded\n\n![logo](data:image/png;base64,{encoded})\n"),
+        format!("# Embedded\n\n![logo](data:image/png;base64,{encoded})\n\n[gone](gone.md)\n"),
     )
     .unwrap();
     git(root, &["add", "."]);
@@ -425,20 +424,22 @@ fn a_document_over_a_per_document_ceiling_is_unsupported_and_the_run_completes()
         .iter()
         .find(|row| row["path"] == "docs/embedded.md")
         .expect("the document over the ceiling keeps its row");
-    assert_eq!(embedded["candidate"]["status"], "unsupported");
+    assert_eq!(embedded["candidate"]["status"], "scanned");
+    let mut reasons: Vec<&str> = payload["observations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|row| row["sides"]["each"]["candidate"].as_object())
+        .filter(|side| side["observation_id_input"]["document"] == "docs/embedded.md")
+        .filter_map(|side| side["resolution"]["reason"].as_str())
+        .collect();
+    reasons.sort_unstable();
     assert_eq!(
-        embedded["candidate"]["unsupported_reason"],
-        "resource-ceiling-crossed"
+        reasons,
+        ["oversized-destination", "path-not-found"],
+        "the long destination is declined and the link beside it still checked"
     );
-    assert_eq!(
-        embedded["candidate"]["content_availability"], "available",
-        "the bytes were read; the scan is what stopped"
-    );
-    assert_eq!(
-        payload["summary"]["documents"]["scanned"].as_u64(),
-        Some(2),
-        "the other documents are scanned and reported"
-    );
+    assert_eq!(payload["summary"]["documents"]["scanned"].as_u64(), Some(3));
 }
 
 /// Reformatting a file a document points at changes the target's bytes and nothing

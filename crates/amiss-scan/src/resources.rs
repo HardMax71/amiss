@@ -475,31 +475,24 @@ impl ScanResources {
         )
     }
 
-    /// Charges one extracted reference whose raw destination is
-    /// `destination_bytes` long, as the `document_references`th reference of
-    /// its document.
+    /// Charges one extracted reference as the `document_references`th
+    /// reference of its document. A destination past its byte ceiling is
+    /// declined by the resolver rather than charged here, so it costs that one
+    /// reference and not the document.
     ///
     /// # Errors
     ///
-    /// The destination byte, per-document reference, or per-snapshot
-    /// reference crossing, checked in that order.
-    pub fn charge_reference(
-        &mut self,
-        destination_bytes: u64,
-        document_references: u64,
-    ) -> Result<(), Error> {
-        within_limit(
-            destination_bytes,
-            self.limits.raw_link_destination_bytes,
-            ResourceName::RawLinkDestinationBytes,
-            destination_bytes,
-        )?;
-        within_limit(
-            document_references,
-            self.limits.references_per_document,
-            ResourceName::ReferencesPerDocument,
-            self.limits.references_per_document.saturating_add(1),
-        )?;
+    /// The per-document reference or per-snapshot reference crossing, checked
+    /// in that order.
+    pub fn charge_reference(&mut self, document_references: u64) -> Result<(), Error> {
+        let per_document = self.limits.references_per_document;
+        if document_references > per_document {
+            return Err(Error::ResourceLimit {
+                resource: ResourceName::ReferencesPerDocument,
+                configured_limit: per_document,
+                observed_lower_bound: per_document.saturating_add(1),
+            });
+        }
         Self::charge_count(
             &mut self.references,
             1,

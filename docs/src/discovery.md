@@ -112,10 +112,11 @@ including one refusal vector per clause of the value grammar.
 
 A file the engine tried to read and could not is unsupported too, and the run keeps going.
 Bytes that do not decode as the suffix promises, a tab-indented JSX block or an HTML comment
-the MDX grammar rejects, a 45 KB link destination past `raw-link-destination-bytes`: the
-document is counted, its row carries `undecodable-document` for bytes, `unparsable-document`
-for markup the grammar refuses, or `resource-ceiling-crossed`, and every other document in
-the repository is still reported. The two are apart because the fix is: one is an encoding,
+the MDX grammar rejects, a document past one of its ceilings: the document is counted, its row
+carries `undecodable-document` for bytes, `unparsable-document` for markup the grammar refuses,
+or `resource-ceiling-crossed`, and every other document in the repository is still reported. A
+45 KB link destination past `raw-link-destination-bytes` costs less, only that one reference,
+which is declined as `oversized-destination`. The two are apart because the fix is: one is an encoding,
 the other is the source, and `<!-- -->` in an MDX document is `{/* */}` written wrong. The
 exception is a page a Docusaurus site holds, since Docusaurus reads that comment by default
 where MDX alone refuses it. There the comment the grammar rejected is read as a comment, every
