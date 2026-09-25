@@ -174,6 +174,7 @@ pub enum UnsupportedSemantics<P> {
     DuplicateLabel,
     ExternalInventory,
     RepositoryRoot,
+    OversizedDestination,
 }
 
 impl<P> UnsupportedSemantics<P> {
@@ -188,7 +189,8 @@ impl<P> UnsupportedSemantics<P> {
             | Self::AttributeDependent
             | Self::DuplicateLabel
             | Self::ExternalInventory
-            | Self::RepositoryRoot => false,
+            | Self::RepositoryRoot
+            | Self::OversizedDestination => false,
         }
     }
 }
@@ -207,6 +209,7 @@ pub enum UnsupportedSemanticsReason {
     ExternalInventory,
     Fragment,
     NetworkPath,
+    OversizedDestination,
     Query,
     RepositoryRoot,
     SiteRoute,

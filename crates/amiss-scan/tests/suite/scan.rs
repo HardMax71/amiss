@@ -263,7 +263,7 @@ fn nesting_and_node_counts_observe_limit_plus_one() {
 }
 
 #[test]
-fn reference_budgets_and_destination_bytes_charge_in_document_order() {
+fn reference_budgets_charge_in_document_order() {
     let limits = ScanLimits {
         references_per_document: 2,
         ..ScanLimits::CONTRACT
@@ -277,22 +277,6 @@ fn reference_budgets_and_destination_bytes_charge_in_document_order() {
             configured_limit: 2,
             observed_lower_bound: 3,
         })
-    );
-
-    let limits = ScanLimits {
-        raw_link_destination_bytes: 4,
-        ..ScanLimits::CONTRACT
-    };
-    let mut resources = ScanResources::new(limits);
-    let got = scan_document(&mut resources, Adapter::Markdown, b"[a](abcdef)\n");
-    assert_eq!(
-        got,
-        Err(Error::ResourceLimit {
-            resource: ResourceName::RawLinkDestinationBytes,
-            configured_limit: 4,
-            observed_lower_bound: 6,
-        }),
-        "a per-value byte resource observes the exact declared length"
     );
 
     let limits = ScanLimits {

@@ -142,7 +142,6 @@ impl Error {
             Self::ResourceLimit { resource, .. } => matches!(
                 resource,
                 ResourceName::DocumentBlobBytes
-                    | ResourceName::RawLinkDestinationBytes
                     | ResourceName::ParserNesting
                     | ResourceName::ParserNodesPerDocument
                     | ResourceName::ReferencesPerDocument

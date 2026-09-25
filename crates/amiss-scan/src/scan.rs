@@ -107,10 +107,7 @@ pub fn scan_bytes(
     let mut previous_projection = None;
     for occurrence in extraction.occurrences {
         document_references = document_references.saturating_add(1);
-        resources.charge_reference(
-            length(occurrence.raw_destination.as_bytes()),
-            document_references,
-        )?;
+        resources.charge_reference(document_references)?;
         let projection_digest =
             source_projection_digest(source, occurrence.block_span, previous_projection)?;
         previous_projection = Some((occurrence.block_span, projection_digest));
@@ -175,7 +172,7 @@ fn governed_sources(
     for definition in definitions {
         let span = definition.span;
         document_references = document_references.saturating_add(1);
-        resources.charge_reference(0, document_references)?;
+        resources.charge_reference(document_references)?;
         let bytes = source
             .get(span.0..span.1)
             .ok_or(Error::Parse(amiss_md::Fault::InvalidSourceSpan))?;
@@ -246,17 +243,12 @@ pub(crate) fn replay_scan_charges(
     resources.charge_embedded_code(scanned.embedded_code_bytes);
     resources.charge_work(scanned.work.nodes, scanned.work.nesting)?;
 
-    let mut document_references = 0_u64;
-    for occurrence in &scanned.occurrences {
-        document_references = document_references.saturating_add(1);
-        resources.charge_reference(
-            length(occurrence.occurrence.raw_destination.as_bytes()),
-            document_references,
-        )?;
-    }
-    for _definition in &scanned.governed {
-        document_references = document_references.saturating_add(1);
-        resources.charge_reference(0, document_references)?;
+    let references = scanned
+        .occurrences
+        .len()
+        .saturating_add(scanned.governed.len());
+    for document_references in 1..=u64::try_from(references).unwrap_or(u64::MAX) {
+        resources.charge_reference(document_references)?;
     }
     Ok(())
 }

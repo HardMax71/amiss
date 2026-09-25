@@ -71,25 +71,17 @@ fn every_charge_admits_its_ceiling_and_refuses_the_next() {
     );
 
     let mut scan = ScanResources::new(limits());
-    assert!(
-        scan.charge_reference(4, 2).is_ok(),
-        "a destination at its cap"
-    );
-    let destination = scan.charge_reference(5, 0).unwrap_err();
-    assert_eq!(
-        resource_of(&destination),
-        Some(ResourceName::RawLinkDestinationBytes)
-    );
-    let per_document = scan.charge_reference(1, 3).unwrap_err();
+    assert!(scan.charge_reference(2).is_ok(), "a document at its cap");
+    let per_document = scan.charge_reference(3).unwrap_err();
     assert_eq!(
         resource_of(&per_document),
         Some(ResourceName::ReferencesPerDocument)
     );
     assert_eq!(scan.references(), 1, "only the admitted reference counted");
-    assert!(scan.charge_reference(1, 0).is_ok());
-    assert!(scan.charge_reference(1, 0).is_ok());
+    assert!(scan.charge_reference(0).is_ok());
+    assert!(scan.charge_reference(0).is_ok());
     assert_eq!(scan.references(), 3, "the snapshot total at its cap");
-    let per_snapshot = scan.charge_reference(1, 0).unwrap_err();
+    let per_snapshot = scan.charge_reference(0).unwrap_err();
     assert_eq!(
         resource_of(&per_snapshot),
         Some(ResourceName::ReferencesPerSnapshot)

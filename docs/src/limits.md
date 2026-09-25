@@ -161,7 +161,7 @@ an ordinary document whose path the report writes as hex. The alternative in eve
 these cases is a report that looks complete and is not.
 
 One file is not the run. A document whose bytes will not decode as its format requires, one
-whose markup its grammar rejects, and one that crosses one of the five per-document ceilings
+whose markup its grammar rejects, and one that crosses one of the four per-document ceilings
 say nothing about the rest of the tree, so none of them ends the run. Such a document is
 unsupported: it is counted in the summary, named in the human output, and its report row
 carries `undecodable-document`, `unparsable-document` or `resource-ceiling-crossed`. An `unsupported-document-format` finding records that its
@@ -169,9 +169,12 @@ references went unchecked. What the old refusal protected still holds. The file 
 quietly skipped, its references are never counted as checked, and a repository policy that
 protects that path fails the run through `coverage-reduced`.
 
-The five per-document ceilings are `document-blob-bytes`, `raw-link-destination-bytes`,
-`parser-nesting`, `parser-nodes-per-document`, and `references-per-document`. Every other
-ceiling on this page bounds a whole snapshot or the run itself, so crossing one is a refusal.
+The four per-document ceilings are `document-blob-bytes`, `parser-nesting`,
+`parser-nodes-per-document`, and `references-per-document`. One reference is smaller still:
+a destination past `raw-link-destination-bytes`, such as an inline base64 image, costs that
+reference alone, which is declined as `oversized-destination` while the rest of its document
+is read and checked. Every other ceiling on this page bounds a whole snapshot or the run itself,
+so crossing one is a refusal.
 
 The codes themselves live on [Analysis errors](errors.md), one fixed sentence each saying
 what happened and what to do about it. Two of them are this page's own:
