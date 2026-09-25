@@ -545,6 +545,7 @@ fn bound_adapter_answers_only_policy_included_rows() {
         sole_sites: BTreeMap::new(),
         sphinx_included: BTreeSet::new(),
         asciidoc_included: BTreeSet::new(),
+        fragment_pages: BTreeMap::new(),
         antora_components: BTreeMap::new(),
         source_suffixes: BTreeMap::new(),
         sphinx_configs: BTreeMap::new(),

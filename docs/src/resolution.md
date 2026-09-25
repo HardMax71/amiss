@@ -391,7 +391,14 @@ before. The count says how many references the run saw rather than how many it a
 Heading evaluation expands the closed local include subset in source order. An AsciiDoc
 `include::path[]` or option-free, document-level reStructuredText `include` participates when its
 literal relative target was already scanned under the same adapter; each nested path is relative to
-the file that includes it. An MDX partial joins the same subset: a default import of a relative
+the file that includes it, except under a `conf.py`, where Sphinx reads every nested path from the
+page and so does this expansion. The same holds for everything else an included file writes: a
+file a Sphinx page includes, directly or through other included files, reads each relative
+reference from that page's directory rather than its own, so an image, a `:doc:`, a download or
+an include in it names the page's file, and one the page lacks is missing there. A file several
+pages include has to reach its target from each of them. An include carrying options is left
+out, since MyST's `relative-docs` and `relative-images` read paths from the included file
+instead. An MDX partial joins the same subset: a default import of a relative
 Markdown document rendered as an element, which is how Docusaurus composes one page out of
 several files, and the identities flow to the page rather than back to the partial. So a fragment
 written inside a document Docusaurus publishes no page for is undecided rather than absent: the
