@@ -4,6 +4,8 @@ use amiss_wire::extraction::SourceConstruct;
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::uri::scheme;
 
+use crate::scanned::Publication;
+
 /// A spelling a router serves for a page whose source file is named
 /// otherwise. The first three were harvested from the router itself and hold
 /// in every tree; the rest were read from a generator's own resolver and hold
@@ -275,6 +277,7 @@ const BASE_URL: &[u8] = b"baseURL";
 const DEFAULT_LANGUAGE: &[u8] = b"defaultContentLanguage";
 const LANGUAGE_IN_SUBDIR: &[u8] = b"defaultContentLanguageInSubdir";
 const LANGUAGE_TABLE: &str = "languages.";
+const PATH_CASE: &[u8] = b"disablePathToLower";
 const MOUNT_TABLE: &str = "[[module.mounts]]";
 const MOUNT_SOURCE: &[u8] = b"source";
 const MOUNT_TARGET: &[u8] = b"target";
@@ -559,9 +562,10 @@ pub(crate) fn astro_base(source: &[u8]) -> Option<String> {
 /// Every content root one Hugo configuration names and the path each is
 /// served under: the project's own, where a key opens a line of the file
 /// itself, and one for every language table. Where the file names no root,
-/// Hugo reads `content`.
+/// Hugo reads `content`. The flag says whether the site serves its page URLs
+/// in lowercase, which Hugo does unless `disablePathToLower` is bound true.
 #[must_use]
-pub(crate) fn hugo_project(source: &[u8]) -> BTreeMap<String, String> {
+pub(crate) fn hugo_project(source: &[u8]) -> (BTreeMap<String, String>, bool) {
     let project = project_lines(source);
     let bound = |key| project.iter().find_map(|line| configured(line, key));
     let base = bound(BASE_URL).map(served_under).unwrap_or_default();
@@ -580,7 +584,7 @@ pub(crate) fn hugo_project(source: &[u8]) -> BTreeMap<String, String> {
         };
         roots.insert(directory, served);
     }
-    roots
+    (roots, bound(PATH_CASE) != Some("true"))
 }
 
 /// Where one language of a site is served: under the site's own base, and
@@ -924,41 +928,38 @@ const HUGO_ONLY_KEYS: [&[u8]; 6] = [
 ];
 
 /// What a document declares about its own publication in frontmatter: the
-/// `slug` and the `id` it publishes under, and the page URLs it is also served
-/// at. A name is a plain scalar on a line of its own and the URLs are the block
-/// under `aliases`. Nothing else in the region is read, and the region stays
-/// opaque to the grammar.
+/// `slug` and the `id` it publishes under, the page URLs it is also served at,
+/// and whether it names the `layout` it is rendered through. A name is a plain
+/// scalar on a line of its own and the URLs are the block under `aliases`.
+/// Nothing else in the region is read, and the region stays opaque to the
+/// grammar.
 #[must_use]
-pub(crate) fn declared_publication(
-    adapter: Adapter,
-    source: &[u8],
-) -> (Option<String>, Option<String>, Vec<String>) {
+pub(crate) fn declared_publication(adapter: Adapter, source: &[u8]) -> Publication {
+    let mut publication = Publication::default();
     if !matches!(adapter, Adapter::Markdown | Adapter::Mdx) {
-        return (None, None, Vec::new());
+        return publication;
     }
     let Some(body) = amiss_md::frontmatter::recognize(source)
         .and_then(|region| source.get(region.bom_bytes..region.suffix_offset))
     else {
-        return (None, None, Vec::new());
+        return publication;
     };
-    let mut id = None;
-    let mut slug = None;
-    let mut redirects: Vec<String> = Vec::new();
     let mut listing = false;
     for line in amiss_md::lines::scan(body) {
         let content = line.content(body);
         if listing && let Some(entry) = sequence_entry(content) {
-            redirects.push(entry.to_owned());
+            publication.redirects.push(entry.to_owned());
             continue;
         }
         listing = opens_sequence(content, PAGE_REDIRECTS);
+        publication.layout |= scalar(content, b"layout:").is_some();
         if let Some(value) = scalar(content, b"slug:") {
-            slug = slug.or(Some(value));
+            publication.slug.get_or_insert_with(|| value.to_owned());
         } else if let Some(value) = scalar(content, b"id:") {
-            id = id.or(Some(value));
+            publication.id.get_or_insert_with(|| value.to_owned());
         }
     }
-    (slug.map(str::to_owned), id.map(str::to_owned), redirects)
+    publication
 }
 
 /// Whether a key opens a block sequence: it opens the line and carries no

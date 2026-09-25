@@ -74,8 +74,7 @@ pub fn scan_bytes(
     resources.charge_embedded_code(analysis.embedded_code_bytes);
     resources.charge_work(analysis.work.nodes, analysis.work.nesting)?;
 
-    let (declared_slug, declared_id, declared_redirects) =
-        crate::route::declared_publication(adapter, source);
+    let publication = crate::route::declared_publication(adapter, source);
     let images_dir = if adapter == Adapter::AsciiDoc {
         amiss_adoc::images_dir(source)
     } else {
@@ -90,9 +89,7 @@ pub fn scan_bytes(
             opaque: Opaque::default(),
             governed: Vec::new(),
             declared_anchors: Vec::new(),
-            declared_slug,
-            declared_id,
-            declared_redirects,
+            publication,
             images_dir,
             commented: false,
             anchor_source: None,
@@ -151,9 +148,7 @@ pub fn scan_bytes(
         opaque: extraction.opaque,
         governed,
         declared_anchors: extraction.declared_anchors,
-        declared_slug,
-        declared_id,
-        declared_redirects,
+        publication,
         images_dir,
         commented: false,
         anchor_source: Some(AnchorSource {

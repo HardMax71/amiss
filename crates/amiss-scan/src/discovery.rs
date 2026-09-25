@@ -368,6 +368,7 @@ fn record_declaration(
             let project = directory(path.as_bytes()).to_vec();
             if let Some(base) = crate::route::astro_base(body) {
                 let root = join(&project, crate::route::STARLIGHT_CONTENT.as_bytes());
+                declared.folded_roots.insert(root.clone());
                 declared
                     .published_roots
                     .insert(project.clone(), vec![(root, base)]);
@@ -419,7 +420,8 @@ fn record_publication(
     let project = declaring_directory(path.as_bytes(), name)
         .unwrap_or_default()
         .to_vec();
-    let roots: Vec<(Vec<u8>, String)> = crate::route::hugo_project(body)
+    let (roots, lowercased) = crate::route::hugo_project(body);
+    let roots: Vec<(Vec<u8>, String)> = roots
         .into_iter()
         .map(|(root, base)| (join(&project, root.as_bytes()), base))
         .collect();
@@ -439,6 +441,11 @@ fn record_publication(
         declared.bound_configs.insert(path, rule.declared_by);
     }
     if hugo {
+        if lowercased {
+            declared
+                .folded_roots
+                .extend(roots.iter().map(|(root, _)| root.clone()));
+        }
         declared.published_roots.insert(project, roots);
     }
 }
@@ -457,6 +464,7 @@ struct Declared {
     bound_configs: BTreeMap<RepoPath, &'static [&'static str]>,
     book_sources: BTreeMap<Vec<u8>, Vec<u8>>,
     starlight_roots: BTreeSet<Vec<u8>>,
+    folded_roots: BTreeSet<Vec<u8>>,
 }
 
 /// Every document the seeds include through a parsed include, and every one
@@ -616,6 +624,8 @@ pub struct SnapshotDiscovery {
     /// Each Astro project whose configuration loads Starlight, by the
     /// directory holding that configuration.
     pub starlight_roots: BTreeSet<Vec<u8>>,
+    /// The content roots whose generator serves every page URL in lowercase.
+    pub folded_roots: BTreeSet<Vec<u8>>,
 }
 
 /// What the snapshot's documents say about one `.. _name:` label: the one
@@ -726,6 +736,7 @@ pub(crate) fn empty_discovery() -> SnapshotDiscovery {
         bound_configs: BTreeMap::new(),
         book_sources: BTreeMap::new(),
         starlight_roots: BTreeSet::new(),
+        folded_roots: BTreeSet::new(),
     }
 }
 
@@ -1055,6 +1066,7 @@ pub(crate) fn discover_walk(
         discovery.bound_configs = declared.bound_configs;
         discovery.book_sources = declared.book_sources;
         discovery.starlight_roots = declared.starlight_roots;
+        discovery.folded_roots = declared.folded_roots;
         let context = DocumentContext {
             repo,
             includes,
@@ -1127,6 +1139,7 @@ pub fn discover_index(
     discovery.bound_configs = declared.bound_configs;
     discovery.book_sources = declared.book_sources;
     discovery.starlight_roots = declared.starlight_roots;
+    discovery.folded_roots = declared.folded_roots;
     declared_documents(&context, git, scan, &mut discovery)?;
     settle_comments(&mut discovery);
     (discovery.published_routes, discovery.redirect_routes) = published_routes(&discovery);
@@ -1385,7 +1398,7 @@ pub(crate) fn published_routes(
     let redirects = published_by(snapshot, &DIRECTORY_PAGES);
     let mut published: Vec<(RepoPath, RepoPath)> = Vec::new();
     let mut moved: Vec<(RepoPath, RepoPath)> = Vec::new();
-    if !names && !redirects && snapshot.starlight_roots.is_empty() {
+    if !names && !redirects && snapshot.folded_roots.is_empty() {
         return (sole_claims(published), sole_claims(moved));
     }
     for record in &snapshot.documents {
@@ -1400,7 +1413,7 @@ pub(crate) fn published_routes(
         }
         if redirects {
             moved.extend(
-                moved_from(snapshot, &record.path, &scanned.declared_redirects)
+                moved_from(snapshot, &record.path, &scanned.publication.redirects)
                     .into_iter()
                     .map(|route| (route, record.path.clone())),
             );
@@ -1456,21 +1469,28 @@ fn published_route(
             .rsplit(|byte| *byte == b'/')
             .next()
             .is_some_and(|name| name.starts_with(b"_"));
-        return match scanned.declared_slug.as_deref() {
+        return match scanned.publication.slug.as_deref() {
             _ if partial => None,
-            Some(slug) => {
-                RepoPath::from_bytes(join(&root, slug.trim_start_matches('/').as_bytes()))
-            }
-            None => RepoPath::from_bytes(page_route(raw, false)),
+            Some(slug) => folded(&root, &join(&root, slug.trim_start_matches('/').as_bytes())),
+            None => folded(&root, &page_route(raw, false)),
         };
+    }
+    if let Some(root) = snapshot
+        .folded_roots
+        .iter()
+        .filter(|root| within(raw, root))
+        .max_by_key(|root| root.len())
+    {
+        return folded(root, &page_route(raw, true));
     }
     if !docusaurus {
         return None;
     }
     let Some(name) = scanned
-        .declared_slug
+        .publication
+        .slug
         .as_ref()
-        .or(scanned.declared_id.as_ref())
+        .or(scanned.publication.id.as_ref())
     else {
         return RepoPath::from_bytes(page_route(raw, false));
     };
@@ -1480,6 +1500,12 @@ fn published_route(
     let site = declared_root(snapshot, raw, DOCUSAURUS.declared_by)?;
     let root = content_root(&site, raw).unwrap_or(site);
     RepoPath::from_bytes(join(&root, absolute.as_bytes()))
+}
+
+/// A route under a root whose generator serves it in lowercase, as served.
+fn folded(root: &[u8], route: &[u8]) -> Option<RepoPath> {
+    let under = std::str::from_utf8(route.get(root.len()..)?).ok()?;
+    RepoPath::from_bytes([root, under.to_lowercase().as_bytes()].concat())
 }
 
 /// Every directory this tree declares one rule's generator in. A declaration

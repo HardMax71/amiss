@@ -241,7 +241,7 @@ fn expanded_anchors(
         && !chapter
         && !transliterated(snapshot, adapter, path, &expanded.headings)
         && !unrouted(snapshot, adapter, path)
-        && !templated(snapshot, adapter, path, source.transclusions)
+        && !templated(snapshot, adapter, path, &source)
     {
         Anchors::Published(identities)
     } else {
