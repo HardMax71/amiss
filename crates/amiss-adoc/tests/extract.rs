@@ -493,3 +493,50 @@ fn a_reserved_line_comment_becomes_governed_and_only_it() {
         assert_eq!(read.governed.len(), 0, "{reason}");
     }
 }
+
+/// Asciidoctor reads a line over a matching underline as a section title, so
+/// the underline opens no listing and the text after it is read, while an
+/// underline off by more than one character still opens a listing block.
+#[test]
+fn a_two_line_title_is_a_section_not_a_listing() -> Result<(), Refusal> {
+    let source = "= Doc\n\nFirst Section\n-------------\n\nSee xref:b.adoc[y].\n\nShort\n------------\n\nlink:hidden.html[z]\n";
+    let extraction = extract(source.as_bytes())?;
+    let titles: Vec<(usize, &str)> = extraction
+        .titles
+        .iter()
+        .map(|title| (title.level, title.text.as_str()))
+        .collect();
+    assert_eq!(titles, [(1, "Doc"), (2, "First Section")]);
+    let targets: Vec<&str> = extraction
+        .references
+        .iter()
+        .map(|reference| reference.target.as_str())
+        .collect();
+    assert_eq!(targets, ["b.adoc"]);
+    Ok(())
+}
+
+/// An include inside a listing, literal or passthrough block is resolved before
+/// blocks are parsed, so it still names a file, one whose content lands as
+/// literal text.
+#[test]
+fn an_include_inside_a_verbatim_block_names_its_file() -> Result<(), Refusal> {
+    let source =
+        "[source,java]\n----\ninclude::Example.java[]\n----\n\n++++\ninclude::raw.html[]\n++++\n";
+    let extraction = extract(source.as_bytes())?;
+    let includes: Vec<(&str, bool)> = extraction
+        .references
+        .iter()
+        .map(|reference| {
+            (
+                reference.target.as_str(),
+                matches!(
+                    reference.transclusion,
+                    Some(Err(TransclusionRefusal::Context))
+                ),
+            )
+        })
+        .collect();
+    assert_eq!(includes, [("Example.java", true), ("raw.html", true)]);
+    Ok(())
+}

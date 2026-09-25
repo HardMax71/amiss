@@ -83,11 +83,15 @@ pub fn extract(source: &[u8]) -> Result<Extraction, Refusal> {
     };
     for (index, block) in scanned.iter().enumerate() {
         match block.delimiter {
-            Some(Delimiter::Passthrough) => {
-                extraction.opaque.push(block.span);
+            Some(delimiter @ (Delimiter::Passthrough | Delimiter::Verbatim)) => {
+                if delimiter == Delimiter::Passthrough {
+                    extraction.opaque.push(block.span);
+                }
+                let body = text.get(block.span.0..block.span.1).unwrap_or_default();
+                verbatim_includes(&mut extraction, index, block, body);
                 continue;
             }
-            Some(Delimiter::Comment | Delimiter::Compound | Delimiter::Verbatim) => continue,
+            Some(Delimiter::Comment | Delimiter::Compound) => continue,
             None => {}
         }
         let body = text.get(block.span.0..block.span.1).unwrap_or_default();
@@ -96,8 +100,36 @@ pub fn extract(source: &[u8]) -> Result<Extraction, Refusal> {
     Ok(extraction)
 }
 
-fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str) {
+/// Asciidoctor resolves an include before it parses blocks, so one inside a
+/// listing, literal or passthrough block still names a file, whose content
+/// lands as literal text rather than as parsed `AsciiDoc`.
+fn verbatim_includes(extraction: &mut Extraction, index: usize, block: &Block, body: &str) {
     for (offset, line) in lines(body) {
+        if !line.starts_with("include::") {
+            continue;
+        }
+        let at = block.span.0.saturating_add(offset);
+        for mut reference in references(line, at) {
+            if reference.kind != ReferenceKind::Include {
+                continue;
+            }
+            reference.block = index;
+            reference.block_span = block.span;
+            reference.transclusion =
+                Some(Err(amiss_wire::extraction::TransclusionRefusal::Context));
+            extraction.references.push(reference);
+        }
+    }
+}
+
+fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str) {
+    let rows: Vec<(usize, &str)> = lines(body).collect();
+    let mut underline = false;
+    for (row, &(offset, line)) in rows.iter().enumerate() {
+        if underline {
+            underline = false;
+            continue;
+        }
         let at = block.span.0.saturating_add(offset);
         let bare = line.strip_suffix('\r').unwrap_or(line);
         if let Some(rest) = bare.strip_prefix("// ")
@@ -112,7 +144,16 @@ fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str)
             });
             continue;
         }
-        if let Some(title) = macros::title(line, at) {
+        let setext = rows
+            .get(row.saturating_add(1))
+            .and_then(|(_offset, next)| block::setext_level(line, next))
+            .map(|level| Title {
+                level,
+                text: line.trim().to_owned(),
+                span: (at, at.saturating_add(line.len())),
+            });
+        underline = setext.is_some();
+        if let Some(title) = macros::title(line, at).or(setext) {
             // Asciidoctor names a title by its text only when it holds a space or a capital.
             if title.text.contains(' ') || title.text.chars().any(char::is_uppercase) {
                 extraction.anchors.push(title.text.clone());
