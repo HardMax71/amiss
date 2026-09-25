@@ -236,7 +236,10 @@ evaluation as `check --index`, takes every finding whose `fix` is not null, and 
 exactly those byte spans in the working tree. Nothing is applied on faith. The staged
 index is pinned before the evaluation and verified unchanged before any write. A document
 is repaired only while its working-tree bytes still equal the staged bytes the fixes were
-computed against, and one already holding the repaired bytes counts as already fixed. A
+computed against, and one already holding the repaired bytes counts as already fixed. A CRLF
+checkout counts as those bytes too: under `core.autocrlf` or `eol=crlf` a staged document with
+no carriage return is written with every line ending as CRLF, so the repair is applied to the
+staged bytes and written back the same way. A mix of endings is not a checkout and is refused. A
 document is refused whole when it is missing from the index, a symlink, unreadable,
 escaping the worktree, differing from its staged bytes, carrying overlapping or
 out-of-range spans, or failing the write; each refusal row names its reason. Output is one

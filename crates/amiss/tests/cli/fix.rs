@@ -124,6 +124,33 @@ fn a_case_drifted_path_is_repaired_in_place() {
     assert!(stdout.contains("0 applied, 1 already present"), "{stdout}");
 }
 
+/// A CRLF checkout of the staged bytes, as `core.autocrlf` writes on
+/// Windows, is the staged document in the only other spelling Git maps back
+/// to it, so the repair lands in that spelling and a rerun finds it present.
+#[test]
+fn a_crlf_checkout_is_repaired_in_its_own_line_endings() {
+    let (dir, base) = staged_repo("# Guide\n\n[a](Sections.md)\n");
+    let document = dir.path().join("guide.md");
+    fs::write(&document, "# Guide\r\n\r\n[a](Sections.md)\r\n").unwrap();
+    let (code, stdout) = run_fix(dir.path(), &base);
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("fixed guide.md"), "{stdout}");
+    assert_eq!(
+        fs::read(&document).unwrap(),
+        b"# Guide\r\n\r\n[a](sections.md)\r\n"
+    );
+    let (code, stdout) = run_fix(dir.path(), &base);
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("already fixed guide.md"), "{stdout}");
+
+    fs::write(&document, "# Guide\r\n\n[a](Sections.md)\r\n").unwrap();
+    let (code, stdout) = run_fix(dir.path(), &base);
+    assert_eq!(
+        code, 1,
+        "a mixed ending is not a checkout of the staged bytes: {stdout}"
+    );
+}
+
 /// A worktree that moved past the staged bytes is refused whole, exits 1,
 /// and keeps its bytes.
 #[test]

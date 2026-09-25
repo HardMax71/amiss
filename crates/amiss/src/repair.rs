@@ -166,16 +166,40 @@ fn repair_document(
     let Ok(current) = fs::read(&path) else {
         return DocumentOutcome::Refused("unreadable in the worktree");
     };
-    if current == repaired {
+    let converted = crlf_checkout(&repaired);
+    if current == repaired || converted.as_ref() == Some(&current) {
         return DocumentOutcome::AlreadyApplied(rows.len());
     }
-    if current != *staged {
+    let written = if current == *staged {
+        repaired
+    } else if let Some(converted) = converted
+        && crlf_checkout(staged) == Some(current)
+    {
+        converted
+    } else {
         return DocumentOutcome::Refused("worktree differs from the staged bytes the fixes name");
-    }
-    if fs::write(&path, &repaired).is_err() {
+    };
+    if fs::write(&path, &written).is_err() {
         return DocumentOutcome::Refused("could not be written");
     }
     DocumentOutcome::Applied(rows.len())
+}
+
+/// The bytes a CRLF checkout (`core.autocrlf` or `eol=crlf`) writes for a
+/// blob holding no carriage return, the one conversion that maps back to the
+/// staged bytes exactly.
+fn crlf_checkout(blob: &[u8]) -> Option<Vec<u8>> {
+    if blob.contains(&b'\r') {
+        return None;
+    }
+    let mut converted = Vec::with_capacity(blob.len().saturating_mul(2));
+    for byte in blob {
+        if *byte == b'\n' {
+            converted.push(b'\r');
+        }
+        converted.push(*byte);
+    }
+    Some(converted)
 }
 
 /// A symlinked parent must not carry the write outside the repository, so
