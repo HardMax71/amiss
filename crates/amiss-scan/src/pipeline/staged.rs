@@ -16,9 +16,10 @@ use crate::resources::{ScanLimits, ScanResources};
 use super::external::external_gate;
 use super::{
     CandidateEvaluation, CandidateOutcomes, Evaluated, ExternalVerified, PipelineFailure,
-    PipelineResult, ResolvedTree, SetupShell, binding_mismatch, conclude, controls_failure, detail,
-    effective_limits, effective_policy, effective_shell, evaluate_tree, floor_gate, pair_effects,
-    policy_unavailable_reason, resolve_tree, side_observations, unavailable_reason,
+    PipelineResult, ResolvedTree, SetupShell, base_policy, binding_mismatch, conclude,
+    controls_failure, detail, effective_limits, effective_policy, effective_shell, evaluate_tree,
+    floor_gate, pair_effects, policy_unavailable_reason, resolve_tree, side_observations,
+    unavailable_reason,
 };
 
 /// The staged candidate's discovery and observations plus the failure rows
@@ -146,7 +147,13 @@ fn staged_policy(
         setup.controls_unavailable = Some(policy_unavailable_reason(&details));
         PipelineFailure::new(setup, details)
     };
-    let base = crate::policy::acquire(repo, git_resources, base_scan, base_tree).map_err(&bail)?;
+    let base = base_policy(crate::policy::acquire(
+        repo,
+        git_resources,
+        base_scan,
+        base_tree,
+    ))
+    .map_err(&bail)?;
     let staged = index
         .entries
         .iter()
