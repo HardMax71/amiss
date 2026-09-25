@@ -2,6 +2,8 @@ amiss:
   image: buildpack-deps:stable-scm@sha256:ac978b7836573cd359152b362450d668e0a3e2b146f2348a60156aef043b100a
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # the default branch's own report is the baseline the merge-request widget diffs against
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   variables:
     # the evaluation reads both commits' objects, not a diff
     GIT_DEPTH: "0"
@@ -16,9 +18,20 @@ amiss:
     - grep ' amiss-linux-x86_64$' SHA256SUMS | sha256sum -c -
     - chmod +x amiss-linux-x86_64
     - |
+      parent="$(git rev-parse --verify -q "${CI_COMMIT_SHA}^1" || echo "$CI_COMMIT_SHA")"
+      if [ "$CI_PIPELINE_SOURCE" = merge_request_event ]; then
+        # a merged-results or merge-train commit already holds the target, so its first parent is the base
+        case "${CI_MERGE_REQUEST_EVENT_TYPE:-}" in
+          merged_result|merge_train) base="$parent" ;;
+          *) base="$CI_MERGE_REQUEST_DIFF_BASE_SHA" ;;
+        esac
+      else
+        base="$CI_COMMIT_BEFORE_SHA"
+        case "$base" in *[!0]*) ;; *) base="$parent" ;; esac
+      fi
       set +e
       ./amiss-linux-x86_64 check --repo . --object-format "${AMISS_OBJECT_FORMAT:-sha1}" \
-        --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --candidate "$CI_COMMIT_SHA" \
+        --base "$base" --candidate "$CI_COMMIT_SHA" \
         --profile "${AMISS_PROFILE:-observe}" --format json > amiss-report.json
       status=$?
       set -e

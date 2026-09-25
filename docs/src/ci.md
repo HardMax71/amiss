@@ -232,16 +232,19 @@ variables:
 Both pins name the release you reviewed and move together, and the job's image is pinned by
 digest. The
 [template](https://github.com/HardMax71/amiss/blob/main/integrations/gitlab/amiss.gitlab-ci.yml)
-runs on merge-request pipelines, refuses to run with exit 2 until `AMISS_VERSION` is set,
-verifies the downloaded binary against the release's `SHA256SUMS` before executing it, scans
-the merge request's diff base against its head under `AMISS_PROFILE` (`observe` until the
-first report is triaged, the same ramp as everywhere else), renders Code Quality and JUnit
+runs on merge-request pipelines and on the default branch, refuses to run with exit 2 until
+`AMISS_VERSION` is set, and verifies the downloaded binary against the release's `SHA256SUMS`
+before executing it. It scans under `AMISS_PROFILE` (`observe` until the first report is
+triaged, the same ramp as everywhere else). A merge request compares its diff base with its
+head, a merged-results or merge-train pipeline compares its merge commit with that commit's
+first parent, so drift already on the target is not charged to the merge request, and the
+default branch compares each push with the commit before it. It renders Code Quality and JUnit
 from that same validated report without a second scan, and uploads three artifacts: the
 exact JSON report, a
 [Code Quality report](https://docs.gitlab.com/ci/testing/code_quality/) rendered in the
 merge-request widget and inline on the diff, and a JUnit report for the test widget. The
-fingerprint is the finding key, so the widget's new-versus-resolved diff follows the same
-identity the report uses. An exit-2 run writes no Code Quality rows, since the widget would
+fingerprint is the finding key, so the widget's new-versus-resolved diff, taken against the
+default branch's own report, follows the same identity the report uses. An exit-2 run writes no Code Quality rows, since the widget would
 read an empty file as a clean run; the JUnit report carries the error instead. This is
 rendering, not the trust lane: a blocking run still fails the job by exit class, and the
 provider-verified gate is [the GitLab policy lane](provider-gitlab.md).
