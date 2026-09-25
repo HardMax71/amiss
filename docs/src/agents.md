@@ -80,3 +80,21 @@ check runs under `enforce-introduced`, and a blocking or untrusted result stops 
 hands the report back to the agent, which is how Claude Code's hooks refuse a tool call. A
 repository with no commit yet, or a machine without `amiss` on its path, commits unchecked, and
 the hook says so.
+
+## Codex, Copilot and other skill readers
+
+The skill is a plain Agent Skills directory: one `SKILL.md` whose frontmatter names the skill and
+says when to use it, so an agent that reads that layout loads it without the plugin. Codex looks
+in `.agents/skills` from the working directory up to the repository root, and Copilot reads
+`.agents/skills`, `.github/skills` and `.claude/skills`. Copy the directory into one of them from
+the release your CI pins:
+
+```sh
+mkdir -p .agents/skills/amiss
+curl -fsSL -o .agents/skills/amiss/SKILL.md \
+  "https://raw.githubusercontent.com/HardMax71/amiss/v<reviewed-version>/integrations/claude/skills/amiss/SKILL.md"
+```
+
+Replace `<reviewed-version>` with the release you reviewed, the same one the check runs. The
+commit hook stays Claude Code's own, so under another agent the pre-commit hook in
+[Running it in CI](ci.md) is the gate the agent cannot skip.
