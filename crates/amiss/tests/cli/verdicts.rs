@@ -231,7 +231,12 @@ fn index_mode_scans_the_staged_snapshot() {
         "--format",
         "json",
     ]);
-    assert_eq!((code, stderr.as_str()), (0, ""));
+    assert_eq!(code, 0, "{stderr}");
+    assert!(
+        stderr.contains("1 staged documents differ from their working copies")
+            && stderr.contains("\"docs/staged.md\""),
+        "the drift is named, never read: {stderr}"
+    );
     let payload = payload(&stdout);
     assert_eq!(payload["result"]["status"], "pass");
     assert_eq!(payload["evaluation"]["mode"], "index");

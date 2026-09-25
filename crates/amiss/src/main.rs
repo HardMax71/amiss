@@ -17,6 +17,7 @@ mod references;
 mod render;
 mod repair;
 mod sarif;
+mod staging;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
@@ -468,6 +469,7 @@ fn run(invocation: &Invocation, reserve: &mut BufWriter<Stdout>) -> ExitCode {
         );
         return failure;
     };
+    staging::unstaged(invocation, &built.envelope.payload);
     if invocation.verb == Verb::Fix {
         return repair::run(
             &invocation.repo,

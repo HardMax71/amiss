@@ -11,6 +11,12 @@ or the file `GIT_INDEX_FILE` names when Git sets it, as it does for a hook under
 `git commit -a` or a partial commit. That file has to sit in the same private git directory;
 one anywhere else is refused with `GIT_INDEX_OUTSIDE_REPOSITORY` rather than read.
 
+The working directory is never judged, but a staged `check` does look at it once, after the
+verdict. It names on stderr each document it read whose working copy holds other bytes than
+the staged blob, since a pass over stale staging says nothing about the edit still waiting to
+be added. A CRLF copy of a LF blob, which `core.autocrlf` and `eol=crlf` write and `git status`
+calls clean, is not a difference, and neither is a copy a sparse checkout left out.
+
 ## What refs name
 
 Branch refs describe identity and link scope; they never select either snapshot. The rolling
