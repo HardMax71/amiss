@@ -74,6 +74,7 @@ for a whole-file reference, any change to the target bytes or file mode is a cha
 numeric line fragment, any change to the file mode or to bytes inside the inclusive selection
 is a change and bytes outside it are not.
 Every normalizer is a parser for someone else's language and each one shipped would be a
-place for a real change to hide. For the block itself, the compared projection is
-structural, so re-wrapping a paragraph without changing its text does not create fake
-impact.
+place for a real change to hide. For the block itself, the compared projection is its
+source bytes with line endings made LF, so a re-wrapped paragraph reads as a changed subject.
+That costs a `subject-changed` record and nothing more: a failing reference keeps its
+attribution through the pairing, as [Profiles and findings](profiles.md) describes.
