@@ -286,7 +286,8 @@ twice is undecided rather than guessed between. Labels follow the Docutils simpl
 rule, case-folded with whitespace runs collapsed, a phrase declaration may arrive
 backtick-quoted or sit inside a list item or grid-table cell, and an undeclared name
 carrying a colon is treated as another project's inventory, declared unsupported rather
-than reported missing. A prefixless name absent from the local table can resolve only through one
+than reported missing. So are `genindex`, `modindex`, `py-modindex` and `search`, which
+Sphinx declares itself for the index and search pages every build writes. A prefixless name absent from the local table can resolve only through one
 unique label in complete, candidate-bound [Intersphinx evidence](semantic-evidence.md) supplied
 through the sealed trust boundary. Local declarations retain precedence; duplicate external labels
 stay unsupported, while absent, partial, stale, malformed, or mismatched evidence leaves the name

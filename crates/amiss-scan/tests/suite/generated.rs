@@ -426,3 +426,33 @@ fn the_myst_rows_name_the_file_the_route_table_reads() {
     assert_eq!(routed, declared, "the Sphinx declaration is one file");
     assert!(!routed.is_empty(), "the route table declares Sphinx");
 }
+
+/// Sphinx declares `genindex`, `modindex`, `py-modindex` and `search` for the
+/// pages every build writes, so a `:ref:` to one is the build's own inventory
+/// rather than a missing label, while a name nobody declares stays missing.
+#[test]
+fn a_sphinx_built_in_label_is_not_missing() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("docs/conf.py", "project = 'probe'\n"),
+            (
+                "docs/index.rst",
+                ":ref:`genindex`\n\n:ref:`py-modindex`\n\n:ref:`Search <search>`\n\n:ref:`nowhere`\n",
+            ),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    for line in [1, 3, 5] {
+        assert_eq!(
+            answer(&rows, "docs/index.rst", line),
+            &Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory),
+            "line {line}"
+        );
+    }
+    assert_eq!(
+        answer(&rows, "docs/index.rst", 7),
+        &Resolution::Missing(Missing::LabelNotDeclared)
+    );
+}

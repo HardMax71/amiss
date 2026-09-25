@@ -289,12 +289,21 @@ impl Resolver<'_> {
                 Some(crate::semantic::InventoryLabel::Ambiguous) => {
                     Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
                 }
+                None if SPHINX_BUILT_IN_LABELS
+                    .contains(&amiss_rst::normalized_label(label).as_str()) =>
+                {
+                    Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
+                }
                 None => Resolution::Missing(Missing::LabelNotDeclared),
             },
         };
         Ok((intent, resolution, external_destination))
     }
 }
+
+/// The labels Sphinx itself declares for the pages every build writes, which
+/// its own inventory lists and no document of the tree declares.
+const SPHINX_BUILT_IN_LABELS: [&str; 4] = ["genindex", "modindex", "py-modindex", "search"];
 
 /// The anchor inputs discovery already parsed for an in-set scanned target
 /// under the same adapter; a mismatch falls back to the target-body parse.
