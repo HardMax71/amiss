@@ -152,6 +152,9 @@ label resolved through candidate-bound inventory evidence carries both the selec
 and `reason: "intersphinx-inventory"`, but counts as resolved and is not delegated again. A
 generated route proved by complete site-build evidence similarly carries `reason: "site-build"`,
 counts as resolved, and has no `external_destination` because it names no external target.
+An occurrence whose target misses a heading anchor or a label carries `fragment`, the text its
+`fragment_digest` digests, so a reader can name what is missing without the tree. It stays
+outside the observation identity and every fact, so no key or fact digest moves with it.
 [The external plan](external-plan.md) derives the introduced and removed destinations from
 a written report, and [Amiss and link checkers](comparison.md) shows the pipe that hands
 them to the tool that does fetch.

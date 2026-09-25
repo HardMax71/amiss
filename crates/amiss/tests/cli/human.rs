@@ -487,7 +487,7 @@ fn every_row_names_its_places_reasons_and_meaning_verbatim() {
     assert_eq!((code, stderr.as_str()), (1, ""));
     let expected = format!(
         "amiss: fail (fix 0, check 0, pre-existing 2, errors 0, exit 1)\n\
-         Pre-existing target \"README.md\" affected places 1 explicit-target-missing heading-anchor-not-found\n\
+         Pre-existing target \"README.md\" affected places 1 explicit-target-missing heading-anchor-not-found \"setup-steps\"\n\
          \x20 \"README.md\":3:5\n\
          Pre-existing target \"docs/guide.md\" affected places 1 explicit-target-missing path-not-found\n\
          \x20 \"README.md\":3:31\n\
@@ -696,7 +696,7 @@ fn places_in_one_document_read_by_line() {
     let text = String::from_utf8(stdout).unwrap();
     assert!(
         text.contains(
-            "Fix target \"target.md\" affected places 5 explicit-target-missing heading-anchor-not-found\n  \"guide.md\":3:1\n  \"guide.md\":4:1\n  \"guide.md\":5:1\n  \"guide.md\":6:1\n  \"guide.md\":7:1\n"
+            "Fix target \"target.md\" affected places 5\n  \"guide.md\":3:1 explicit-target-missing heading-anchor-not-found \"epsilon\"\n  \"guide.md\":4:1 explicit-target-missing heading-anchor-not-found \"delta\"\n  \"guide.md\":5:1 explicit-target-missing heading-anchor-not-found \"gamma\"\n  \"guide.md\":6:1 explicit-target-missing heading-anchor-not-found \"beta\"\n  \"guide.md\":7:1 explicit-target-missing heading-anchor-not-found \"alpha\"\n"
         ),
         "the lines climb: {text}"
     );
@@ -746,10 +746,13 @@ fn a_row_heads_the_tokens_its_places_share_and_leaves_the_ones_they_do_not() {
             ("mixed.md", "# Mixed\n\n## Alpha Step\n"),
             ("guide.md", "# Guide\n"),
         ],
-        &[(
-            "guide.md",
-            "# Guide\n\n[a](uniform.md#gone-one)\n[b](uniform.md#gone-two)\n[c](mixed.md#Alpha_Step)\n[d](mixed.md#nothing-alike)\n",
-        )],
+        &[
+            (
+                "guide.md",
+                "# Guide\n\n[a](uniform.md#gone)\n[c](mixed.md#Alpha_Step)\n[d](mixed.md#nothing-alike)\n",
+            ),
+            ("other.md", "# Other\n\n[b](uniform.md#gone)\n"),
+        ],
     )
     .unwrap();
     let (code, stdout, _stderr) = amiss(&[
@@ -769,13 +772,13 @@ fn a_row_heads_the_tokens_its_places_share_and_leaves_the_ones_they_do_not() {
     let text = String::from_utf8_lossy(&stdout);
     assert!(
         text.contains(
-            "Fix target \"uniform.md\" affected places 2 explicit-target-missing heading-anchor-not-found\n  \"guide.md\":3:1\n  \"guide.md\":4:1\n"
+            "Fix target \"uniform.md\" affected places 2 explicit-target-missing heading-anchor-not-found \"gone\"\n  \"guide.md\":3:1\n  \"other.md\":3:1\n"
         ),
         "two places carrying one kind and reason read them once, off the heading: {text}"
     );
     assert!(
         text.contains(
-            "Fix target \"mixed.md\" affected places 2\n  \"guide.md\":5:1 explicit-target-missing heading-anchor-not-found near \"alpha-step\"\n  \"guide.md\":6:1 explicit-target-missing heading-anchor-not-found\n"
+            "Fix target \"mixed.md\" affected places 2\n  \"guide.md\":4:1 explicit-target-missing heading-anchor-not-found \"Alpha_Step\" near \"alpha-step\"\n  \"guide.md\":5:1 explicit-target-missing heading-anchor-not-found \"nothing-alike\"\n"
         ),
         "one nearby spelling and no nearby spelling disagree, so both places keep their own: {text}"
     );

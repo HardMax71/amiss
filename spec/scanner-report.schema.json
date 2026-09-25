@@ -3231,9 +3231,53 @@
           "minLength": 1,
           "maxLength": 16384,
           "description": "The destination the parser publishes after the format's own decoding, which is what an evidence producer would request. Present for URL, foreign-repository, and inventory resolutions and for an unavailable exact historical commit; site-build evidence already resolved the generated target and carries no destination."
+        },
+        "fragment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384,
+          "description": "The fragment or label the missed target did not publish, the text extracted_intent.fragment_digest digests. Present exactly on a heading-anchor-not-found or label-not-declared resolution, so a reader can name what is missing without the tree."
         }
       },
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "resolution": {
+                "properties": {
+                  "kind": {
+                    "const": "missing"
+                  },
+                  "reason": {
+                    "enum": [
+                      "heading-anchor-not-found",
+                      "label-not-declared"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "reason"
+                ]
+              }
+            },
+            "required": [
+              "resolution"
+            ]
+          },
+          "then": {
+            "required": [
+              "fragment"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "fragment"
+              ]
+            }
+          }
+        },
         {
           "if": {
             "anyOf": [
