@@ -19,11 +19,12 @@ use amiss_adoc::ImagesDir;
 
 use crate::Error;
 use crate::declared::Declarations;
+use crate::discovery::component::antora_elsewhere;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::{DocumentClassification, classify};
 use crate::published::redirected;
 use crate::published::unplaced;
-use crate::published::{anchors, antora_elsewhere, image_home};
+use crate::published::{anchors, image_home};
 use crate::resources::{Aggregate, ScanResources};
 use crate::route::{directory, generator_alias, template_expression};
 

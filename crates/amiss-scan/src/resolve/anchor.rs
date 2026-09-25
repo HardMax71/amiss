@@ -8,9 +8,10 @@ use amiss_wire::resolution::{BlobTarget, Missing, TaggedBlobTarget, Target, Unsu
 
 use crate::Error;
 use crate::anchor::anchor_set;
+use crate::discovery::component::antora_fragment;
 use crate::discovery::{SnapshotDiscovery, declared_root};
 use crate::document::{classify, native_adapter};
-use crate::published::{antora_fragment, unrouted};
+use crate::published::unrouted;
 use crate::resources::{Aggregate, ScanResources};
 use crate::route::{SPHINX, ZOLA};
 

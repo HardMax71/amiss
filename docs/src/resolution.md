@@ -398,7 +398,10 @@ reference from that page's directory rather than its own, so an image, a `:doc:`
 an include in it names the page's file, and one the page lacks is missing there. A file several
 pages include has to reach its target from each of them. An include carrying options is left
 out, since MyST's `relative-docs` and `relative-images` read paths from the included file
-instead. An MDX partial joins the same subset: a default import of a relative
+instead. An Antora partial is read the same way for its cross references and images, from the
+module of each page that includes it, while its own includes stay with the partial, which is
+how an Antora build reads them. An include selecting a tag or lines leaves the partial read from
+its own module, since that include renders only part of it. An MDX partial joins the same subset: a default import of a relative
 Markdown document rendered as an element, which is how Docusaurus composes one page out of
 several files, and the identities flow to the page rather than back to the partial. So a fragment
 written inside a document Docusaurus publishes no page for is undecided rather than absent: the
