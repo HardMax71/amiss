@@ -17,6 +17,8 @@ use crate::resources::{GitResources, ValueCap, crossing};
 #[derive(Debug)]
 pub struct Repository {
     git_dir: File,
+    private: PathBuf,
+    index: String,
     objects: File,
     object_format: ObjectFormat,
     packs: OnceLock<Result<PackSet, Error>>,
@@ -40,7 +42,11 @@ impl Repository {
         let root_dir = open_root(root)?;
         if let Ok(git_dir) = open_dir(&root_dir, ".git") {
             let objects = open_dir(&git_dir, "objects").map_err(|_defect| RepositoryOpenError)?;
-            return Ok(Self::from_handles(git_dir, objects, object_format));
+            return Ok(Self::from_handles(
+                (git_dir, root.join(".git")),
+                objects,
+                object_format,
+            ));
         }
         let pointer = open_file(&root_dir, ".git").map_err(|_defect| RepositoryOpenError)?;
         let private_path = root.join(pointer_line(pointer, "gitdir: ")?);
@@ -56,12 +62,22 @@ impl Repository {
             }
             Err(_defect) => return Err(RepositoryOpenError),
         };
-        Ok(Self::from_handles(git_dir, objects, object_format))
+        Ok(Self::from_handles(
+            (git_dir, private_path),
+            objects,
+            object_format,
+        ))
     }
 
-    const fn from_handles(git_dir: File, objects: File, object_format: ObjectFormat) -> Self {
+    fn from_handles(
+        (git_dir, private): (File, PathBuf),
+        objects: File,
+        object_format: ObjectFormat,
+    ) -> Self {
         Self {
             git_dir,
+            private,
+            index: "index".to_owned(),
             objects,
             object_format,
             packs: OnceLock::new(),
@@ -279,7 +295,37 @@ impl Repository {
         self.object_format
     }
 
-    /// Reads the current raw `.git/index` bytes through the retained handle:
+    /// Reads the index Git keeps for this process in the private directory
+    /// instead of `index`, as Git does for a hook under `git commit -a` or a
+    /// partial commit. The path has to name an entry of that same directory,
+    /// and only its name is kept, so the read still goes through the retained
+    /// handle and never leaves the declared roots.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryOpenError`] when the path's directory is not the private
+    /// git directory or its name is not one plain entry.
+    pub fn select_index(&mut self, path: &Path) -> Result<(), RepositoryOpenError> {
+        let name = path
+            .file_name()
+            .and_then(std::ffi::OsStr::to_str)
+            .ok_or(RepositoryOpenError)?;
+        let directory = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let same = std::fs::canonicalize(directory)
+            .ok()
+            .zip(std::fs::canonicalize(&self.private).ok())
+            .is_some_and(|(named, private)| named == private);
+        if !same {
+            return Err(RepositoryOpenError);
+        }
+        name.clone_into(&mut self.index);
+        Ok(())
+    }
+
+    /// Reads the current raw staged index bytes through the retained handle:
     /// an ordinary no-follow entry, bounded by the raw staged-index cap with
     /// the exact declared length observed.
     ///
@@ -288,7 +334,7 @@ impl Repository {
     /// `IndexInvalid` for a missing or non-ordinary entry, and the
     /// `git-index-bytes` crossing for an oversized one.
     pub fn read_index_bytes(&self, resources: &mut GitResources) -> Result<Vec<u8>, Error> {
-        let file = open_file(&self.git_dir, "index").map_err(|_defect| Error::IndexInvalid)?;
+        let file = open_file(&self.git_dir, &self.index).map_err(|_defect| Error::IndexInvalid)?;
         let metadata = file.metadata().map_err(|_defect| Error::IndexInvalid)?;
         let cap = resources.limits().index_bytes;
         if metadata.len() > cap {

@@ -38,13 +38,23 @@ fn staged_paths(
     invocation: &PolicyIncludeInvocation,
     preview: &PolicyIncludePreview,
 ) -> Option<Vec<RepoPath>> {
-    let repository = match Repository::open(&preview.repo, preview.object_format) {
+    let mut repository = match Repository::open(&preview.repo, preview.object_format) {
         Ok(repository) => repository,
         Err(_defect) => {
             eprintln!("amiss policy-include: the repository is unavailable");
             return None;
         }
     };
+    if let Some(index) = std::env::var_os("GIT_INDEX_FILE").filter(|index| !index.is_empty())
+        && repository
+            .select_index(std::path::Path::new(&index))
+            .is_err()
+    {
+        eprintln!(
+            "amiss policy-include: GIT_INDEX_FILE names an index outside this repository's git directory"
+        );
+        return None;
+    }
     let mut resources = GitResources::new(GitLimits::CONTRACT);
     let index_bytes = match repository.read_index_bytes(&mut resources) {
         Ok(bytes) => bytes,

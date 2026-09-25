@@ -302,7 +302,9 @@ The same check runs on the staged index. The repository publishes a
 the `amiss` binary on the path (`cargo install --locked amiss`, at the version CI reviews).
 The hook runs on every commit, since a staged rename breaks links in files the commit never
 touched, and it runs under `enforce-introduced` unless told otherwise: what the commit
-introduces blocks and an older backlog only warns. `args` picks the profile:
+introduces blocks and an older backlog only warns. It reads the index Git hands the hook, so
+`git commit -a` and `git commit <path>` are checked as they will commit. `args` picks the
+profile:
 
 ```yaml
 repos:

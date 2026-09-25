@@ -94,3 +94,68 @@ fn a_worktree_staged_check_reads_the_private_index() {
         "the primary index never saw the worktree's staged edit"
     );
 }
+
+/// Under `git commit -a` Git hands the hook its own index through
+/// `GIT_INDEX_FILE`, so the staged check reads that one, whether Git names it
+/// absolutely or relative to the checkout, and refuses an index outside the
+/// repository's git directory rather than read it.
+#[test]
+fn the_staged_check_reads_the_index_git_names() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = dir.path();
+    amiss_fixtures::init_repository(root).unwrap();
+    fs::write(root.join("guide.md"), "# G\n").unwrap();
+    fs::write(root.join("a.md"), "[ok](guide.md)\n").unwrap();
+    let base = amiss_fixtures::commit_worktree(root, &[], "base")
+        .unwrap()
+        .id;
+    let clean = root.join("clean-index");
+    fs::copy(root.join(".git/index"), &clean).unwrap();
+    fs::write(root.join("a.md"), "[gone](missing.md)\n").unwrap();
+    git(root, &["add", "a.md"]);
+    fs::rename(root.join(".git/index"), root.join(".git/index.lock")).unwrap();
+    fs::rename(&clean, root.join(".git/index")).unwrap();
+
+    let repo = amiss_fixtures::path_arg(root);
+    let args = check_args(&repo, &base, &["--index"]);
+    let run = |index: Option<&std::ffi::OsStr>| {
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_amiss"));
+        command
+            .args(&args)
+            .current_dir(root)
+            .env_remove("GIT_INDEX_FILE");
+        if let Some(index) = index {
+            command.env("GIT_INDEX_FILE", index);
+        }
+        let output = command.output().unwrap();
+        (output.status.code(), payload(&output.stdout))
+    };
+    let kinds = |payload: &serde_json::Value| -> Vec<String> {
+        payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|finding| finding["kind"].as_str().unwrap().to_owned())
+            .collect()
+    };
+
+    let (code, unset) = run(None);
+    assert_eq!(
+        code,
+        Some(0),
+        "without the variable the checkout's own index is read"
+    );
+    assert!(kinds(&unset).is_empty());
+    for named in [
+        root.join(".git/index.lock").into_os_string(),
+        ".git/index.lock".into(),
+    ] {
+        let (code, locked) = run(Some(&named));
+        assert_eq!(code, Some(1), "{named:?}");
+        assert!(kinds(&locked).contains(&"explicit-target-missing".to_owned()));
+    }
+    let elsewhere = tempfile::TempDir::new().unwrap();
+    let (code, refused) = run(Some(elsewhere.path().join("index").as_os_str()));
+    assert_eq!(code, Some(2));
+    assert_eq!(refused["errors"][0]["code"], "GIT_INDEX_OUTSIDE_REPOSITORY");
+}
