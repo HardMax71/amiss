@@ -73,7 +73,7 @@ fn feedback_projects_counts_labels_and_atom_targets() {
         vec![
             "findings: fix 2, check 1, existing 2".to_owned(),
             "- Fix target \"docs/new.md\" affected places 1".to_owned(),
-            "- Check target \"\\u00ff\" affected places 2".to_owned(),
+            "- Check target \"\\xff\" affected places 2".to_owned(),
             "- Existing target - affected places 3".to_owned(),
             "- Fix target \"docs/second.md\" affected places 4".to_owned(),
         ]
@@ -240,7 +240,7 @@ fn malformed_byte_targets_refuse_the_summary_even_outside_the_display_window() {
             "findings: fix 1, check 0, existing 0".to_owned(),
             format!(
                 "- Fix target \"{}...\" affected places 1",
-                "\\u00ff".repeat(200)
+                "\\xff".repeat(200)
             ),
         ]
     );

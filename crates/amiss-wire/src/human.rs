@@ -43,9 +43,10 @@ pub fn atom(text: &str) -> String {
 /// text, rendered under the same law as [`atom`]. At most the first two
 /// hundred bytes are kept with a literal `...` appended inside the quotes
 /// when any were omitted; printable ASCII stays literal with quote and
-/// backslash escaped, and every other byte becomes the lowercase `\u00xx`
-/// escape of its value, so no byte is ever active terminal syntax and no
-/// Unicode scalar is invented for bytes that never encoded one.
+/// backslash escaped, and every other byte becomes the lowercase `\xhh`
+/// escape of its value, so no byte is ever active terminal syntax, no
+/// Unicode scalar is invented for bytes that never encoded one, and a raw
+/// byte never reads as the text escape [`atom`] writes for a character.
 #[must_use]
 pub fn atom_bytes(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len().saturating_add(2));
@@ -61,7 +62,7 @@ pub fn atom_bytes(bytes: &[u8]) -> String {
             b'\\' => out.push_str("\\\\"),
             b' '..=b'~' => out.push(char::from(*byte)),
             _ => {
-                let _infallible = write!(&mut out, "\\u00{byte:02x}");
+                let _infallible = write!(&mut out, "\\x{byte:02x}");
             }
         }
     }

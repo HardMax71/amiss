@@ -244,9 +244,10 @@ place, refusing any document whose bytes moved since the evaluation. The sentenc
 [`FindingKind::meaning`, `AnalysisErrorCode::meaning`, and `FixKind::meaning`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs);
 the lists in [Profiles and findings](profiles.md) and [Analysis errors](errors.md)
 and the shipped example are checked against that source in CI. The human format prints
-the result plus at most ten grouped feedback items, replaces every byte outside printable ASCII with a
-`\uXXXX` escape so a hostile filename cannot inject terminal control codes or a forged CI
-command into a log, and states any overflow explicitly. It keeps raw totals and prints
+the result plus at most ten grouped feedback items, replaces every character outside printable
+ASCII with a `\uXXXX` escape, and every such byte of a path that is not UTF-8 with `\xhh`, so a
+hostile filename cannot inject terminal control codes or a forged CI command into a log and a raw
+byte never reads as the character sharing its value, and states any overflow explicitly. It keeps raw totals and prints
 descriptions only for errors; finding kinds and their descriptions stay in JSON. The places
 under a row read by document, then line, then column, so a reader can scan down to one, and
 two places at a single position settle on the finding key, which the report holds distinct.

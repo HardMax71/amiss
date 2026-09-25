@@ -38,8 +38,8 @@ Output is part of the surface too. Repository paths end up in terminals and CI l
 the human format escapes every byte outside printable ASCII. An ANSI escape sequence, a
 carriage return, or a forged `::error::` workflow command embedded in a filename reaches
 the log only as harmless `\uXXXX` text. A path that is raw bytes rather than text renders
-each such byte as the two-digit escape of its value, never inventing a character the
-bytes never encoded. The JSON report keeps fidelity its own way, the exact original
+each such byte as the two-digit `\xhh` escape of its value, never inventing a character the
+bytes never encoded, so a byte-named `nav\xe9.md` and a UTF-8 `nav\u00e9.md` stay two names. The JSON report keeps fidelity its own way, the exact original
 string for a UTF-8 path and a `bytes` object for anything else, because the log needs
 safety and the report needs fidelity, and those are different channels with different
 rules. The Action separately HTML-escapes repository-controlled targets before placing
