@@ -528,3 +528,35 @@ fn a_download_names_a_file_and_a_numref_a_label() {
         Resolution::Missing(Missing::PathNotFound { .. })
     ));
 }
+
+/// A `literalinclude` selection is checked the way a line fragment is: a
+/// `:lines:` range the file does not hold is out of range, one it holds
+/// resolves, and a `:pyobject:` is a code fragment the run declines.
+#[test]
+fn a_literalinclude_selection_is_checked_as_a_line_range() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("docs/conf.py", "project = 'probe'\n"),
+            ("docs/code.py", "a = 1\nb = 2\nc = 3\n"),
+            (
+                "docs/index.rst",
+                "Index\n=====\n\n.. literalinclude:: code.py\n   :lines: 2-3\n\n.. literalinclude:: code.py\n   :lines: 5-8\n\n.. literalinclude:: code.py\n   :pyobject: Foo\n",
+            ),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    assert!(matches!(
+        answer(&rows, "docs/index.rst", 4),
+        Resolution::Resolved { .. }
+    ));
+    assert!(matches!(
+        answer(&rows, "docs/index.rst", 7),
+        Resolution::Missing(Missing::LineFragmentOutOfRange { .. })
+    ));
+    assert!(matches!(
+        answer(&rows, "docs/index.rst", 10),
+        Resolution::UnsupportedSemantics(UnsupportedSemantics::CodeFragment(_))
+    ));
+}
