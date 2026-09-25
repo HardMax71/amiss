@@ -207,7 +207,7 @@ declare_taxonomy! {
             metadata: &RATCHETED_REFERENCE,
         },
         InvalidReference => {
-            meaning: "the destination cannot name a repository target: it escapes the repository or carries a backslash, an encoded separator, or control bytes; fix the destination",
+            meaning: "the destination cannot name a target: it escapes the repository, carries a backslash, an encoded separator, or control bytes, or is a URL that is not well formed; fix the destination",
             metadata: &RATCHETED_OBSERVATION,
         },
         TargetDeclaredUntracked => {
