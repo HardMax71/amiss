@@ -18,6 +18,8 @@ pub const TREE_PATHS_SOURCE: &str = "tree-paths";
 pub const RECORD_VALUE_SOURCE: &str = "record-value";
 pub const RECORD_SET_SOURCE: &str = "record-set";
 pub const SOURCE_MARKER_BYTES: usize = 256;
+/// Maximum segments one `key-value` source's key path may hold.
+pub const KEY_PATH_SEGMENTS: usize = 16;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
@@ -47,6 +49,18 @@ pub enum ProjectionKind {
     SortedRowsV1,
     #[strum(serialize = "decimal-count-v1")]
     DecimalCountV1,
+    #[strum(serialize = "contains-v1")]
+    ContainsV1,
+}
+
+/// The grammar a `key-value` source parses its file under.
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
+pub enum KeyFormat {
+    Toml,
+    Json,
 }
 
 #[derive(
@@ -114,6 +128,20 @@ pub struct RecordSetSelection {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BlobSelection {
+    pub path: RepoPathText,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KeyValueSelection {
+    pub path: RepoPathText,
+    pub format: KeyFormat,
+    pub key: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ProjectionSource {
     BlobLines(BlobLineSelection),
@@ -121,6 +149,8 @@ pub enum ProjectionSource {
     TreePaths(TreePathSelection),
     RecordValue(RecordValueSelection),
     RecordSet(RecordSetSelection),
+    Blob(BlobSelection),
+    KeyValue(KeyValueSelection),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -219,7 +249,19 @@ fn validate_projection_source(
                 return fail(path, ErrorKind::InvalidValue);
             }
         }
-        ProjectionSource::RecordSet(_) => {}
+        ProjectionSource::KeyValue(selection) => {
+            if selection.key.is_empty()
+                || selection.key.len() > KEY_PATH_SEGMENTS
+                || !selection.key.iter().all(|segment| {
+                    !segment.is_empty()
+                        && segment.len() <= SOURCE_MARKER_BYTES
+                        && !segment.chars().any(char::is_control)
+                })
+            {
+                return fail(path, ErrorKind::InvalidValue);
+            }
+        }
+        ProjectionSource::RecordSet(_) | ProjectionSource::Blob(_) => {}
     }
     projection_source_compatible(projection, source)
         .then_some(())
@@ -258,7 +300,12 @@ fn projection_source_compatible(projection: ProjectionKind, source: &ProjectionS
     match source {
         ProjectionSource::BlobLines(_)
         | ProjectionSource::NamedRegion(_)
-        | ProjectionSource::RecordValue(_) => projection == ProjectionKind::CodeTextV1,
+        | ProjectionSource::RecordValue(_)
+        | ProjectionSource::Blob(_)
+        | ProjectionSource::KeyValue(_) => matches!(
+            projection,
+            ProjectionKind::CodeTextV1 | ProjectionKind::ContainsV1
+        ),
         ProjectionSource::TreePaths(_) | ProjectionSource::RecordSet(_) => matches!(
             projection,
             ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1

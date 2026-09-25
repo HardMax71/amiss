@@ -2727,3 +2727,108 @@ fn removing_a_router_declaration_reports_the_declaration_it_dropped() {
         );
     }
 }
+
+/// A projection can read a whole file, as a committed `--help` snapshot is,
+/// or the one scalar a TOML or JSON key names, and `contains-v1` asks only
+/// that the visible block hold the value somewhere, so an install line fails
+/// the day the version it spells stops being the package's. A key that is
+/// missing, names a table or array, or sits in a file its format cannot parse
+/// is typed drift rather than a guess.
+#[test]
+fn a_file_or_one_key_projects_and_contains_asks_the_block_to_hold_it()
+-> Result<(), Box<dyn std::error::Error>> {
+    let toml_key = |key: &[&str]| serde_json::json!({"kind": "key-value", "path": "Cargo.toml", "format": "toml", "key": key});
+    let json_key = |path: &str, key: &[&str]| serde_json::json!({"kind": "key-value", "path": path, "format": "json", "key": key});
+    let version = ["workspace", "package", "version"];
+    let cases = [
+        (
+            "code-text-v1",
+            serde_json::json!({"kind": "blob", "path": "help.txt"}),
+            "usage: tool\n  --flag",
+            None,
+        ),
+        (
+            "contains-v1",
+            toml_key(&version),
+            "cargo install tool --version 0.35.0",
+            None,
+        ),
+        (
+            "contains-v1",
+            toml_key(&version),
+            "cargo install tool --version 0.34.0",
+            Some("content-absent"),
+        ),
+        (
+            "code-text-v1",
+            json_key("package.json", &["version"]),
+            "1.2.3",
+            None,
+        ),
+        (
+            "code-text-v1",
+            json_key("package.json", &["list"]),
+            "1",
+            Some("source-key-not-scalar"),
+        ),
+        (
+            "code-text-v1",
+            toml_key(&["missing"]),
+            "x",
+            Some("source-key-absent"),
+        ),
+        (
+            "code-text-v1",
+            json_key("Cargo.toml", &["version"]),
+            "x",
+            Some("source-unparsable"),
+        ),
+    ];
+    for (projection, source, block, want) in cases {
+        let dir = TempDir::new()?;
+        let root = dir.path();
+        let base = base_commit(root);
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace.package]\nversion = \"0.35.0\"\n",
+        )?;
+        fs::write(
+            root.join("package.json"),
+            "{\"version\": \"1.2.3\", \"list\": [1]}\n",
+        )?;
+        fs::write(root.join("help.txt"), "usage: tool\r\n  --flag\n")?;
+        fs::write(
+            root.join("docs.md"),
+            format!("```text\n{block}\n```\n[amiss:sample]: <amiss:projection>\n"),
+        )?;
+        projection_policy(root, "docs.md", "sample", projection, &source);
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "projected"]);
+        let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        let repo =
+            Repository::open(root, ObjectFormat::Sha1).map_err(|defect| format!("{defect:?}"))?;
+        let built = commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        )
+        .map_err(|defect| format!("{defect:?}"))?;
+        let payload = payload(&built);
+        let observed = payload["findings"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|row| row["kind"] == "projection-drift")
+            .and_then(|row| row["candidate_fact"]["evidence"]["observed"].as_str())
+            .map(str::to_owned);
+        assert_eq!(
+            observed.as_deref(),
+            want,
+            "{projection} {source}: {payload}"
+        );
+    }
+    Ok(())
+}

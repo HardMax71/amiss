@@ -24,7 +24,8 @@ authenticated live GitLab policy job can instead consume its exact synchronous d
 ## One closed relation
 
 One relation contains exactly two subjects and one of the existing projection kinds:
-`code-text-v1`, `sorted-rows-v1`, or `decimal-count-v1`. Reusing the scanner's projection vocabulary
+`code-text-v1`, `sorted-rows-v1`, or `decimal-count-v1`. `contains-v1` is not one of them, since
+two digests say nothing about one value sitting inside the other. Reusing the scanner's projection vocabulary
 keeps copied text, exact inventories, and counts under one comparison model instead of adding a
 second selector language.
 
@@ -275,7 +276,8 @@ and roles must differ, and the trigger role must name one subject. Credentials, 
 and transport budgets are deliberately not copied into the portable document.
 
 The checked writer and strict reader share the scanner's existing projection-source grammar. A
-`code-text-v1` plan therefore accepts blob lines, a named region, or one record value;
+`code-text-v1` plan therefore accepts blob lines, a named region, a whole blob, one key's value,
+or one record value;
 `sorted-rows-v1` and `decimal-count-v1` accept tree paths or one record set. The plan does not add a
 second selector language or let either repository change the operator-owned selector.
 
@@ -304,8 +306,8 @@ missing evidence document remains distinct from a present receipt that records f
 attempts.
 
 The projection kind in the plan defines the canonical bytes. For `code-text-v1`, blob-line and
-named-region selections normalize CR and CRLF to LF and remove one terminal LF; record values use
-their exact UTF-8 value bytes. `sorted-rows-v1` byte-sorts the complete selected rows and joins them
+named-region selections, a whole blob, and a key's value normalize CR and CRLF to LF and remove one
+terminal LF; record values use their exact UTF-8 value bytes. `sorted-rows-v1` byte-sorts the complete selected rows and joins them
 with one LF and no trailing LF. `decimal-count-v1` uses the canonical ASCII decimal item count
 without leading zeroes. The compact receipt does not copy potentially multi-megabyte values merely
 to compare them twice.

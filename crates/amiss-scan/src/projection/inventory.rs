@@ -268,7 +268,7 @@ pub(super) fn evaluate(
             }
             compare_count(expected_count, sink, resources)
         }
-        ProjectionKind::CodeTextV1 => Err(Error::Internal),
+        ProjectionKind::CodeTextV1 | ProjectionKind::ContainsV1 => Err(Error::Internal),
     }
 }
 

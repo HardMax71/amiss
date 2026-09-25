@@ -453,3 +453,41 @@ fn a_tree_suffix_is_one_bounded_exact_selector() {
         "suffix does not mint a second selector identity at one root"
     );
 }
+
+/// A whole-file source names only a path, a key source names a nonempty
+/// path of keys to one scalar, and containment reads text, so neither pairs
+/// with a row or count projection and `contains-v1` pairs with no inventory.
+#[test]
+fn blob_and_key_sources_pair_only_with_text_projections() {
+    let kind = |projection: &str, source: &str| {
+        let text = policy_with_assertions(&format!(
+            r#"{{"document":"docs/a.md","name":"sample","projection":"{projection}","sink":"previous-code","source":{source}}}"#
+        ));
+        ScannerPolicy::parse(text.as_bytes())
+            .err()
+            .map(|defect| defect.kind)
+    };
+    let blob = r#"{"kind":"blob","path":"help.txt"}"#;
+    let key =
+        r#"{"kind":"key-value","path":"Cargo.toml","format":"toml","key":["package","version"]}"#;
+    let tree = r#"{"kind":"tree-paths","root":"docs","maximum_depth":1}"#;
+    assert_eq!(kind("code-text-v1", blob), None);
+    assert_eq!(kind("contains-v1", key), None);
+    assert_eq!(kind("sorted-rows-v1", blob), Some(ErrorKind::Inconsistent));
+    assert_eq!(kind("contains-v1", tree), Some(ErrorKind::Inconsistent));
+    assert_eq!(
+        kind(
+            "code-text-v1",
+            r#"{"kind":"key-value","path":"a.json","format":"json","key":[]}"#
+        ),
+        Some(ErrorKind::InvalidValue)
+    );
+    assert!(
+        kind(
+            "code-text-v1",
+            r#"{"kind":"key-value","path":"a.yaml","format":"yaml","key":["a"]}"#
+        )
+        .is_some(),
+        "the formats are closed"
+    );
+}

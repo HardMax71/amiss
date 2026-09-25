@@ -73,8 +73,10 @@ and leaves the run incomplete, so a repository grows its policy only after every
 reading it has learned the field.
 
 A projection assertion is owned by the policy, under the stable identity `(document, name)`.
-The `code-text-v1` sources select either an inclusive one-based line interval from a tracked regular
-or executable blob, or bytes between distinct exact `start_marker` and `end_marker` lines. Each
+The `code-text-v1` sources select an inclusive one-based line interval from a tracked regular or
+executable blob, the bytes between distinct exact `start_marker` and `end_marker` lines, the whole
+blob, or the one scalar a TOML or JSON key path names, which [Claims](claims.md) describes with
+`contains-v1`. Each
 printable-ASCII marker line is at most 256 bytes, occurs exactly once, and is itself excluded. Amiss
 does not parse a source language or its comment syntax. Duplicate, missing, reversed, same-line,
 or non-UTF-8 regions are typed drift, while edits outside the selected region are irrelevant.

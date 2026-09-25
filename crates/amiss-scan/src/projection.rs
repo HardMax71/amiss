@@ -1,7 +1,9 @@
 use sha2::Digest as _;
 use std::collections::BTreeMap;
 
-use amiss_wire::controls::{ProjectionAssertion, ProjectionKind, ProjectionSource};
+use amiss_wire::controls::{
+    KeyFormat, KeyValueSelection, ProjectionAssertion, ProjectionKind, ProjectionSource,
+};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPath};
 use amiss_wire::report::model::ProjectionObserved;
@@ -63,8 +65,10 @@ pub(crate) fn evaluate(
     record_sets: &BTreeMap<ArtifactId, RecordSet>,
     assertion: &ProjectionAssertion,
 ) -> Result<Outcome, Error> {
-    use ProjectionKind::{CodeTextV1, DecimalCountV1, SortedRowsV1};
-    use ProjectionSource::{BlobLines, NamedRegion, RecordSet, RecordValue, TreePaths};
+    use ProjectionKind::{CodeTextV1, ContainsV1, DecimalCountV1, SortedRowsV1};
+    use ProjectionSource::{
+        Blob, BlobLines, KeyValue, NamedRegion, RecordSet, RecordValue, TreePaths,
+    };
 
     resolver.scan.charge(Aggregate::ProjectionAssertions, 1)?;
     let document = RepoPath::from(&assertion.document);
@@ -125,18 +129,17 @@ pub(crate) fn evaluate(
         ));
     };
     let verdict = match (assertion.projection, &assertion.source) {
-        (CodeTextV1, BlobLines(_) | NamedRegion(_)) => {
-            resolver.resolve_code_projection(&assertion.source, sink)?
+        (CodeTextV1 | ContainsV1, BlobLines(_) | NamedRegion(_) | Blob(_) | KeyValue(_)) => {
+            resolver.resolve_code_projection(&assertion.source, assertion.projection, sink)?
         }
-        (CodeTextV1, RecordValue(_)) | (SortedRowsV1 | DecimalCountV1, RecordSet(_)) => {
-            record_projection(
-                record_sets,
-                &assertion.source,
-                assertion.projection,
-                sink,
-                resolver.scan,
-            )?
-        }
+        (CodeTextV1 | ContainsV1, RecordValue(_))
+        | (SortedRowsV1 | DecimalCountV1, RecordSet(_)) => record_projection(
+            record_sets,
+            &assertion.source,
+            assertion.projection,
+            sink,
+            resolver.scan,
+        )?,
         (SortedRowsV1 | DecimalCountV1, TreePaths(selection)) => inventory::evaluate(
             discovery,
             selection,
@@ -144,8 +147,11 @@ pub(crate) fn evaluate(
             sink,
             resolver.scan,
         )?,
-        (CodeTextV1, TreePaths(_) | RecordSet(_))
-        | (SortedRowsV1 | DecimalCountV1, BlobLines(_) | NamedRegion(_) | RecordValue(_)) => {
+        (CodeTextV1 | ContainsV1, TreePaths(_) | RecordSet(_))
+        | (
+            SortedRowsV1 | DecimalCountV1,
+            BlobLines(_) | NamedRegion(_) | RecordValue(_) | Blob(_) | KeyValue(_),
+        ) => {
             return Err(Error::Internal);
         }
     };
@@ -171,14 +177,19 @@ fn record_projection(
         ProjectionSource::RecordSet(selection) => &selection.set,
         ProjectionSource::BlobLines(_)
         | ProjectionSource::NamedRegion(_)
-        | ProjectionSource::TreePaths(_) => return Err(Error::Internal),
+        | ProjectionSource::TreePaths(_)
+        | ProjectionSource::Blob(_)
+        | ProjectionSource::KeyValue(_) => return Err(Error::Internal),
     };
     let Some(set) = record_sets.get(set_name) else {
         return Ok(unavailable(ProjectionObserved::SourceRecordSetAbsent, sink));
     };
     match source {
         ProjectionSource::RecordValue(selection) => {
-            if projection != ProjectionKind::CodeTextV1 {
+            if !matches!(
+                projection,
+                ProjectionKind::CodeTextV1 | ProjectionKind::ContainsV1
+            ) {
                 return Err(Error::Internal);
             }
             let Some(value) = set.records.get(&selection.key) else {
@@ -199,26 +210,13 @@ fn record_projection(
                 Aggregate::ProjectionProjectedBytes,
                 u64::try_from(value.len()).unwrap_or(u64::MAX),
             )?;
-            if value == &sink.value {
-                return Ok(Verdict::Attested);
-            }
-            Ok(Verdict::Drift {
-                reason: ProjectionObserved::ContentDiffers,
-                expected_digest: Some(Digest::from(
-                    sha2::Sha256::new_with_prefix(CODE_TEXT_SOURCE_DOMAIN)
-                        .chain_update([0_u8])
-                        .chain_update(value.as_bytes())
-                        .finalize()
-                        .0,
-                )),
-                observed_digest: Some(sink.digest),
-                expected_bytes: Some(u64::try_from(value.len()).unwrap_or(u64::MAX)),
-                observed_bytes: Some(u64::try_from(sink.value.len()).unwrap_or(u64::MAX)),
-                difference: None,
-            })
+            Ok(code_verdict(value.as_bytes(), projection, sink))
         }
         ProjectionSource::RecordSet(_) => {
-            if projection == ProjectionKind::CodeTextV1 {
+            if matches!(
+                projection,
+                ProjectionKind::CodeTextV1 | ProjectionKind::ContainsV1
+            ) {
                 return Err(Error::Internal);
             }
             if !set.complete {
@@ -246,11 +244,116 @@ fn record_projection(
                     sink,
                     resources,
                 ),
-                ProjectionKind::CodeTextV1 => Err(Error::Internal),
+                ProjectionKind::CodeTextV1 | ProjectionKind::ContainsV1 => Err(Error::Internal),
             }
         }
         ProjectionSource::BlobLines(_)
         | ProjectionSource::NamedRegion(_)
-        | ProjectionSource::TreePaths(_) => Err(Error::Internal),
+        | ProjectionSource::TreePaths(_)
+        | ProjectionSource::Blob(_)
+        | ProjectionSource::KeyValue(_) => Err(Error::Internal),
+    }
+}
+
+/// The verdict one code-text value earns against the visible block: equal to
+/// it under `code-text-v1`, somewhere inside it under `contains-v1`.
+pub(crate) fn code_verdict(
+    expected: &[u8],
+    projection: ProjectionKind,
+    sink: &SemanticCodeSink,
+) -> Verdict {
+    let observed = sink.value.as_bytes();
+    let (held, reason) = match projection {
+        ProjectionKind::ContainsV1 => (
+            memchr::memmem::find(observed, expected).is_some(),
+            ProjectionObserved::ContentAbsent,
+        ),
+        ProjectionKind::CodeTextV1
+        | ProjectionKind::SortedRowsV1
+        | ProjectionKind::DecimalCountV1 => {
+            (expected == observed, ProjectionObserved::ContentDiffers)
+        }
+    };
+    if held {
+        return Verdict::Attested;
+    }
+    Verdict::Drift {
+        reason,
+        expected_digest: Some(Digest::from(
+            sha2::Sha256::new_with_prefix(CODE_TEXT_SOURCE_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(expected)
+                .finalize()
+                .0,
+        )),
+        observed_digest: Some(sink.digest),
+        expected_bytes: Some(u64::try_from(expected.len()).unwrap_or(u64::MAX)),
+        observed_bytes: Some(u64::try_from(observed.len()).unwrap_or(u64::MAX)),
+        difference: None,
+    }
+}
+
+/// The scalar one key path names in a TOML or JSON file, spelled the way the
+/// file's own grammar prints it: a string as its text, a number, boolean or
+/// date as written. A table, array or null names no one value.
+pub(crate) fn key_value(
+    body: &[u8],
+    selection: &KeyValueSelection,
+) -> Result<String, ProjectionObserved> {
+    let text = std::str::from_utf8(body).map_err(|_defect| ProjectionObserved::SourceUnparsable)?;
+    match selection.format {
+        KeyFormat::Toml => {
+            let mut table: toml::Table =
+                toml::from_str(text).map_err(|_defect| ProjectionObserved::SourceUnparsable)?;
+            let (last, parents) = selection
+                .key
+                .split_last()
+                .ok_or(ProjectionObserved::SourceKeyAbsent)?;
+            for segment in parents {
+                match table.remove(segment) {
+                    Some(toml::Value::Table(inner)) => table = inner,
+                    Some(_) | None => return Err(ProjectionObserved::SourceKeyAbsent),
+                }
+            }
+            match table
+                .remove(last)
+                .ok_or(ProjectionObserved::SourceKeyAbsent)?
+            {
+                toml::Value::String(value) => Ok(value),
+                toml::Value::Integer(value) => Ok(value.to_string()),
+                toml::Value::Float(value) => Ok(value.to_string()),
+                toml::Value::Boolean(value) => Ok(value.to_string()),
+                toml::Value::Datetime(value) => Ok(value.to_string()),
+                toml::Value::Array(_) | toml::Value::Table(_) => {
+                    Err(ProjectionObserved::SourceKeyNotScalar)
+                }
+            }
+        }
+        KeyFormat::Json => {
+            let mut value: serde_json::Value = serde_json::from_str(text)
+                .map_err(|_defect| ProjectionObserved::SourceUnparsable)?;
+            for segment in &selection.key {
+                value = match value {
+                    serde_json::Value::Object(mut object) => object
+                        .remove(segment)
+                        .ok_or(ProjectionObserved::SourceKeyAbsent)?,
+                    serde_json::Value::Null
+                    | serde_json::Value::Bool(_)
+                    | serde_json::Value::Number(_)
+                    | serde_json::Value::String(_)
+                    | serde_json::Value::Array(_) => {
+                        return Err(ProjectionObserved::SourceKeyAbsent);
+                    }
+                };
+            }
+            match value {
+                serde_json::Value::String(value) => Ok(value),
+                serde_json::Value::Number(value) => Ok(value.to_string()),
+                serde_json::Value::Bool(value) => Ok(value.to_string()),
+                serde_json::Value::Null
+                | serde_json::Value::Array(_)
+                | serde_json::Value::Object(_) => Err(ProjectionObserved::SourceKeyNotScalar),
+            }
+        }
     }
 }

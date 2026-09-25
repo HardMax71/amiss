@@ -73,9 +73,10 @@ pub fn project_repository(
         },
     )?;
     match request.source {
-        ProjectionSource::BlobLines(_) | ProjectionSource::NamedRegion(_) => {
-            project_blob(&mut request, &discovery)
-        }
+        ProjectionSource::BlobLines(_)
+        | ProjectionSource::NamedRegion(_)
+        | ProjectionSource::Blob(_)
+        | ProjectionSource::KeyValue(_) => project_blob(&mut request, &discovery),
         ProjectionSource::TreePaths(selection) => {
             project_tree(&request, &discovery, selection, selection_complete)
         }
@@ -90,6 +91,8 @@ fn project_blob(
     let path = match request.source {
         ProjectionSource::BlobLines(selection) => RepoPath::from(&selection.path),
         ProjectionSource::NamedRegion(selection) => RepoPath::from(&selection.path),
+        ProjectionSource::Blob(selection) => RepoPath::from(&selection.path),
+        ProjectionSource::KeyValue(selection) => RepoPath::from(&selection.path),
         ProjectionSource::TreePaths(_)
         | ProjectionSource::RecordValue(_)
         | ProjectionSource::RecordSet(_) => return Err(Error::Internal),
@@ -135,6 +138,13 @@ fn project_blob(
         ProjectionSource::NamedRegion(selection) => {
             named_region_bytes(&object.body, selection).ok()
         }
+        ProjectionSource::Blob(_) => Some(object.body.as_slice()),
+        ProjectionSource::KeyValue(selection) => {
+            let Ok(value) = super::key_value(&object.body, selection) else {
+                return Ok(unavailable(1, selected_bytes));
+            };
+            return projected(value.as_bytes(), selected_bytes, request.limits);
+        }
         ProjectionSource::TreePaths(_)
         | ProjectionSource::RecordValue(_)
         | ProjectionSource::RecordSet(_) => return Err(Error::Internal),
@@ -142,6 +152,16 @@ fn project_blob(
     let Some(selected) = selected else {
         return Ok(unavailable(1, selected_bytes));
     };
+    projected(selected, selected_bytes, request.limits)
+}
+
+/// One selected value under `code-text-v1`, the only projection a relation
+/// compares text by, digested for the other side to match.
+fn projected(
+    selected: &[u8],
+    selected_bytes: u64,
+    limits: RepositoryProjectionLimits,
+) -> Result<RepositoryProjectionOutcome, Error> {
     let normalized = normalized_line_endings(selected);
     let projected = normalized
         .as_ref()
@@ -150,7 +170,7 @@ fn project_blob(
     let projected_bytes = u64::try_from(projected.len()).unwrap_or(u64::MAX);
     within(
         projected_bytes,
-        request.limits.bytes,
+        limits.bytes,
         ResourceName::AggregateProjectionProjectedBytesPerSnapshot,
     )?;
     Ok(RepositoryProjectionOutcome {
