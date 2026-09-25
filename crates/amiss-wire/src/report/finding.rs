@@ -215,7 +215,7 @@ declare_taxonomy! {
             metadata: &COVERAGE_DOCUMENT,
         },
         UnsupportedReferenceSemantics => {
-            meaning: "the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string the selected grammar does not recognize, a destination that needs a document attribute this run does not evaluate, or a fragment on a target it cannot answer for; the unchecked part is declared instead of guessed",
+            meaning: "the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string the selected grammar does not recognize, a destination that needs a document attribute this run does not evaluate, the repository root, which every snapshot holds, or a fragment on a target it cannot answer for; the unchecked part is declared instead of guessed",
             metadata: &UNSUPPORTED_DOCUMENT,
         },
         UnsupportedDocumentFormat => {

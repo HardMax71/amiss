@@ -267,10 +267,8 @@ fn github_with_a_different_trusted_identity_is_foreign() {
         .1;
     assert_eq!(
         row,
-        Resolution::Invalid {
-            reason: InvalidReference::Syntax
-        },
-        "a ref consuming the complete suffix leaves no path"
+        Resolution::UnsupportedSemantics(UnsupportedSemantics::RepositoryRoot),
+        "a ref consuming the complete suffix names the repository root"
     );
 
     let row = bed

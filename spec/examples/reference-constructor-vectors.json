@@ -230,7 +230,7 @@
       "candidate_ref": "refs/heads/main",
       "default_ref": "refs/heads/main",
       "expected": {
-        "status": "invalid",
+        "status": "repository-root",
         "path": null
       }
     },

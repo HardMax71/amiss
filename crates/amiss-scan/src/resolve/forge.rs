@@ -1,7 +1,9 @@
 use amiss_wire::controls::TargetKind;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
-use amiss_wire::resolution::{ExternalReference, InvalidReference, VersionScope};
+use amiss_wire::resolution::{
+    ExternalReference, InvalidReference, UnsupportedSemantics, VersionScope,
+};
 use amiss_wire::uri::decode_component;
 
 use crate::Error;
@@ -600,13 +602,14 @@ fn decoded_tail(
     Ok(decoded)
 }
 
-/// The remaining segments as a contained repository path: nonempty, no dot
-/// segments, and inside the frozen byte grammar.
+/// The remaining segments as a contained repository path: no dot segments,
+/// inside the frozen byte grammar, and the repository root when nothing
+/// remains, which every forge serves and no repository path spells.
 fn contained_path(remaining: &[Vec<u8>]) -> Result<RepoPath, Resolution<RepoPath>> {
     if remaining.is_empty() {
-        return Err(Resolution::Invalid {
-            reason: InvalidReference::Syntax,
-        });
+        return Err(Resolution::UnsupportedSemantics(
+            UnsupportedSemantics::RepositoryRoot,
+        ));
     }
     if remaining
         .iter()
