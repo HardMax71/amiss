@@ -239,7 +239,9 @@ closes the pipe early, `head` among them, ends the printing and not the verdict.
 
 `amiss fix` repairs what the check proves, over the staged state only. It runs the same
 evaluation as `check --index`, takes every finding whose `fix` is not null, and rewrites
-exactly those byte spans in the working tree. Nothing is applied on faith. The staged
+exactly those byte spans in the working tree. Under `--profile enforce-introduced` it takes only
+the findings that profile charges to the change, so a pre-existing row's fix waits for a run under
+`enforce`, and the summary line counts the ones it left. Nothing is applied on faith. The staged
 index is pinned before the evaluation and verified unchanged before any write. A document
 is repaired only while its working-tree bytes still equal the staged bytes the fixes were
 computed against, and one already holding the repaired bytes counts as already fixed. A CRLF
