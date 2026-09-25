@@ -180,18 +180,13 @@ fn attributed(
     target: Option<RepoPath>,
 ) -> Decision {
     match attribution {
-        Attribution::Introduced => Decision::Item {
+        Attribution::Introduced | Attribution::Unknown => Decision::Item {
             action: FeedbackAction::Fix,
             subject,
             target,
         },
         Attribution::PreExisting => Decision::Item {
             action: FeedbackAction::Existing,
-            subject,
-            target,
-        },
-        Attribution::Unknown => Decision::Item {
-            action: FeedbackAction::Check,
             subject,
             target,
         },

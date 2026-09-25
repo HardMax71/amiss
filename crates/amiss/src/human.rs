@@ -343,9 +343,8 @@ where
 
 fn attributed(attribution: Attribution, side: LocationSide) -> Option<FeedbackAction> {
     match attribution {
-        Attribution::Introduced => Some(FeedbackAction::Fix),
+        Attribution::Introduced | Attribution::Unknown => Some(FeedbackAction::Fix),
         Attribution::PreExisting => Some(FeedbackAction::Existing),
-        Attribution::Unknown => Some(FeedbackAction::Check),
         Attribution::Resolved => None,
         Attribution::NotApplicable => match side {
             LocationSide::Candidate | LocationSide::Control | LocationSide::Global => {
