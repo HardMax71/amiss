@@ -943,3 +943,31 @@ fn an_asciidoc_title_reads_its_documents_attributes() {
         answer(&rows, "open.adoc", 5)
     );
 }
+
+/// The HTML standard answers `#top`, in any case, with the top of the page, so
+/// it names no heading and is never missing; a longer name still is.
+#[test]
+fn the_top_fragment_always_resolves() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            (
+                "doc.md",
+                "# Doc\n\n[a](#top)\n\n[b](#TOP)\n\n[c](other.md#Top)\n\n[d](#topmost)\n",
+            ),
+            ("other.md", "# Other\n"),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    for line in [3, 5, 7] {
+        assert!(
+            matches!(answer(&rows, "doc.md", line), Resolution::Resolved { .. }),
+            "line {line}"
+        );
+    }
+    assert!(matches!(
+        answer(&rows, "doc.md", 9),
+        Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+    ));
+}
