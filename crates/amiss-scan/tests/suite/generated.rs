@@ -562,6 +562,38 @@ fn an_included_fragment_reads_from_its_page() {
     ));
 }
 
+/// Sphinx writes each page as `.html` beside where its source sits, so a
+/// relative link to that page reaches the source under any suffix the root
+/// reads, fragment and all, and one naming no source is missing.
+#[test]
+fn a_sphinx_html_link_reaches_its_source() {
+    let chain = amiss_fixtures::commit_chain(&[(
+        "base",
+        &[
+            ("docs/conf.py", "extensions = ['myst_parser']\n"),
+            ("docs/a.rst", "A\n=\n\nX section\n---------\n"),
+            ("docs/m.md", "# M\n"),
+            (
+                "docs/b.rst",
+                "B\n=\n\n`A <a.html>`_\n\n`Sec <a.html#x-section>`_\n\n`M <m.html>`_\n\n`Gone <gone.html>`_\n",
+            ),
+        ],
+    )])
+    .expect("the fixture stages");
+    let rows = answers(&chain);
+    for (line, target) in [(4, "docs/a.rst"), (6, "docs/a.rst"), (8, "docs/m.md")] {
+        assert_eq!(
+            blob(answer(&rows, "docs/b.rst", line)),
+            Some(target),
+            "line {line}"
+        );
+    }
+    assert!(matches!(
+        answer(&rows, "docs/b.rst", 10),
+        Resolution::Missing(Missing::PathNotFound { .. })
+    ));
+}
+
 /// Under a Sphinx declaration a `MyST` directive that names a file is a
 /// reference the way the reStructuredText directive is, and so is the
 /// `{download}` role; outside one the fence is the code block it looks like.
