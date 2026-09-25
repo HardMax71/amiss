@@ -302,7 +302,9 @@ blocking finding of the two debt-eligible kinds, `explicit-target-missing` and
 its own clock. The engine supplies each item's key and accepted fact from the evaluation.
 The flags supply what it cannot know: the floor digest the snapshot binds to, the owner
 that floor must authorize, the reason, both instants in the wire's own clock grammar with
-creation strictly before expiry, and the output path, which must not exist. Adoption
+creation strictly before expiry, and the output path, which must not exist. An all-zero floor
+digest or an expiry the local clock has already passed records nothing, since that debt could
+never apply. Adoption
 records a committed tree, so `--index` is refused and the identity triple is required.
 `--ref` does double duty here: beyond URL resolution, its exact string becomes the
 snapshot's ref binding. Spell it as the branch the consuming lanes enforce, since a
@@ -315,7 +317,8 @@ ramp for a standing backlog is [`enforce-introduced`](profiles.md). The minted f
 written only after the engine's own reader accepts its
 bytes, by exclusive creation. The summary line counts what was recorded, what blocked but
 is not debt-eligible, what was eligible but missing facts, and what was eligible but names a
-path outside the text path grammar, which the debt file cannot hold. Exit 0 recorded the
+path outside the text path grammar, which the debt file cannot hold. A second line names the
+next step, since nothing public reads the file. Exit 0 recorded the
 snapshot. Exit 1 means the output path already exists or the write failed, any partial
 file removed. Exit 2 means nothing trustworthy could be recorded: the evaluation failed,
 the report carried no candidate tree, or the minted bytes failed the engine's own reader.
