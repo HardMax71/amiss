@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
-use amiss_wire::resolution::Resolution;
+use amiss_wire::resolution::{Resolution, TaggedBlobTarget, UnsupportedSemantics};
 
 pub(crate) use components::unique_path_pairs;
 use components::{ObservationPool, correlation_components};
@@ -227,6 +227,37 @@ fn isolated(observation: Observation, is_base: bool) -> Comparison {
     }
 }
 
+/// The content projection of the file a reference located, whether its
+/// meaning was then evaluated or not. A fragment, code fragment or query the
+/// run could not answer still names a file, and that file changing is the
+/// same dependency change it would be for a plain link.
+fn located_projection(resolution: &Resolution<RepoPath>) -> Option<Digest> {
+    match resolution {
+        Resolution::Resolved { target }
+        | Resolution::UnsupportedSemantics(
+            UnsupportedSemantics::Query(target) | UnsupportedSemantics::CodeFragment(target),
+        ) => target.projection_digest(),
+        Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(
+            TaggedBlobTarget::Blob(blob),
+        )) => blob.content.projection_digest(),
+        Resolution::UnsupportedSemantics(
+            UnsupportedSemantics::SiteRoute
+            | UnsupportedSemantics::UnmodelledRoute
+            | UnsupportedSemantics::NetworkPath
+            | UnsupportedSemantics::AttributeDependent
+            | UnsupportedSemantics::DuplicateLabel
+            | UnsupportedSemantics::ExternalInventory,
+        )
+        | Resolution::Missing(_)
+        | Resolution::DeclaredUntracked(_)
+        | Resolution::TypeMismatch { .. }
+        | Resolution::UnsupportedTarget(_)
+        | Resolution::UnsupportedVersion { .. }
+        | Resolution::Invalid { .. }
+        | Resolution::External { .. } => None,
+    }
+}
+
 /// The base-versus-candidate derivation for exact and candidate pairs, in the
 /// closed table's order.
 fn derive(
@@ -244,30 +275,22 @@ fn derive(
         Impact::None
     };
 
+    if let (Some(left_projection), Some(right_projection)) =
+        (located_projection(left), located_projection(right))
+    {
+        if left_projection == right_projection {
+            return (TargetChange::Equal, equal_impact);
+        }
+        let impact = if source_changed {
+            Impact::DependencyAndSubjectCochanged
+        } else {
+            Impact::DependencyChangedSubjectUnchanged
+        };
+        return (TargetChange::Changed, impact);
+    }
     match (left, right) {
-        (
-            Resolution::Resolved {
-                target: left_target,
-            },
-            Resolution::Resolved {
-                target: right_target,
-            },
-        ) => {
-            let (Some(left_projection), Some(right_projection)) = (
-                left_target.projection_digest(),
-                right_target.projection_digest(),
-            ) else {
-                return (TargetChange::NotComparable, Impact::NotApplicable);
-            };
-            if left_projection == right_projection {
-                return (TargetChange::Equal, equal_impact);
-            }
-            let impact = if source_changed {
-                Impact::DependencyAndSubjectCochanged
-            } else {
-                Impact::DependencyChangedSubjectUnchanged
-            };
-            (TargetChange::Changed, impact)
+        (Resolution::Resolved { .. }, Resolution::Resolved { .. }) => {
+            (TargetChange::NotComparable, Impact::NotApplicable)
         }
         (Resolution::Missing(left_missing), Resolution::Missing(right_missing)) => {
             if left_missing == right_missing {
