@@ -10,7 +10,8 @@ that verify, mark, and rename it. `gh attestation verify <binary> --repo HardMax
 with gh 2.49 or later, matches a downloaded binary against the build that produced it.
 
 The everyday form checks the staged index against the last commit. It names only `HEAD`, so
-it works on a fresh repository and on a depth-1 clone alike:
+it works on a depth-1 clone and on any repository with a commit. Before the first commit
+`HEAD` names nothing, and the published pre-commit hook passes with a note rather than refusing.
 
 ```sh
 amiss check --repo . --object-format sha1 \
@@ -28,7 +29,7 @@ amiss check --repo . --object-format sha1 \
 Both ids must be full commit ids: forty lowercase hex characters under sha1, sixty-four under
 sha256, never a branch name or a short form, and the two must differ. On a one-commit
 repository or a depth-1 clone, `HEAD~1` names a commit the object store does not hold, so
-`git rev-parse` prints an error and an empty string, and Amiss refuses the empty `--base` as
+`git rev-parse` prints an error and echoes `HEAD~1` back, and Amiss refuses that `--base` as
 an invalid invocation, grammar attached, before any scan starts. The staged form has no
 parent to miss.
 
