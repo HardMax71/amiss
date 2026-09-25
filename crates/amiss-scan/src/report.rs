@@ -30,7 +30,16 @@ pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CandidateBlock {
     Commit(GitSnapshotIdentity),
+    CommitUnavailable(Vec<SnapshotUnavailableReason>),
     Index(IndexCandidate),
+    Unavailable(Vec<SnapshotUnavailableReason>),
+}
+
+/// The base side of a run: the commit it resolved to, or why it did not
+/// resolve, since a commit ID is no tree ID and a report must not say so.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BaseBlock {
+    Commit(GitSnapshotIdentity),
     Unavailable(Vec<SnapshotUnavailableReason>),
 }
 
@@ -62,7 +71,7 @@ pub struct Setup {
     pub candidate_ref: Option<BranchRef>,
     pub target_ref: Option<BranchRef>,
     pub default_branch_ref: Option<BranchRef>,
-    pub base: GitSnapshotIdentity,
+    pub base: BaseBlock,
     pub candidate: CandidateBlock,
     pub policy: crate::policy::Effects,
     pub controls_unavailable: Option<ControlsUnavailableReason>,

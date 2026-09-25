@@ -243,7 +243,7 @@ fn setup() -> Setup {
         candidate_ref: None,
         target_ref: None,
         default_branch_ref: None,
-        base,
+        base: amiss_scan::report::BaseBlock::Commit(base),
         candidate: CandidateBlock::Commit(candidate),
         policy: amiss_scan::Effects::default(),
         controls_unavailable: None,

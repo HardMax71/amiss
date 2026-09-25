@@ -338,7 +338,7 @@ fn report_setup() -> Setup {
         candidate_ref: None,
         target_ref: None,
         default_branch_ref: None,
-        base: identity.clone(),
+        base: amiss_scan::report::BaseBlock::Commit(identity.clone()),
         candidate: CandidateBlock::Commit(identity),
         policy: Effects {
             errors_retained: 64,

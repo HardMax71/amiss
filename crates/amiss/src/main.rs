@@ -552,19 +552,12 @@ fn fatal(
     details: &[ErrorDetail],
     reserve: &mut BufWriter<Stdout>,
 ) -> ExitCode {
-    use amiss_scan::report::{GitSnapshotIdentity, Setup, construct_incomplete};
+    use amiss_scan::report::{BaseBlock, CandidateBlock, Setup, construct_incomplete};
 
-    let identity = |oid: &Oid| GitSnapshotIdentity {
-        commit_oid: oid.clone(),
-        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
-        object_format: invocation.object_format,
-        tree_oid: oid.clone(),
-    };
+    let unevaluated = || vec![SnapshotUnavailableReason::NotEvaluated];
     let candidate = match &invocation.candidate {
-        CandidateSelector::Commit(oid) => amiss_scan::report::CandidateBlock::Commit(identity(oid)),
-        CandidateSelector::Index => amiss_scan::report::CandidateBlock::Unavailable(vec![
-            SnapshotUnavailableReason::NotEvaluated,
-        ]),
+        CandidateSelector::Commit(_) => CandidateBlock::CommitUnavailable(unevaluated()),
+        CandidateSelector::Index => CandidateBlock::Unavailable(unevaluated()),
     };
     let setup = Setup {
         engine: engine.clone(),
@@ -574,7 +567,7 @@ fn fatal(
         candidate_ref: None,
         target_ref: None,
         default_branch_ref: None,
-        base: identity(&invocation.base),
+        base: BaseBlock::Unavailable(unevaluated()),
         candidate,
         policy: amiss_scan::policy::Effects::default(),
         controls_unavailable: None,
