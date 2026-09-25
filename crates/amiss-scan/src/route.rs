@@ -608,12 +608,15 @@ fn served_under(url: &str) -> String {
     path.trim_matches('/').to_owned()
 }
 
-/// What one `conf.py` turns on beyond suffixes: the extensions it names, and
-/// whether `autosectionlabel` prefixes each title label with its docname.
+/// What one `conf.py` turns on beyond suffixes: the extensions it names,
+/// whether `autosectionlabel` prefixes each title label with its docname, and
+/// whether it mentions intersphinx at all, which an extension of its own can
+/// load without naming.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SphinxConfig {
     pub extensions: BTreeSet<String>,
     pub prefix_document: bool,
+    pub intersphinx: bool,
 }
 
 const EXTENSIONS: &str = "extensions";
@@ -647,6 +650,7 @@ pub(crate) fn sphinx_config(source: &[u8]) -> SphinxConfig {
             config.extensions.extend(literals(body, open));
         }
     }
+    config.intersphinx = text.to_ascii_lowercase().contains("intersphinx");
     config.prefix_document = amiss_md::lines::scan(source).any(|line| {
         assigned(line.content(source), PREFIX_DOCUMENT)
             .is_some_and(|value| value.trim_ascii() == b"True")

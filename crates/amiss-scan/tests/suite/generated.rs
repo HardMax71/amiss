@@ -529,6 +529,49 @@ fn a_download_names_a_file_and_a_numref_a_label() {
     ));
 }
 
+/// A `:term:` names a glossary term any page of the root declares, in any
+/// case. One nobody declares is missing, unless intersphinx is loaded, since
+/// then it may be another project's term.
+#[test]
+fn a_term_role_names_a_declared_glossary_term() {
+    for (config, undeclared_missing) in [
+        ("project = 'probe'\n", true),
+        ("extensions = ['sphinx.ext.intersphinx']\n", false),
+    ] {
+        let chain = amiss_fixtures::commit_chain(&[(
+            "base",
+            &[
+                ("docs/conf.py", config),
+                (
+                    "docs/glossary.rst",
+                    "Glossary\n========\n\n.. glossary::\n\n   source directory\n      Where conf.py lives.\n",
+                ),
+                (
+                    "docs/index.rst",
+                    "Index\n=====\n\n:term:`source directory`\n\n:term:`Source Directory`\n\n:term:`iterable`\n",
+                ),
+            ],
+        )])
+        .expect("the fixture stages");
+        let rows = answers(&chain);
+        for line in [4, 6] {
+            assert!(
+                matches!(
+                    answer(&rows, "docs/index.rst", line),
+                    Resolution::Resolved { .. }
+                ),
+                "line {line}"
+            );
+        }
+        let undeclared = answer(&rows, "docs/index.rst", 8);
+        assert_eq!(
+            matches!(undeclared, Resolution::Missing(Missing::LabelNotDeclared)),
+            undeclared_missing,
+            "{config}: {undeclared:?}"
+        );
+    }
+}
+
 /// Sphinx reads an image, figure, include or literalinclude path that starts
 /// with `/` from the directory holding `conf.py`, not as a site route.
 #[test]

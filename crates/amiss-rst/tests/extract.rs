@@ -143,6 +143,45 @@ fn download_numref_substitution_images_and_figure_targets_are_read() {
     );
 }
 
+/// A glossary declares each term at the indent its first term sets, after
+/// any options and before the deeper definition, which is still read; a
+/// classifier after ` : ` is no part of the term. `:term:` names one, wrapped
+/// or behind a title.
+#[test]
+fn glossary_terms_are_declared_and_term_roles_read() {
+    let source = concat!(
+        ".. glossary::\n",
+        "   :sorted:\n",
+        "\n",
+        "   source directory\n",
+        "   source dir\n",
+        "      Where :doc:`conf` lives.\n",
+        "\n",
+        "   ``environment`` : internal\n",
+        "      A structure.\n",
+        "\n",
+        "After the :term:`source\n",
+        "directory`, see :term:`the env <environment>`.\n",
+    );
+    let read = extract(source.as_bytes()).expect("utf-8 source");
+    assert_eq!(
+        read.anchors,
+        vec![
+            "source directory".to_owned(),
+            "source dir".to_owned(),
+            "environment".to_owned(),
+        ],
+    );
+    assert_eq!(
+        kinds(source),
+        vec![
+            (ReferenceKind::DocRole, "conf".to_owned()),
+            (ReferenceKind::TermRole, "source directory".to_owned()),
+            (ReferenceKind::TermRole, "environment".to_owned()),
+        ],
+    );
+}
+
 #[test]
 fn a_quoted_label_declaration_sheds_its_backticks() {
     let read = extract(b".. _`pytest helpers`:\n\n.. _plain:\n").expect("utf-8 source");

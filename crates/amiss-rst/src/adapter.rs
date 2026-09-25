@@ -92,10 +92,14 @@ fn occurrence(reference: &Reference, within: usize) -> Occurrence {
     Occurrence {
         construct: construct(reference.kind),
         raw_destination: reference.target.clone(),
-        semantic_destination: reference.selection.as_ref().map_or_else(
-            || reference.target.clone(),
-            |selection| format!("{}#{selection}", reference.target),
-        ),
+        semantic_destination: if let Some(selection) = &reference.selection {
+            format!("{}#{selection}", reference.target)
+        } else if reference.kind == ReferenceKind::TermRole {
+            // A term is a label of its own kind, spelled the way `MyST` spells `{term}`.
+            format!("term:{}", reference.target)
+        } else {
+            reference.target.clone()
+        },
         span: reference.span,
         node_path: vec![reference.block, within],
         block_kind: BlockKind::Paragraph,
@@ -115,6 +119,7 @@ const fn construct(kind: ReferenceKind) -> SourceConstruct {
         ReferenceKind::DocRole => SourceConstruct::RstDocRole,
         ReferenceKind::DownloadRole => SourceConstruct::RstDownloadRole,
         ReferenceKind::RefRole => SourceConstruct::RstRefRole,
+        ReferenceKind::TermRole => SourceConstruct::RstTermRole,
         ReferenceKind::NumrefRole => SourceConstruct::RstNumrefRole,
         ReferenceKind::TargetOption => SourceConstruct::RstTargetOption,
         ReferenceKind::TocTreeEntry => SourceConstruct::RstTocTreeEntry,
