@@ -291,10 +291,9 @@ fn a_heading_that_filters_to_nothing_diverges_by_empty_rule() {
     for rule in &RULES {
         let published = identities(rule, &headings);
         match rule.name {
-            "gitea" | "docutils" => {
+            "gitea" | "docutils" | "asciidoctor" => {
                 assert!(published.is_empty(), "{} publishes no anchor", rule.name);
             }
-            "asciidoctor" => assert_eq!(published, vec!["_...".to_owned()]),
             "forgejo" | "goldmark" => assert_eq!(published, vec!["heading".to_owned()]),
             "kramdown" => assert_eq!(published, vec!["section".to_owned()]),
             "python-markdown" | "pymdownx" => assert_eq!(published, vec!["_1".to_owned()]),
@@ -305,6 +304,7 @@ fn a_heading_that_filters_to_nothing_diverges_by_empty_rule() {
 
 /// The generated identity is what an `AsciiDoc` cross reference actually names,
 /// and a document that splices another file cannot answer for one it lacks.
+/// Every expectation is what Asciidoctor 2.1.0.alpha.0 generated for the title.
 #[test]
 fn asciidoctor_publishes_its_generated_identity() {
     let rule = RULES
@@ -313,10 +313,22 @@ fn asciidoctor_publishes_its_generated_identity() {
         .expect("the table holds the asciidoctor rule");
     let cases = [
         ("Named Part", "_named_part"),
-        ("A -- B", "_a_--_b"),
-        ("a.b.c", "_a.b.c"),
+        ("A -- B", "_ab"),
+        ("a.b.c", "_a_b_c"),
         ("3D printing", "_3d_printing"),
-        ("Ⅻ chapter", "__chapter"),
+        ("Ⅻ chapter", "_ⅻ_chapter"),
+        ("Hello-World", "_hello_world"),
+        ("Version 2.0 notes", "_version_2_0_notes"),
+        ("Copyright (C) 2024 -- now", "_copyright_2024now"),
+        ("a--b and a->b...", "_ab_and_ab"),
+        ("Über café", "_über_café"),
+        ("Don't stop", "_dont_stop"),
+        ("-- start", "_start"),
+        ("end --", "_end"),
+        ("x (TM) y", "_x_y"),
+        ("a <- b <= c", "_a_b_c"),
+        ("A...B", "_ab"),
+        ("Wait...", "_wait"),
     ];
     for (text, want) in cases {
         let heading = Heading {

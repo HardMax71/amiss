@@ -133,7 +133,8 @@ fn bump(candidate: &str) -> String {
 
 fn slug(rule: &AnchorRule, text: &str) -> String {
     let typography = match rule.typography {
-        Typography::SmartPunctuation => smart(text),
+        Typography::SmartPunctuation => rewrite(text, smart_form),
+        Typography::AsciidoctorReplacements => rewrite(text, replaced_form),
         Typography::Plain => text.to_owned(),
     };
     let normalized = match rule.normalize {
@@ -209,33 +210,62 @@ fn slug(rule: &AnchorRule, text: &str) -> String {
 /// The dash and ellipsis rewrites pulldown-cmark performs before mdBook reads
 /// a heading. Its quote rewrites are unobservable here: every rule either drops
 /// both spellings or treats both as separators.
-fn smart(text: &str) -> String {
+fn smart_form(_out: &str, rest: &str) -> Option<(&'static str, usize)> {
+    [("---", "\u{2014}"), ("--", "\u{2013}"), ("...", "\u{2026}")]
+        .into_iter()
+        .find(|(form, _replacement)| rest.starts_with(form))
+        .map(|(form, replacement)| (replacement, form.len()))
+}
+
+/// The forms Asciidoctor replaces anywhere in a section title: the copyright,
+/// registered and trademark marks, the ellipsis, the four arrows, and a
+/// backtick apostrophe.
+const REPLACED: [&str; 9] = ["(C)", "(R)", "(TM)", "...", "->", "=>", "<-", "<=", "`'"];
+
+/// The replacements Asciidoctor makes in a section title before it derives the
+/// id. Each becomes a character reference and the id rule deletes references,
+/// so the replaced text vanishes; a spaced em dash takes its spaces with it,
+/// and one between two word characters joins them.
+fn replaced_form(out: &str, rest: &str) -> Option<(&'static str, usize)> {
+    let word = |ch: Option<char>| ch.is_some_and(|ch| is_kept(Keep::LetterMarkNumberConnector, ch));
+    let spaced_dash = |dash: &str| -> Option<usize> {
+        let after = dash.strip_prefix("--")?;
+        (after.is_empty() || after.starts_with(' '))
+            .then(|| 2_usize.saturating_add(usize::from(after.starts_with(' '))))
+    };
+    let width = REPLACED
+        .iter()
+        .find(|form| rest.starts_with(**form))
+        .map(|form| form.len())
+        .or_else(|| {
+            rest.strip_prefix(' ')
+                .and_then(spaced_dash)
+                .map(|width| width.saturating_add(1))
+        })
+        .or_else(|| out.is_empty().then(|| spaced_dash(rest)).flatten())
+        .or_else(|| {
+            (word(out.chars().next_back())
+                && rest.starts_with("--")
+                && word(rest.get(2..).and_then(|after| after.chars().next())))
+            .then_some(2)
+        })?;
+    Some(("", width))
+}
+
+/// Copies the text, putting the rule's replacement in place of each form the
+/// rule finds where it starts.
+fn rewrite(text: &str, form_at: fn(&str, &str) -> Option<(&'static str, usize)>) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
-    while let Some(at) = rest.find(['-', '.']) {
-        let (head, tail) = rest.split_at(at);
-        out.push_str(head);
-        let (replacement, width) = if tail.starts_with("---") {
-            ("\u{2014}", 3)
-        } else if tail.starts_with("--") {
-            ("\u{2013}", 2)
-        } else if tail.starts_with("...") {
-            ("\u{2026}", 3)
+    while let Some((ch, tail)) = split_first(rest) {
+        if let Some((replacement, width)) = form_at(&out, rest) {
+            out.push_str(replacement);
+            rest = rest.get(width..).unwrap_or_default();
         } else {
-            ("", 0)
-        };
-        if width == 0 {
-            let Some((first, remainder)) = split_first(tail) else {
-                break;
-            };
-            out.push(first);
-            rest = remainder;
-            continue;
+            out.push(ch);
+            rest = tail;
         }
-        out.push_str(replacement);
-        rest = tail.get(width..).unwrap_or_default();
     }
-    out.push_str(rest);
     out
 }
 
@@ -249,6 +279,7 @@ fn is_separator(separators: Separators, ch: char) -> bool {
         Separators::Space => ch == ' ',
         Separators::Whitespace => ch.is_whitespace(),
         Separators::WhitespaceUnderscore => ch.is_whitespace() || ch == '_',
+        Separators::SpaceUnderscoreDotHyphen => matches!(ch, ' ' | '_' | '.' | '-'),
         Separators::NonAlphanumeric => !ch.is_ascii_alphanumeric(),
         Separators::MditVuePunctuation => {
             ch.is_whitespace()
@@ -323,7 +354,6 @@ fn is_kept(keep: Keep, ch: char) -> bool {
         Keep::LetterNumberUnderscore => word || ch == '_',
         Keep::AlphabeticNumericUnderscore => ch.is_alphanumeric() || ch == '_',
         Keep::AsciiAlphanumeric => ch.is_ascii_alphanumeric(),
-        Keep::AsciidoctorId => ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.',
         Keep::AnythingButC0 => !matches!(u32::from(ch), 0x0000..=0x001F),
     }
 }

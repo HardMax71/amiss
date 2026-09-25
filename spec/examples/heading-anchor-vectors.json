@@ -99,8 +99,8 @@
         "serves": [
           "Asciidoctor 2 and Antora, at the default idprefix and idseparator"
         ],
-        "expectations": "transcribed from Asciidoctor's Section.generate_id and InvalidSectionIdCharsRx, then hand-traced case by case",
-        "cross_checked": "not cross-checked against a running Asciidoctor; a title whose every character is filtered publishes nothing here, and a document set overriding idprefix or idseparator publishes identities this rule does not know",
+        "expectations": "Asciidoctor 2.1.0.alpha.0 under ruby, rendering one section per case",
+        "cross_checked": "a title whose every character is filtered gets an empty id, which no link can name, so it publishes nothing here; a document set overriding idprefix or idseparator publishes identities this rule does not know",
         "source": "https://github.com/asciidoctor/asciidoctor/blob/main/lib/asciidoctor/section.rb"
       },
       {
@@ -168,7 +168,7 @@
         "pymdownx": "a----b",
         "mdit-vue": "a-b",
         "kramdown": "a----b",
-        "asciidoctor": "_a_--_b",
+        "asciidoctor": "_ab",
         "docutils": "a-b"
       }
     },
@@ -187,7 +187,7 @@
         "pymdownx": "a--b",
         "mdit-vue": "a-b",
         "kramdown": "a--b",
-        "asciidoctor": "_a_..._b",
+        "asciidoctor": "_a_b",
         "docutils": "a-b"
       }
     },
@@ -282,7 +282,7 @@
         "pymdownx": "-hyphen-",
         "mdit-vue": "hyphen",
         "kramdown": "hyphen-",
-        "asciidoctor": "_-hyphen-",
+        "asciidoctor": "_hyphen",
         "docutils": "hyphen"
       }
     },
@@ -301,7 +301,7 @@
         "pymdownx": "abc",
         "mdit-vue": "a-b-c",
         "kramdown": "abc",
-        "asciidoctor": "_a.b.c",
+        "asciidoctor": "_a_b_c",
         "docutils": "a-b-c"
       }
     },
@@ -358,7 +358,7 @@
         "pymdownx": "résumé--cv",
         "mdit-vue": "resume-cv",
         "kramdown": "rsum--cv",
-        "asciidoctor": "_rsum_cv",
+        "asciidoctor": "_résumé_cv",
         "docutils": "resume-cv"
       }
     },
@@ -377,7 +377,7 @@
         "pymdownx": "café-latte",
         "mdit-vue": "cafe-latte",
         "kramdown": "cafe-latte",
-        "asciidoctor": "_cafe_latte",
+        "asciidoctor": "_café_latte",
         "docutils": "cafe-latte"
       }
     },
@@ -396,7 +396,7 @@
         "pymdownx": "istanbul",
         "mdit-vue": "istanbul",
         "kramdown": "stanbul",
-        "asciidoctor": "_stanbul",
+        "asciidoctor": "_i̇stanbul",
         "docutils": "istanbul"
       }
     },
@@ -415,7 +415,7 @@
         "pymdownx": "日本語の見出し",
         "mdit-vue": "日本語の見出し",
         "kramdown": "section",
-        "asciidoctor": null,
+        "asciidoctor": "_日本語の見出し",
         "docutils": null
       }
     },
@@ -434,7 +434,7 @@
         "pymdownx": "ইনসটল",
         "mdit-vue": "ইন্সটল",
         "kramdown": "section",
-        "asciidoctor": null,
+        "asciidoctor": "_ইন্সটল",
         "docutils": null
       }
     },
@@ -472,7 +472,7 @@
         "pymdownx": "-sponsors",
         "mdit-vue": "❤️-sponsors",
         "kramdown": "sponsors",
-        "asciidoctor": "__sponsors",
+        "asciidoctor": "_️_sponsors",
         "docutils": "sponsors"
       }
     },
@@ -491,7 +491,7 @@
         "pymdownx": "第-1-章",
         "mdit-vue": "第-1-章",
         "kramdown": "section",
-        "asciidoctor": "__1",
+        "asciidoctor": "_第_1_章",
         "docutils": null
       }
     },
@@ -510,7 +510,7 @@
         "pymdownx": "_1",
         "mdit-vue": "",
         "kramdown": "section",
-        "asciidoctor": "_...",
+        "asciidoctor": null,
         "docutils": null
       }
     },
@@ -529,7 +529,7 @@
         "pymdownx": "ünïcödé-ähnlich",
         "mdit-vue": "unicode-ahnlich",
         "kramdown": "ncd-hnlich",
-        "asciidoctor": "_ncd_hnlich",
+        "asciidoctor": "_ünïcödé_ähnlich",
         "docutils": "unicode-ahnlich"
       }
     },
@@ -548,7 +548,7 @@
         "pymdownx": "ⅻ-chapter",
         "mdit-vue": "xii-chapter",
         "kramdown": "chapter",
-        "asciidoctor": "__chapter",
+        "asciidoctor": "_ⅻ_chapter",
         "docutils": "xii-chapter"
       }
     },
