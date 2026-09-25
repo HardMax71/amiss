@@ -149,7 +149,10 @@ and Starlight both define a translation as the file at the matching relative pat
 key from the tree needs no build and no generator configuration, which keeps executable build
 semantics out of the trust boundary. It also cannot see the two escapes that move a page's
 identity off its path, a Docusaurus `id` and a Hugo `translationKey`; a page using either is
-reported as a missing and orphaned pair.
+reported as a missing and orphaned pair. A translation written in another page suffix than its
+source, a `.md` for an `.mdx`, is the same page, since both generators pair them by the path
+without its suffix, so a target page no source page shares a key with takes the one source key
+sharing its stem.
 
 The context names each side's root, the locale it claims, an optional filename suffix, and the
 file suffixes that count as pages. The plan names the object format, commit, and tree, so the
@@ -200,7 +203,8 @@ This is the MkDocs i18n default and Hugo's filename mode:
 
 Here `docs/guide/start.md` and `docs/guide/start.de-DE.md` both key as `guide/start.md`. A null
 suffix means the filename carries no locale token at all, so `start.de-DE.md` is not an English
-page and `start.md` is not a German one. When one root sits inside the other the deeper one wins,
+page and `start.md` is not a German one. That reading holds only where both sides share a root;
+under a locale directory a dotted name such as `v1.2-notes.md` is a page like any other. When one root sits inside the other the deeper one wins,
 which is what lets a locale directory live under the source root.
 
 `documents` is byte-sorted, and every entry starts with a dot. A file whose name ends in none of
@@ -222,7 +226,7 @@ plan. Human output ends with it:
 amiss locale-inventory: en 42 pages complete
 amiss locale-inventory: de-DE 39 pages complete
 target pages still carrying the source bytes: 7
-producer amiss-locale-tree 1.0.0 context sha256:0f3c...
+producer amiss-locale-tree 1.1.0 context sha256:0f3c...
 ```
 
 Those seven pages are the point of the audit. Either the plan authorizes `source-identical` for

@@ -129,6 +129,39 @@ fn a_locale_directory_keys_every_page_under_its_own_root() {
     assert_eq!(assessment.coverage.target_missing, ["guide/start.md"]);
 }
 
+/// A translation written in another page suffix than its source is the same
+/// page, and a dotted name under a locale directory is a page like any other;
+/// only a shared root makes a dotted name another locale's.
+#[test]
+fn a_page_keys_across_suffixes_and_keeps_dotted_names() {
+    let chain = staged_repository(&[
+        ("docs/guide.mdx", Staged::File(b"# Guide\n")),
+        ("docs/v1.2-notes.md", Staged::File(b"# Notes\n")),
+        ("docs/de-DE/guide.md", Staged::File(b"# Anleitung\n")),
+        ("docs/de-DE/v1.2-notes.md", Staged::File(b"# Hinweise\n")),
+    ])
+    .unwrap();
+    let context = LocaleTreeContext {
+        documents: vec![".md".to_owned(), ".mdx".to_owned()],
+        ..directories()
+    };
+    let plan = plan(&chain, &context, |_plan| {});
+
+    let evidence = inventory(&chain, &context, &plan);
+
+    assert_eq!(
+        keys(&evidence),
+        (
+            vec!["guide.mdx".to_owned(), "v1.2-notes.md".to_owned()],
+            vec!["guide.mdx".to_owned(), "v1.2-notes.md".to_owned()]
+        )
+    );
+    assert_eq!(
+        coverage(&plan, &evidence).verdict,
+        AssessmentVerdict::Matched
+    );
+}
+
 #[test]
 fn a_locale_suffix_in_the_filename_keys_the_same_page() {
     let chain = staged_repository(&[
