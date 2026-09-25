@@ -82,7 +82,7 @@ declare_taxonomy! {
             metadata: Some(&INVALID_INVOCATION),
         },
         InvalidEvent => {
-            meaning: "the declared repository, ref, or default-branch identity is not in canonical form; pass a lowercase owner and name and full refs/heads/ references",
+            meaning: "the declared repository, ref, default-branch, or forge identity is unusable as written; pass a lowercase owner and name, full refs/heads/ references, and --forge for a host outside the known table, as the stderr reason line names",
             metadata: Some(&INVALID_EVENT),
         },
         InvalidProfile => {

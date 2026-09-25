@@ -215,9 +215,6 @@ fn the_fix_form_refuses_check_only_flags() {
         args.extend(extra.iter());
         let (code, _stdout, stderr) = amiss(&args);
         assert_eq!(code, 2, "{stderr}");
-        assert!(
-            stderr.contains("INVALID_INVOCATION") || stderr.is_empty(),
-            "{stderr}"
-        );
+        assert!(stderr.contains("INVALID_INVOCATION"), "{stderr}");
     }
 }
