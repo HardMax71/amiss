@@ -267,7 +267,8 @@ which GitHub renders as a suggested edit
 and the finding key riding as the stable `partialFingerprints` entry, so an ingesting
 scanner deduplicates across runs by the same identity the report uses. A location's URI is
 the path's own bytes percent-encoded, so a hostile path cannot break it and a name that is not
-UTF-8 still names its file. Retained analysis errors become tool execution notifications, an
+UTF-8 still names its file. The run declares `columnKind` as `unicodeCodePoints`, the unit every
+report column counts. Retained analysis errors become tool execution notifications, an
 incomplete run reports `executionSuccessful` false, and a rejected machine invocation
 still answers in SARIF with exit class 2. Like the human form, the projection cannot
 change facts, ordering, totals, or the exit class; the canonical report stays the only
