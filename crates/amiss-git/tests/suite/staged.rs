@@ -115,7 +115,7 @@ fn intent_to_add_and_unmerged_and_split_reject() {
     git_allow_failure(dir.path(), &["merge", "--abort"]);
 
     git(dir.path(), &["update-index", "--split-index"]);
-    assert_eq!(read(dir.path()), Err(Error::IndexInvalid));
+    assert_eq!(read(dir.path()), Err(Error::IndexFormatUnsupported));
 }
 
 #[test]
@@ -298,7 +298,7 @@ fn a_crafted_index_holds_order_prefixes_and_name_lengths() {
 fn index_extensions_are_skipped_or_refused_by_their_case() {
     let entry = named_entry(b"a");
 
-    let mut mandatory = b"link".to_vec();
+    let mut mandatory = b"abcd".to_vec();
     mandatory.extend_from_slice(&0_u32.to_be_bytes());
     assert_eq!(
         parse_index_file(
@@ -309,6 +309,18 @@ fn index_extensions_are_skipped_or_refused_by_their_case() {
         Error::IndexInvalid,
         "a lowercase-initial extension is mandatory and unknown"
     );
+    for format in [b"link", b"sdir"] {
+        let mut split_or_sparse = format.to_vec();
+        split_or_sparse.extend_from_slice(&0_u32.to_be_bytes());
+        assert_eq!(
+            parse_index_file(
+                ObjectFormat::Sha1,
+                &raw_index(std::slice::from_ref(&entry), &split_or_sparse)
+            ),
+            Err(Error::IndexFormatUnsupported),
+            "a split or sparse index is a format this reader does not expand"
+        );
+    }
 
     let mut optional = b"TREE".to_vec();
     optional.extend_from_slice(&4_u32.to_be_bytes());
@@ -345,4 +357,35 @@ fn an_index_at_exactly_the_cap_is_read() {
         bytes,
         "an index the size of its ceiling is under it"
     );
+}
+
+/// `index.skipHash`, which `feature.manyFiles` turns on, writes an all-zero
+/// trailer, and Git reads such an index without checking it.
+#[test]
+fn an_index_written_under_skip_hash_parses() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = TempDir::new()?;
+    amiss_fixtures::real_git(dir.path(), &["init", "-q"])?;
+    amiss_fixtures::real_git(dir.path(), &["config", "index.skipHash", "true"])?;
+    fs::write(dir.path().join("a.md"), "# a\n")?;
+    amiss_fixtures::real_git(dir.path(), &["add", "a.md"])?;
+    let bytes = fs::read(dir.path().join(".git/index"))?;
+    assert!(
+        bytes.iter().rev().take(20).all(|byte| *byte == 0),
+        "git wrote the zero trailer"
+    );
+    assert_eq!(read(dir.path()).map(|index| index.entries.len()), Ok(1));
+    Ok(())
+}
+
+/// A sparse index keeps a whole directory outside the cone as one entry, a
+/// format this reader names rather than calling the index invalid.
+#[test]
+fn a_sparse_index_is_named_unsupported() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = TempDir::new()?;
+    base(dir.path());
+    amiss_fixtures::real_git(dir.path(), &["commit", "-qm", "one"])?;
+    amiss_fixtures::real_git(dir.path(), &["config", "index.sparse", "true"])?;
+    amiss_fixtures::real_git(dir.path(), &["sparse-checkout", "set", "--cone", "docs"])?;
+    assert_eq!(read(dir.path()), Err(Error::IndexFormatUnsupported));
+    Ok(())
 }

@@ -97,7 +97,8 @@ pub fn parse_index_file(object_format: ObjectFormat, bytes: &[u8]) -> Result<Log
         .ok_or(Error::IndexInvalid)?;
     let content = bytes.get(..checksum_at).ok_or(Error::IndexInvalid)?;
     let stored = bytes.get(checksum_at..).ok_or(Error::IndexInvalid)?;
-    if ordinary_digest(object_format, content) != stored {
+    // index.skipHash writes an all-zero trailer, and Git skips the check then.
+    if stored.iter().any(|byte| *byte != 0) && ordinary_digest(object_format, content) != stored {
         return Err(Error::IndexInvalid);
     }
     if content.get(..4) != Some(b"DIRC") {
@@ -110,10 +111,14 @@ pub fn parse_index_file(object_format: ObjectFormat, bytes: &[u8]) -> Result<Log
     let count = usize::try_from(be32(content, 8)?).map_err(|_wide| Error::IndexInvalid)?;
 
     let mut entries: Vec<IndexEntry> = Vec::new();
+    let mut unexpanded = false;
     let mut at = 12_usize;
     for _entry in 0..count {
         let start = at;
-        let mode = entry_mode(be32(content, start.saturating_add(24))?)?;
+        let raw_mode = be32(content, start.saturating_add(24))?;
+        let mode = (raw_mode != 0o040_000)
+            .then(|| entry_mode(raw_mode))
+            .transpose()?;
         let oid_start = start.saturating_add(40);
         let raw_oid = content
             .get(oid_start..oid_start.saturating_add(oid_width))
@@ -147,9 +152,12 @@ pub fn parse_index_file(object_format: ObjectFormat, bytes: &[u8]) -> Result<Log
         let (path, next) = entry_path(content, version, start, path_at, flags, previous_path)?;
         at = next;
 
-        if path.is_empty() {
-            return Err(Error::IndexInvalid);
-        }
+        // A split index names replacements by position and a sparse one keeps
+        // whole directories; both are only valid beside their extension.
+        let Some(mode) = mode.filter(|_mode| !path.is_empty()) else {
+            unexpanded = true;
+            continue;
+        };
         if !previous_path.is_empty() && previous_path >= path.as_slice() {
             return Err(Error::IndexInvalid);
         }
@@ -165,6 +173,9 @@ pub fn parse_index_file(object_format: ObjectFormat, bytes: &[u8]) -> Result<Log
     }
 
     extensions(content, at)?;
+    if unexpanded {
+        return Err(Error::IndexInvalid);
+    }
     Ok(LogicalIndex { entries })
 }
 
@@ -222,8 +233,8 @@ fn entry_path(
 }
 
 /// Extensions after the rows: an uppercase-initial signature is optional and
-/// skipped; split-index backing, sparse directories, and any other mandatory
-/// unknown extension reject the index.
+/// skipped; split-index backing and sparse directories name formats this
+/// reader does not expand, and any other mandatory extension rejects the index.
 fn extensions(content: &[u8], mut at: usize) -> Result<(), Error> {
     while at < content.len() {
         let signature = content
@@ -235,8 +246,10 @@ fn extensions(content: &[u8], mut at: usize) -> Result<(), Error> {
         if payload_at.saturating_add(length) > content.len() {
             return Err(Error::IndexInvalid);
         }
-        let optional = signature.first().is_some_and(u8::is_ascii_uppercase);
-        if !optional {
+        if signature == b"link" || signature == b"sdir" {
+            return Err(Error::IndexFormatUnsupported);
+        }
+        if !signature.first().is_some_and(u8::is_ascii_uppercase) {
             return Err(Error::IndexInvalid);
         }
         at = payload_at.saturating_add(length);

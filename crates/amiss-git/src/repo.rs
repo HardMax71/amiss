@@ -406,6 +406,7 @@ impl Repository {
                 | Error::ObjectWrongKind
                 | Error::ObjectUnreadable
                 | Error::IndexInvalid
+                | Error::IndexFormatUnsupported
                 | Error::IndexUnmerged
                 | Error::IntentToAdd
                 | Error::SnapshotChanged,

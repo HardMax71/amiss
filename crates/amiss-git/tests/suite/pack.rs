@@ -166,8 +166,8 @@ fn rejects_orphans_and_corruption() {
     let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
     assert_eq!(
         read_blob(&repo, &blob_v1).unwrap_err(),
-        Error::ObjectUnreadable,
-        "orphan idx without its pack is fatal"
+        Error::ObjectMissing,
+        "an orphan idx is skipped, as Git skips it, so its objects are missing"
     );
     fs::write(&pack, &saved).unwrap();
 
@@ -409,4 +409,23 @@ fn junk_pack_directory_entries_are_counted_before_they_are_discarded() {
         observed_lower_bound > 2,
         "the junk was counted, not silently dropped before the tally"
     );
+}
+
+/// An interrupted fetch or repack can leave an index or pack without its
+/// partner; Git skips it and reads the rest, and so does this reader.
+#[test]
+fn an_unpaired_pack_file_is_skipped() -> Result<(), Box<dyn std::error::Error>> {
+    let (dir, blob_v1, _) = packed_repo(&[]);
+    let idx = pack_paths(dir.path())
+        .into_iter()
+        .find(|path| path.extension().is_some_and(|e| e == "idx"))
+        .ok_or("the fixture packs its objects")?;
+    fs::copy(
+        &idx,
+        idx.with_file_name(format!("pack-{}.idx", "f".repeat(40))),
+    )?;
+    let repo =
+        Repository::open(dir.path(), ObjectFormat::Sha1).map_err(|_open| "the repository opens")?;
+    assert_eq!(read_blob(&repo, &blob_v1), Ok(file_v(1).into_bytes()));
+    Ok(())
 }
