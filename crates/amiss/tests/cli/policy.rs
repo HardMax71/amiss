@@ -387,6 +387,13 @@ fn a_broken_policy_names_the_member_it_failed_at() {
             ],
         ),
         (
+            r#"{"schema":"amiss/scanner-policy","document_includes":[{"kind":"tree","path":"docs","suffix":".md"},{"kind":"tree","path":"docs","suffix":".txt"}],"#,
+            vec![
+                ("CONFIGURATION_INVALID", "$.document_includes[1]"),
+                ("NONCANONICAL_ARRAY", "$.document_includes[1]"),
+            ],
+        ),
+        (
             r#"{"schema":"amiss/scanner-policy","extra":1,"document_includes":[],"#,
             vec![
                 ("CONFIGURATION_INVALID", "$.extra"),

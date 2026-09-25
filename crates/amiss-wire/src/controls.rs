@@ -65,12 +65,13 @@ pub(crate) fn sorted_set<T>(
     items: &[T],
     compare: impl Fn(&T, &T) -> Ordering,
 ) -> Result<(), Error> {
-    for pair in items.windows(2) {
+    for (index, pair) in items.windows(2).enumerate() {
         if let [left, right] = pair {
+            let member = format!("{path}[{}]", index.saturating_add(1));
             match compare(left, right) {
                 Ordering::Less => {}
-                Ordering::Equal => return fail(path, ErrorKind::DuplicateMember),
-                Ordering::Greater => return fail(path, ErrorKind::UnsortedSet),
+                Ordering::Equal => return fail(&member, ErrorKind::DuplicateMember),
+                Ordering::Greater => return fail(&member, ErrorKind::UnsortedSet),
             }
         }
     }
