@@ -42,6 +42,7 @@ impl Repository {
         let root_dir = open_root(root)?;
         if let Ok(git_dir) = open_dir(&root_dir, ".git") {
             let objects = open_dir(&git_dir, "objects").map_err(|_defect| RepositoryOpenError)?;
+            declared_format(&git_dir, object_format)?;
             return Ok(Self::from_handles(
                 (git_dir, root.join(".git")),
                 objects,
@@ -55,9 +56,11 @@ impl Repository {
             Ok(commondir) => {
                 let common_path = private_path.join(pointer_line(commondir, "")?);
                 let common = open_root(&common_path)?;
+                declared_format(&common, object_format)?;
                 open_dir(&common, "objects").map_err(|_defect| RepositoryOpenError)?
             }
             Err(defect) if defect.kind() == std::io::ErrorKind::NotFound => {
+                declared_format(&git_dir, object_format)?;
                 open_dir(&git_dir, "objects").map_err(|_defect| RepositoryOpenError)?
             }
             Err(_defect) => return Err(RepositoryOpenError),
@@ -481,6 +484,49 @@ fn require_kind(object: Object, expected: ObjectKind) -> Result<Object, Error> {
 /// The ceiling on a `gitdir:` or `commondir` pointer file; a larger one is a
 /// repository-form defect rather than any real checkout git writes.
 const GITDIR_POINTER_BYTES: u64 = 16_384;
+/// A repository configuration past this many bytes is not read for its format.
+const CONFIG_BYTES: u64 = 1_048_576;
+
+/// Refuses a declared object format the repository's own configuration
+/// contradicts: `extensions.objectFormat` names SHA-256, and its absence
+/// SHA-1. A configuration that cannot be read contradicts nothing.
+fn declared_format(dir: &File, declared: ObjectFormat) -> Result<(), RepositoryOpenError> {
+    let mut bytes = Vec::new();
+    let Ok(config) = open_file(dir, "config") else {
+        return Ok(());
+    };
+    if config.take(CONFIG_BYTES).read_to_end(&mut bytes).is_err() {
+        return Ok(());
+    }
+    let mut extensions = false;
+    let mut configured = ObjectFormat::Sha1;
+    for line in String::from_utf8_lossy(&bytes).lines() {
+        let line = line.trim();
+        if let Some(section) = line.strip_prefix('[') {
+            extensions = section
+                .split([']', ' ', '"'])
+                .next()
+                .is_some_and(|name| name.eq_ignore_ascii_case("extensions"));
+        } else if extensions
+            && let Some((key, value)) = line.split_once('=')
+            && key.trim().eq_ignore_ascii_case("objectformat")
+        {
+            let value = value.split(['#', ';']).next().unwrap_or_default();
+            if value
+                .trim()
+                .trim_matches('"')
+                .eq_ignore_ascii_case("sha256")
+            {
+                configured = ObjectFormat::Sha256;
+            }
+        }
+    }
+    if configured == declared {
+        Ok(())
+    } else {
+        Err(RepositoryOpenError)
+    }
+}
 
 /// One bounded pointer line: `prefix`, a nonempty single-line UTF-8 path,
 /// one optional trailing newline, and nothing else.
