@@ -225,11 +225,21 @@ pub const DECLARABLE: [Spelling; 6] = [
     Spelling::PageUrl,
 ];
 
-/// The two keys an Antora component descriptor opens a line with that this
-/// rule reads: the component the root contributes to, and the block reserved
-/// for the extensions that assemble that component when the site is built.
+/// The three keys an Antora component descriptor opens a line with that this
+/// rule reads: the component the root contributes to, the version of it the
+/// root holds, and the block reserved for the extensions that assemble that
+/// component when the site is built.
 const ANTORA_COMPONENT: &[u8] = b"name:";
+const ANTORA_VERSION: &[u8] = b"version:";
 const ANTORA_EXTENSIONS: &[u8] = b"ext:";
+
+/// What one `antora.yml` says about its own root.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AntoraComponent {
+    pub name: String,
+    pub version: Option<String>,
+    pub extended: bool,
+}
 
 /// The key a Sphinx configuration opens a line with to say which suffixes it
 /// reads, the parser name that means this engine's reStructuredText, and the
@@ -403,23 +413,30 @@ pub fn directory(document: &[u8]) -> &[u8] {
 }
 
 /// What one `antora.yml` says about its own root: the component it contributes
-/// to, and whether it reserves the `ext` block Antora hands to the extensions
-/// that assemble the component. Each is a plain scalar on a line of its own,
-/// read the way a document's frontmatter is, and nothing else in the file is
-/// looked at.
+/// to, the version of it the root holds, and whether it reserves the `ext`
+/// block Antora hands to the extensions that assemble the component. Each is a
+/// plain scalar on a line of its own, read the way a document's frontmatter
+/// is, and nothing else in the file is looked at.
 #[must_use]
-pub(crate) fn antora_descriptor(source: &[u8]) -> Option<(String, bool)> {
+pub(crate) fn antora_descriptor(source: &[u8]) -> Option<AntoraComponent> {
     let mut name = None;
+    let mut version = None;
     let mut extended = false;
     for line in amiss_md::lines::scan(source) {
         let content = line.content(source);
         if let Some(value) = scalar(content, ANTORA_COMPONENT) {
             name.get_or_insert_with(|| value.to_owned());
+        } else if let Some(value) = scalar(content, ANTORA_VERSION) {
+            version.get_or_insert_with(|| value.to_owned());
         } else if content.starts_with(ANTORA_EXTENSIONS) {
             extended = true;
         }
     }
-    name.map(|name| (name, extended))
+    name.map(|name| AntoraComponent {
+        name,
+        version,
+        extended,
+    })
 }
 
 /// What one `.amiss/router.yml` says about the directory it sits in: the
