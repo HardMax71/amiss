@@ -851,12 +851,23 @@ pub(crate) fn addressed_rule(source: &[u8]) -> Option<&'static RouteRule> {
     };
     if binds(b"base_url") {
         Some(&ZOLA)
-    } else if binds(b"baseurl") {
+    } else if binds(b"baseurl") || HUGO_ONLY_KEYS.iter().any(|key| binds(key)) {
         Some(&HUGO)
     } else {
         None
     }
 }
+
+/// Keys Hugo reads that Zola, which writes snake case, never does, for the
+/// Hugo site that leaves `baseURL` unset.
+const HUGO_ONLY_KEYS: [&[u8]; 6] = [
+    b"languagecode",
+    b"defaultcontentlanguage",
+    b"contentdir",
+    b"publishdir",
+    b"enablerobotstxt",
+    b"enablegitinfo",
+];
 
 /// What a document declares about its own publication in frontmatter: the
 /// name it publishes under, which is `slug` before `id`, and the page URLs it
