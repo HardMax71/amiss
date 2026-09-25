@@ -89,7 +89,7 @@ is how sphinx's own repository carries 176 `conf.py` and declares one site.
 | --- | --- | --- |
 | `antora` | `antora.yml` | `antora-resource` |
 | `docusaurus` | `docusaurus.config.ts`, `docusaurus.config.mts`, `docusaurus.config.cts`, `docusaurus.config.js`, `docusaurus.config.mjs`, `docusaurus.config.cjs` | `site-alias`, `content-root`, `document-id` |
-| `mkdocs` | `mkdocs.yml`, `mkdocs.yaml` | `directory-url` |
+| `mkdocs` | `mkdocs.yml`, `mkdocs.yaml`, `zensical.toml` | `directory-url` |
 | `sphinx` | `conf.py` | `source-root` |
 | `mdbook-pages` | `book.toml` | `book-route`, `built-page` |
 | `zola` | `config.toml` | `content-root` |
