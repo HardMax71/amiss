@@ -1,16 +1,18 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_wire::controls::{GitMode, TargetKind};
+use amiss_wire::extraction::Heading;
 use amiss_wire::model::{Adapter, ForgeDialect, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{BlobTarget, Missing, TaggedBlobTarget, Target, UnsupportedSemantics};
 
 use crate::Error;
 use crate::anchor::anchor_set;
-use crate::discovery::SnapshotDiscovery;
+use crate::discovery::{SnapshotDiscovery, declared_root};
 use crate::document::{classify, native_adapter};
 use crate::published::unrouted;
 use crate::resources::{Aggregate, ScanResources};
+use crate::route::ZOLA;
 
 use super::content::{Content, content_cache};
 use super::line::{line_fragment, line_resolution};
@@ -198,6 +200,7 @@ fn expanded_anchors(
         expanded.declared_anchors.as_ref(),
     ));
     if expanded.complete
+        && !transliterated(snapshot, adapter, path, &expanded.headings)
         && !unrouted(snapshot, adapter, path)
         && !templated(snapshot, adapter, path, source.transclusions)
     {
@@ -205,6 +208,21 @@ fn expanded_anchors(
     } else {
         Anchors::Partial(identities)
     }
+}
+
+/// Whether Zola names a heading here by transliterating it to ASCII first, so
+/// `Привет мир` is `privet-mir`. No rule in the table transliterates, so a
+/// page under Zola holding a heading outside ASCII publishes identities the
+/// union does not know, and absence on it stays undecided.
+fn transliterated(
+    snapshot: &SnapshotDiscovery,
+    adapter: Adapter,
+    path: &RepoPath,
+    headings: &[Heading],
+) -> bool {
+    adapter == Adapter::Markdown
+        && headings.iter().any(|heading| !heading.text.is_ascii())
+        && declared_root(snapshot, path.as_bytes(), ZOLA.declared_by).is_some()
 }
 
 /// The comparison key for a heading identity: the two spellings the pinned

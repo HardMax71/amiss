@@ -430,5 +430,9 @@ identity the target actually publishes.
 Renderers outside the table publish identities this check will not match, and a repository
 served by one of them can see an anchor reported missing that its own site resolves. Pandoc,
 Hugo's non-github id types, Sphinx and Docusaurus's custom slug functions are the known
-cases. The fix for any of them is another row, derived and pinned the same way, since the
+cases. Zola is a narrower one: it transliterates a heading to ASCII before slugging it, so
+`Привет мир` publishes `privet-mir`, and no rule here transliterates. A page under a Zola
+`config.toml` whose headings reach outside ASCII therefore keeps absence undecided: an
+identity the union knows still resolves, and one it does not is declined rather than
+reported missing. The fix for any of them is another row, derived and pinned the same way, since the
 union only grows.
