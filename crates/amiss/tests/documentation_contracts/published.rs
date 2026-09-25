@@ -252,6 +252,36 @@ fn the_pre_commit_hook_takes_its_profile_from_args() {
     );
 }
 
+/// The skill is an Agent Skills directory, so any agent reading that layout
+/// loads it: the `name` its frontmatter gives is the directory it sits in, and
+/// the `description` fits the standard's 1,024 characters.
+#[test]
+fn the_skill_keeps_the_agent_skills_layout() -> std::io::Result<()> {
+    let skill =
+        fs::read_to_string(repository_root().join("integrations/claude/skills/amiss/SKILL.md"))?;
+    let frontmatter = skill
+        .strip_prefix("---\n")
+        .and_then(|rest| rest.split_once("\n---\n"))
+        .map_or("", |(head, _)| head);
+    let field = |key: &str| {
+        frontmatter
+            .lines()
+            .find_map(|line| line.strip_prefix(key))
+            .map(str::trim)
+    };
+    assert_eq!(
+        field("name:"),
+        Some("amiss"),
+        "the name is the skill's directory"
+    );
+    let description = field("description:").unwrap_or_default();
+    assert!(
+        !description.is_empty() && description.chars().count() <= 1024,
+        "the description says when to use the skill within the standard's limit"
+    );
+    Ok(())
+}
+
 #[test]
 fn the_gitlab_template_keeps_the_release_choices() {
     let root = repository_root();
