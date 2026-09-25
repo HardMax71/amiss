@@ -478,6 +478,7 @@ fn a_historical_absence_never_borrows_candidate_relocation_evidence() {
         .unwrap(),
         candidate_ref: Some(branch_ref!("refs/heads/main")),
         default_ref: Some(branch_ref!("refs/heads/main")),
+        default_aliases: Vec::new(),
     };
     let mut setup = shell();
     setup.repository = RepositoryIdentity::github("acme".to_owned(), "widgets".to_owned());

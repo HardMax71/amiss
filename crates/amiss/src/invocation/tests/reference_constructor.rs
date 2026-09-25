@@ -132,6 +132,7 @@ fn context(
         .unwrap(),
         candidate_ref: Some(BranchRef::try_from(candidate_ref.to_owned()).unwrap()),
         default_ref: Some(BranchRef::try_from(default_ref.to_owned()).unwrap()),
+        default_aliases: Vec::new(),
     }
 }
 

@@ -153,7 +153,9 @@ another candidate is under test is recognized and reported as `unsupported-versi
 not resolved, and a human run counts those URLs beside its totals, since a pull request's own
 branch passed as `--ref` makes one of every link to the branch it merges into. It also counts
 the URLs on the declared repository that spell a file in another dialect's form, which a wrong
-`--forge` leaves external. Full lowercase commit IDs must match `--object-format` and resolve only through that
+`--forge` leaves external. A repository whose default branch was renamed lists the old names in its policy's
+`default_branch_aliases`, and a URL naming one reads as the default branch;
+[Controls and policy](controls.md) has the key. Full lowercase commit IDs must match `--object-format` and resolve only through that
 exact commit's locally available objects. A fully walked tree may prove absence; an unavailable
 commit, tree, or target retains its exact ID and contained path as unsupported version evidence. A
 branch whose spelling is also a full ID is refused as ambiguous. Without the identity group, forge

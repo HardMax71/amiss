@@ -93,6 +93,31 @@ fn removed_projection_assertions(
         .collect()
 }
 
+/// The old default-branch names the base declared that the candidate does not.
+/// Both sides are read under the candidate's names, so a dropped one sends
+/// the links naming it back to undecided on both sides at once, and a broken
+/// link it was holding open leaves the report with nothing saying it went.
+fn removed_aliases(
+    base: Option<&ScannerPolicy>,
+    candidate: Option<&ScannerPolicy>,
+) -> Vec<ControlSeed> {
+    let declared = |policy: Option<&ScannerPolicy>| {
+        policy
+            .and_then(|policy| policy.default_branch_aliases.clone())
+            .unwrap_or_default()
+    };
+    let kept = declared(candidate);
+    declared(base)
+        .into_iter()
+        .filter(|alias| !kept.contains(alias))
+        .map(|alias| ControlSeed {
+            kind: FindingKind::PolicyWeakened,
+            rule_id: format!("policy/default-branch-alias-removed/{}", alias.name()),
+            control_path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
+        })
+        .collect()
+}
+
 /// The router declarations the base carried that the candidate does not carry
 /// identically. Both sides are read under the candidate's declarations, so a
 /// dropped one takes back the resolutions it served on both sides at once, and
@@ -266,6 +291,7 @@ pub fn effects(
         base_assertions,
         candidate_assertions,
     ));
+    controls.extend(removed_aliases(base_policy, candidate_policy));
     let base_raised = raised(base_policy);
     let candidate_raised = raised(candidate_policy);
     for (kind, strength) in &base_raised {

@@ -21,7 +21,7 @@ use sha2::Digest as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use amiss_wire::controls::{DOCUMENT_SUFFIX_BYTES, SOURCE_MARKER_BYTES};
+use amiss_wire::controls::{DEFAULT_BRANCH_ALIASES, DOCUMENT_SUFFIX_BYTES, SOURCE_MARKER_BYTES};
 use amiss_wire::model::BranchRef;
 use amiss_wire::report::{ENVELOPE_SCHEMA, FindingKind, PAYLOAD_SCHEMA, model::AnalysisErrorCode};
 use amiss_wire::requests::{ControlsRequest, EvaluationRequest, SnapshotRequest};
@@ -290,6 +290,13 @@ fn the_policy_schema_tracks_the_reader_bounds() {
             .and_then(serde_json::Value::as_u64),
         u64::try_from(RECORD_KEY_BYTES).ok(),
         "the schema and strict reader must publish one record-key ceiling"
+    );
+    assert_eq!(
+        schema
+            .pointer("/properties/default_branch_aliases/maxItems")
+            .and_then(serde_json::Value::as_u64),
+        u64::try_from(DEFAULT_BRANCH_ALIASES).ok(),
+        "the schema and strict reader must publish one alias ceiling"
     );
 }
 

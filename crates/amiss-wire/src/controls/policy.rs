@@ -5,7 +5,7 @@ use strum::{Display, EnumString};
 use crate::de::{Document, Error, ErrorKind, fail};
 use crate::extraction::governed_name_valid;
 
-use crate::model::{Adapter, ArtifactId, RepoPathText};
+use crate::model::{Adapter, ArtifactId, BranchRef, RepoPathText};
 
 use super::{IncludeKind, PolicyDisposition, PromotableFindingKind, sorted_set};
 
@@ -18,6 +18,8 @@ pub const TREE_PATHS_SOURCE: &str = "tree-paths";
 pub const RECORD_VALUE_SOURCE: &str = "record-value";
 pub const RECORD_SET_SOURCE: &str = "record-set";
 pub const SOURCE_MARKER_BYTES: usize = 256;
+/// Maximum old names one policy may declare for its default branch.
+pub const DEFAULT_BRANCH_ALIASES: usize = 16;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
@@ -142,6 +144,8 @@ pub struct ScannerPolicy {
     pub projection_assertions: Option<Vec<ProjectionAssertion>>,
     pub protected_inventory: Vec<RepoPathText>,
     pub finding_dispositions: Vec<FindingDisposition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_branch_aliases: Option<Vec<BranchRef>>,
 }
 
 /// Checks a directly constructed source through the same closed grammar and
@@ -315,6 +319,14 @@ impl Document for ScannerPolicy {
             "$.finding_dispositions",
             &self.finding_dispositions,
             |left, right| left.finding_kind.as_ref().cmp(right.finding_kind.as_ref()),
-        )
+        )?;
+
+        let aliases = self.default_branch_aliases.as_deref().unwrap_or_default();
+        if aliases.len() > DEFAULT_BRANCH_ALIASES {
+            return fail("$.default_branch_aliases", ErrorKind::LimitExceeded);
+        }
+        sorted_set("$.default_branch_aliases", aliases, |left, right| {
+            left.as_str().cmp(right.as_str())
+        })
     }
 }

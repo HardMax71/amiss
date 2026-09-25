@@ -906,3 +906,78 @@ fn a_directory_hint_needs_a_segment_before_its_slash() {
         "a lone terminal slash after the ref stays a defect: {github_row:?}"
     );
 }
+
+/// An old name the policy declares for the default branch reads as the
+/// default branch in every dialect: while the default is under test a URL
+/// naming the old name resolves against the tree, while another branch is
+/// under test it is the default's version and stays unread, and without the
+/// declaration the name is no trusted ref at all.
+#[test]
+fn a_declared_alias_reads_as_the_default_branch() -> Result<(), Error> {
+    let mut bed = bed();
+    for (dialect, url) in [
+        (
+            ForgeDialect::Github,
+            "https://github.com/acme/widgets/blob/master/docs/guide.md",
+        ),
+        (
+            ForgeDialect::Gitlab,
+            "https://gitlab.com/acme/widgets/-/blob/master/docs/guide.md",
+        ),
+        (
+            ForgeDialect::Gitea,
+            "https://codeberg.org/acme/widgets/src/branch/master/docs/guide.md",
+        ),
+        (
+            ForgeDialect::BitbucketCloud,
+            "https://bitbucket.org/acme/widgets/src/master/docs/guide.md",
+        ),
+        (
+            ForgeDialect::BitbucketDataCenter,
+            "https://bitbucket.example/projects/ACME/repos/widgets/browse/docs/guide.md?at=refs/heads/master",
+        ),
+    ] {
+        let aliased = ForgeContext {
+            candidate_ref: Some(branch_ref!("refs/heads/main")),
+            default_aliases: vec![branch_ref!("refs/heads/master")],
+            ..forge_context(dialect)
+        };
+        let (_intent, default) = bed.run_as(
+            Adapter::Markdown,
+            Some(&aliased),
+            "docs/guide.md",
+            false,
+            url,
+        )?;
+        assert!(
+            matches!(default, Resolution::Resolved { .. }),
+            "{url}: {default:?}"
+        );
+        let feature = ForgeContext {
+            candidate_ref: forge_context(dialect).candidate_ref,
+            ..aliased.clone()
+        };
+        let (_intent, other) = bed.run_as(
+            Adapter::Markdown,
+            Some(&feature),
+            "docs/guide.md",
+            false,
+            url,
+        )?;
+        assert!(
+            matches!(other, Resolution::UnsupportedVersion { .. }),
+            "{url}: {other:?}"
+        );
+        let plain = ForgeContext {
+            default_aliases: Vec::new(),
+            ..aliased
+        };
+        let (_intent, unknown) =
+            bed.run_as(Adapter::Markdown, Some(&plain), "docs/guide.md", false, url)?;
+        assert!(
+            !matches!(unknown, Resolution::Resolved { .. }),
+            "{url}: {unknown:?}"
+        );
+    }
+    Ok(())
+}

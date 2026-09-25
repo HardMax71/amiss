@@ -203,6 +203,7 @@ fn resolve_repository_path(bencher: Bencher<'_, '_>, shape: ResolutionShape) {
         .unwrap(),
         candidate_ref: Some(branch_ref!("refs/heads/feature/x")),
         default_ref: Some(branch_ref!("refs/heads/main")),
+        default_aliases: Vec::new(),
     };
     let (target, mode, forge, document, semantic) = match shape {
         ResolutionShape::Native => (

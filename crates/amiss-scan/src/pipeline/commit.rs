@@ -194,6 +194,7 @@ fn commit_pair_result(
         (&candidate_tree, &mut candidate_scan),
     )?;
     let includes = crate::policy::Includes::union(&base_policy, &candidate_policy);
+    let forge = super::aliased(forge, &candidate_policy);
     let mut setup = setup_shell.with(
         BaseBlock::Commit(base_tree.1.clone()),
         CandidateBlock::Commit(candidate_tree.1.clone()),
@@ -204,7 +205,7 @@ fn commit_pair_result(
         &mut git_resources,
         (&mut base_scan, &mut candidate_scan),
         engine,
-        forge,
+        forge.as_ref(),
         &external.semantic,
         &includes,
         &candidate_policy,
