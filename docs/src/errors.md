@@ -7,11 +7,11 @@ error.
 
 Every row names its code, the phase it came from (invocation, configuration, git, discovery,
 parse, resolution, policy, output, or internal), and the fixed sentence below. A row that
-knows a file carries its path, or the raw bytes as hex when the name is outside the path
-grammar, and a ceiling crossing carries the resource, the configured limit, and the observed
-lower bound. [The report](report.md) has the exact shape. The human output prints the same
-sentence as a `note` line once per code, so an exit-2 log says what to do without this page
-open.
+knows a file carries its path, or its raw bytes as an array of numbers when the name is
+outside the path grammar, and a ceiling crossing carries the resource, the configured limit,
+and the observed lower bound. [The report](report.md) has the exact shape. The human output
+prints the same sentence as a `note` line once per code, so an exit-2 log says what to do
+without this page open.
 
 Most codes name something to change: a policy file, the command line, the index, a control
 bound to another repository. Seven point at Amiss instead. `INTERNAL_ERROR`,
