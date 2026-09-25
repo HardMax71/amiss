@@ -43,8 +43,9 @@ use amiss_wire::uri::scheme;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 /// The path this reference is answered against. A destination the tree holds
-/// is its own answer; otherwise the first router spelling that reaches an
-/// ordinary file stands in for it, and last the document published at that
+/// is its own answer, unless it is a directory a page is published at, which
+/// answers with that page; otherwise the first router spelling that reaches
+/// an ordinary file stands in for it, and last the document published at that
 /// route. A promised directory is never re-spelled, and every spelling names
 /// a file the tree already holds, so this can only turn an absent target into
 /// a present one.
@@ -53,8 +54,15 @@ pub(crate) fn routed(
     path: &RepoPath,
     target_kind: TargetKind,
 ) -> RepoPath {
-    if target_kind == TargetKind::Tree || snapshot.locate(path).is_some() {
+    if target_kind == TargetKind::Tree {
         return path.clone();
+    }
+    match snapshot.locate(path) {
+        Some(Located::ImpliedTree | Located::Entry(GitMode::Tree, _)) => {
+            return snapshot.published_routes.get(path).unwrap_or(path).clone();
+        }
+        Some(Located::Entry(..)) => return path.clone(),
+        None => {}
     }
     candidates(path)
         .into_iter()
@@ -155,10 +163,11 @@ fn declared_site_anchor(
         .find_map(|(root, base)| served_page(snapshot, root, &base, is_image, route))
 }
 
-/// The page one base serves a route from, where the tree holds it: the page
-/// published at that route first, so a directory answers with its index. A
-/// Starlight site serves a page nowhere but its published route, so there
-/// a route no page claims is left to the build.
+/// The page one base serves a route from, where the tree holds it: a route
+/// some page is published at, read in lowercase under a root served that
+/// way, and otherwise a file the route spells as written. A Starlight site
+/// serves a page nowhere but its published route, so there a route no page
+/// claims is left to the build.
 fn served_page(
     snapshot: &SnapshotDiscovery,
     root: Vec<u8>,
@@ -167,15 +176,15 @@ fn served_page(
     route: &str,
 ) -> Option<(Vec<u8>, String)> {
     let page = under_base(base, route).map(|under| under.strip_suffix('/').unwrap_or(under))?;
-    let served = if page.is_empty() {
-        root.clone()
-    } else {
-        join(&root, page.as_bytes())
+    let served = match (page.is_empty(), snapshot.folded_roots.contains(&root)) {
+        (true, _) => ".".to_owned(),
+        (false, true) => page.to_lowercase(),
+        (false, false) => page.to_owned(),
     };
-    if let Some(published) =
-        RepoPath::from_bytes(served).and_then(|served| snapshot.published_routes.get(&served))
-    {
-        return published.as_str().map(|path| (Vec::new(), path.to_owned()));
+    let published = normalized_path_under(&root, is_image, &served)
+        .is_ok_and(|(path, _)| snapshot.published_routes.contains_key(&path));
+    if published {
+        return Some((root, served));
     }
     let starlight = snapshot
         .starlight_roots
@@ -580,7 +589,11 @@ pub(crate) fn read_as_declared(
         &mut snapshot.declared_routers,
         candidate.declared_routers.clone(),
     );
-    let configured = (snapshot.bound_configs.len(), snapshot.published_roots.len());
+    let configured = (
+        snapshot.bound_configs.len(),
+        snapshot.published_roots.len(),
+        snapshot.folded_roots.len(),
+    );
     for (path, rule) in &candidate.bound_configs {
         snapshot.bound_configs.entry(path.clone()).or_insert(*rule);
     }
@@ -590,8 +603,16 @@ pub(crate) fn read_as_declared(
             .entry(project.clone())
             .or_insert_with(|| roots.clone());
     }
+    snapshot
+        .folded_roots
+        .extend(candidate.folded_roots.iter().cloned());
     if held != snapshot.declared_routers
-        || configured != (snapshot.bound_configs.len(), snapshot.published_roots.len())
+        || configured
+            != (
+                snapshot.bound_configs.len(),
+                snapshot.published_roots.len(),
+                snapshot.folded_roots.len(),
+            )
     {
         (snapshot.published_routes, snapshot.redirect_routes) = published_routes(snapshot);
     }

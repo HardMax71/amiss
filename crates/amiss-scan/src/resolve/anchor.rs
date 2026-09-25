@@ -210,7 +210,7 @@ fn expanded_anchors(
     ));
     if expanded.complete
         && !unrouted(snapshot, adapter, path)
-        && !templated(snapshot, adapter, path, source.transclusions)
+        && !templated(snapshot, adapter, path, &source)
     {
         Anchors::Published(identities)
     } else {

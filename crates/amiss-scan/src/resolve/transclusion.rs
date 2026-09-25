@@ -176,29 +176,47 @@ impl Expansion<'_, '_> {
 /// Whether a template writes part of this document. A Hugo shortcode is
 /// answered by a layout rather than by a file, so a page that calls one holds
 /// headings and terms this engine cannot see, and its identity set is as far
-/// from enumerable as a generator directive leaves one. Eleventy's Liquid in a
-/// heading is the same case. Outside a tree that declares the generator the
-/// same spelling is the text it looks like.
+/// from enumerable as a generator directive leaves one. A Hugo page naming a
+/// `layout` and publishing no identity of its own is that template's output
+/// whole, and Eleventy's Liquid in a heading is the same case. Outside a tree
+/// that declares the generator the same spelling is the text it looks like.
 pub(super) fn templated(
     snapshot: &SnapshotDiscovery,
     adapter: Adapter,
     document: &RepoPath,
-    transclusions: &[Transclusion],
+    source: &Source<'_>,
 ) -> bool {
-    [
-        (crate::anchor::HUGO_SHORTCODE, TransclusionRefusal::Template),
-        (
-            crate::anchor::ELEVENTY_TEMPLATE,
-            TransclusionRefusal::Liquid,
-        ),
-    ]
-    .iter()
-    .any(|(rule, refusal)| {
-        rule.adapters.contains(&adapter)
-            && transclusions
-                .iter()
-                .any(|entry| entry.kind == Err(*refusal))
-            && crate::discovery::declared_root(snapshot, document.as_bytes(), rule.declared_by)
-                .is_some()
-    })
+    let transclusions = source.transclusions;
+    let bare = source.headings.is_empty()
+        && source.html_anchors.is_empty()
+        && source.declared_anchors.is_empty();
+    let laid_out = bare
+        && snapshot.document(document.as_bytes()).is_some_and(|record| {
+            matches!(&record.status, DocumentStatus::Scanned(scanned) if scanned.publication.layout)
+        });
+    let hugo = || {
+        crate::discovery::declared_root(
+            snapshot,
+            document.as_bytes(),
+            crate::route::HUGO.declared_by,
+        )
+        .is_some()
+    };
+    (laid_out && hugo())
+        || [
+            (crate::anchor::HUGO_SHORTCODE, TransclusionRefusal::Template),
+            (
+                crate::anchor::ELEVENTY_TEMPLATE,
+                TransclusionRefusal::Liquid,
+            ),
+        ]
+        .iter()
+        .any(|(rule, refusal)| {
+            rule.adapters.contains(&adapter)
+                && transclusions
+                    .iter()
+                    .any(|entry| entry.kind == Err(*refusal))
+                && crate::discovery::declared_root(snapshot, document.as_bytes(), rule.declared_by)
+                    .is_some()
+        })
 }

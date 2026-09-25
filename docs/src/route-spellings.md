@@ -416,9 +416,18 @@ unless it is the language the file names as its default and that default is not 
 subdirectory. So a route without a code is the default language's, and one with a code is
 that language's.
 
+Hugo serves every page URL in lowercase unless the configuration binds `disablePathToLower`
+true, so a route is read that way under a Hugo root: `/functions/cast/tofloat/` reaches
+`functions/cast/ToFloat.md`. A section's route reaches the `_index.md` that writes it and a
+bundle's the `index.md`. Read whole on 2026-09-25 under the observe profile, Hugo's own
+documentation resolves 3,762 references where it resolved 3,209 and declines 38 where it
+declined 591. The Kubernetes website resolves 27,630 where it resolved 27,063, and six claims
+arrive, each an anchor on its concepts index page, which publishes no heading of that name.
+
 An Astro configuration that imports `@astrojs/starlight` says both as well. Starlight's loader
 reads the pages under `src/content/docs` beside the configuration, and the quoted `base` the
-file binds is what every route opens with, the site root where it binds none. A page is served
+file binds is what every route opens with, the site root where it binds none. Astro slugs every
+path in lowercase, so a route is read that way here too. A page is served
 at the `slug` its frontmatter declares in place of its own path, read from that directory, and
 a directory's `index` page is served at the directory. Starlight serves a page nowhere else, so
 a route no page claims stays with the build, which is where its fallback serves the default
@@ -604,8 +613,9 @@ three ways. A declaration with no `base` line reads exactly as it did before.
 
 A route naming a directory reaches that directory, since a tree holding `guides/index.mdx`
 holds `guides`, and a fragment on a directory stays undecided the way it already does for
-`../guides/#setup`. Where Docusaurus or Starlight publishes that index page at the directory,
-the route reaches the page instead. That is 1,106 of those references, with 302 fragments left unread. Nothing
+`../guides/#setup`. Where Docusaurus, Starlight or Hugo publishes a page at the directory, its
+`index` or Hugo's `_index.md`, the route reaches that page instead, and so does a relative
+destination naming the directory without a trailing slash. That is 1,106 of those references, with 302 fragments left unread. Nothing
 else about the reading is new: the destination is a path under the declared directory, read by
 the spellings every other path is read by.
 

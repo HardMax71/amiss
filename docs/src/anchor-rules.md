@@ -241,6 +241,14 @@ themselves and were wrong. The other 21 name headings a translation never wrote,
 almost certainly broken, and they go undecided with the rest of the page, the same price the
 block rule pays. A heading that sets its own id with `{#id}` keeps that id and says nothing
 about the rest.
+
+A Hugo page can hand itself to a template whole. The Kubernetes glossary is a page whose
+frontmatter names `layout: glossary` and whose body writes nothing, and the layout fills it
+with a `term-` anchor for every entry under the directory beside it. So a page naming a
+`layout` and publishing no heading or anchor of its own is read the way a page calling a
+shortcode is, and an anchor into it stays undecided. A page that names a layout and writes
+its own headings keeps them: a Kubernetes blog post names `layout: blog`, the layout wraps the
+post, and a link to a heading the post never wrote is still reported.
 `eleventy-template` is the same reading for Eleventy, which renders a Markdown page through
 Liquid before Markdown sees it: `## Passthrough File Copy {% addedin "0.2.14" %}` and a `## {{ t }}`
 a loop repeats are headings a template finishes, and all seven claims the rule moves on the

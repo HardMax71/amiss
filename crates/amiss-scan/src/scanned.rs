@@ -59,6 +59,15 @@ pub struct AnchorSource {
     pub transclusions: Vec<amiss_wire::extraction::Transclusion>,
 }
 
+/// What a document's frontmatter says about where and how it is published.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Publication {
+    pub slug: Option<String>,
+    pub id: Option<String>,
+    pub redirects: Vec<String>,
+    pub layout: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Scanned {
     pub adapter: Adapter,
@@ -68,9 +77,7 @@ pub struct Scanned {
     pub opaque: Opaque,
     pub governed: Vec<GovernedSource>,
     pub declared_anchors: Vec<String>,
-    pub declared_slug: Option<String>,
-    pub declared_id: Option<String>,
-    pub declared_redirects: Vec<String>,
+    pub publication: Publication,
     pub anchor_source: Option<AnchorSource>,
     /// Read only once the HTML comments the MDX grammar refused were read as
     /// comments, which a Docusaurus site does and MDX alone does not.
