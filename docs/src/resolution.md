@@ -208,9 +208,12 @@ while a fragment rides untouched beside them.
 When the missed path existed in the base tree and disappeared from the candidate, the same
 resolution also carries `same_object_at` if exactly one candidate-added entry has the identical
 Git mode and object ID and that identity belongs to exactly one removed path. Copies, duplicate
-content, mode changes, and edited moves leave it null. This is candidate-tree evidence that Git
-stores identical bytes at another path, not evidence of author intent: it never supplies a `fix`
-or replacement bytes. The case-only `near` fact remains independent.
+content, mode changes, and edited moves leave it null. When the author wrote a plain relative
+path that reached the missed file from beside its document, that one move also supplies the
+`fix`: the path rewritten, relative the same way, to where the change put the same bytes, with
+any fragment left as written. A site route, a generator's anchoring, or a path that needs escaping
+keeps the fact without a fix, since the author's own spelling cannot be carried over. The
+case-only `near` fact remains independent and answers first.
 
 A destination no spelling reaches is asked one last question, against a declaration the
 repository already publishes for Git rather than for this engine. Only the tracked

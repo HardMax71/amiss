@@ -336,5 +336,6 @@ declare_meaningful_enum! {
         ClaimValueRewrite => "replace the definition so the claim expects the target's current line",
         AnchorRespelling => "replace the fragment with the one published anchor it matches apart from case and separator style",
         PathRespelling => "replace the path with the one tracked spelling it matches apart from case",
+        PathRelocation => "replace the path with the one path the change moved the same bytes to",
     }
 }

@@ -124,6 +124,27 @@ fn a_case_drifted_path_is_repaired_in_place() {
     assert!(stdout.contains("0 applied, 1 already present"), "{stdout}");
 }
 
+/// A file the change moved whole is still one object, so a relative link to
+/// its old path is rewritten, relative the same way, to the new one.
+#[test]
+fn a_moved_file_is_followed_by_its_link() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    init_repository(root).unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(root.join("docs/guide.md"), "[code](../src/old.rs#L1)\n").unwrap();
+    fs::write(root.join("src/old.rs"), "fn main() {}\n").unwrap();
+    let base = commit_worktree(root, &[], "base").unwrap().id;
+    fs::create_dir_all(root.join("lib")).unwrap();
+    git(root, &["mv", "src/old.rs", "lib/new.rs"]).unwrap();
+
+    let (code, stdout) = run_fix(root, &base);
+    assert_eq!(code, 0, "{stdout}");
+    let repaired = fs::read(root.join("docs/guide.md")).unwrap();
+    assert_eq!(repaired, b"[code](../lib/new.rs#L1)\n");
+}
+
 /// A worktree that moved past the staged bytes is refused whole, exits 1,
 /// and keeps its bytes.
 #[test]
