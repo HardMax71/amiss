@@ -107,7 +107,7 @@ runs:
         HEAD_SHA: ${{ github.sha }}
         REPOSITORY: ${{ github.repository }}
         SERVER_URL: ${{ github.server_url }}
-        BRANCH: ${{ github.head_ref || github.ref_name }}
+        BRANCH: ${{ github.base_ref || github.event.merge_group.base_ref || github.ref_name }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         REF_TYPE: ${{ github.ref_type }}
       run: |
@@ -166,6 +166,8 @@ runs:
           printf 'base=%s\n' "$base"
           printf 'candidate=%s\n' "$candidate"
         } >> "$GITHUB_OUTPUT"
+        # a pull request or queue entry is checked as the branch it merges into will read
+        BRANCH="${BRANCH#refs/heads/}"
         if [ -n "$BRANCH" ] && [ -n "$DEFAULT_BRANCH" ] \
           && { [ "$EVENT_NAME" != "push" ] || [ "$REF_TYPE" = "branch" ]; }; then
           host="${SERVER_URL#*://}"
@@ -209,8 +211,12 @@ runs:
               --base "$BASE" --candidate "$CANDIDATE"
               --profile "$PROFILE" --format json)
         if [ -n "${IDENTITY:-}" ]; then
+          forge=github
+          if [ "${GITEA_ACTIONS:-}" = true ] || [ "${FORGEJO_ACTIONS:-}" = true ]; then
+            forge=gitea
+          fi
           args+=(--repository "$IDENTITY" --ref "$REF" --default-branch-ref "$DEFAULT_REF"
-                --forge github)
+                --forge "$forge")
         fi
         status=0
         "$BINARY" "${args[@]}" > "$report" &
