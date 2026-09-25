@@ -17,11 +17,12 @@ pub(super) fn resolve(
     resolver: &mut Resolver<'_>,
     context: &ForgeContext,
     suffix: &str,
+    content_host: bool,
     query: Option<String>,
     fragment: Option<String>,
 ) -> Result<(Intent, Resolution<RepoPath>), Error> {
     let route = match context.dialect {
-        ForgeDialect::Github => github(context, suffix),
+        ForgeDialect::Github => github(context, suffix, content_host),
         ForgeDialect::Gitlab => gitlab(context, suffix),
         ForgeDialect::Gitea => gitea(context, suffix),
         ForgeDialect::BitbucketCloud => bitbucket_cloud(context, suffix),
@@ -144,29 +145,41 @@ fn foreign_row(query: Option<String>, fragment: Option<String>) -> (Intent, Reso
 
 /// GitHub serves a `blob` URL naming a directory and a `tree` URL naming a
 /// file by redirecting to the other form, and serves either with a trailing
-/// slash, so the URL promises no kind.
+/// slash, so the URL promises no kind. `raw` redirects the same way, a file
+/// to the content host and a directory to `tree`. The content host,
+/// `raw.githubusercontent.com`, drops the form segment and answers a
+/// directory with 404, so its URL promises a file. Every form also takes the
+/// branch spelled as a full ref, `refs/heads/main`.
 ///
-/// Foreign unless proven trusted: exact accepted `blob`/`tree` forms, literal
-/// ASCII owner and repository folded only `A`-`Z`, each later segment decoded
-/// exactly once, the trusted refs matched by whole segments, and the
-/// remaining path validated before the candidate-or-default decision.
-fn github(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
+/// Foreign unless proven trusted: exact accepted forms, literal ASCII owner
+/// and repository folded only `A`-`Z`, each later segment decoded exactly
+/// once, the trusted refs matched by whole segments, and the remaining path
+/// validated before the candidate-or-default decision.
+fn github(identity: &ForgeContext, suffix: &str, content_host: bool) -> ForgeRoute {
     let segments: Vec<&str> = suffix.split('/').collect();
-    let (Some(owner), Some(repository), Some(form)) =
-        (segments.first(), segments.get(1), segments.get(2))
-    else {
+    let (Some(owner), Some(repository)) = (segments.first(), segments.get(1)) else {
         return ForgeRoute::Foreign;
     };
     if !repository_pair_matches(identity, owner, repository) {
         return ForgeRoute::Foreign;
     }
-    if !matches!(*form, "blob" | "tree") {
+    let (target_kind, tail) = if content_host {
+        (TargetKind::Blob, segments.get(2..))
+    } else if segments
+        .get(2)
+        .is_some_and(|form| matches!(*form, "blob" | "tree" | "raw"))
+    {
+        (TargetKind::Either, segments.get(3..))
+    } else {
         return ForgeRoute::Foreign;
-    }
-    let tail = segments.get(3..).unwrap_or_default();
+    };
+    let tail = match tail.unwrap_or_default() {
+        ["refs", "heads", branch @ ..] if !branch.is_empty() => branch,
+        tail => tail,
+    };
     same_route(
         IntentKind::SameRepositoryGithub,
-        TargetKind::Either,
+        target_kind,
         versioned_split(identity, true, tail, TailVersions::NamedOrCommit),
     )
 }

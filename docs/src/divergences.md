@@ -23,7 +23,9 @@ cannot see.
 The forge dialects pin the URL spellings the forges' own browsers emit and nothing
 looser. GitLab's legacy pre-separator form still redirects in a browser and is foreign
 here, as is `/-/raw/`; a GitLab project literally named `-` could never be told apart
-from the separator, and GitLab reserves the name anyway. Gitea's untyped `src/<ref>/`
+from the separator, and GitLab reserves the name anyway. GitHub's `raw` form and its
+content host are this repository, since that is how a README links its logo when a package
+registry renders the README somewhere else. Gitea's untyped `src/<ref>/`
 form, which some tooling still generates, is foreign because the typed `src/branch/`
 spelling is what the forge emits. A gitea tag link is out of version scope even when its
 segments spell the candidate branch exactly, because no tag is a trusted ref. The

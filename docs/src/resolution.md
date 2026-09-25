@@ -60,9 +60,12 @@ because there is nothing it decided.
 
 Five dialects exist, each pinned to the exact URL grammar its forge's browser emits.
 The github dialect reads `owner/name/blob-or-tree/ref/path` and serves GitHub and any
-GitHub Enterprise host the identity declares. The gitlab dialect reads the canonical
-separator form `group[/subgroup...]/name/-/blob-or-tree/ref/path`, nested groups compared
-whole. The gitea dialect serves Gitea, Forgejo, and Codeberg with typed selectors:
+GitHub Enterprise host the identity declares. The `raw` form reads the same way, and on
+github.com so does the content host, `raw.githubusercontent.com/owner/name/ref/path`, which
+serves files only; any of them may spell the branch as `refs/heads/main`. The gitlab
+dialect reads the canonical separator form
+`group[/subgroup...]/name/-/blob-or-tree/ref/path`, nested groups compared whole. The
+gitea dialect serves Gitea, Forgejo, and Codeberg with typed selectors:
 `src/branch/` splits like the others, `src/commit/` resolves its full lowercase object ID from the
 local object database and retains a known immutable scope when those objects are unavailable, and
 `src/tag/` is always out of version scope because no tag is a trusted ref.

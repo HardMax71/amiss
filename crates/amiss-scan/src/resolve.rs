@@ -246,10 +246,20 @@ fn absolute(
     if !absolute_valid(path_part, scheme, query.as_deref()) {
         return Ok(invalid(query, fragment));
     }
-    if let Some(identity) = context
-        && let Some(suffix) = same_repo_suffix(path_part, identity.repository.host())
-    {
-        return forge::resolve(resolver, identity, suffix, query, fragment);
+    if let Some(identity) = context {
+        let raw_host = || {
+            (identity.dialect == ForgeDialect::Github && identity.repository.host() == "github.com")
+                .then(|| same_repo_suffix(path_part, "raw.githubusercontent.com"))
+                .flatten()
+                .map(|suffix| (suffix, true))
+        };
+        if let Some((suffix, content_host)) =
+            same_repo_suffix(path_part, identity.repository.host())
+                .map(|suffix| (suffix, false))
+                .or_else(raw_host)
+        {
+            return forge::resolve(resolver, identity, suffix, content_host, query, fragment);
+        }
     }
     Ok((
         Intent {

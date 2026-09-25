@@ -613,7 +613,7 @@ fn one_wrong_fact_makes_a_foreign_url() {
         ),
         (
             forge_context(ForgeDialect::Github),
-            "https://github.com/acme/widgets/raw/main/docs/guide.md",
+            "https://raw.githubusercontent.com/other/widgets/feature/x/docs/guide.md",
         ),
         (
             forge_context(ForgeDialect::Gitea),
@@ -659,6 +659,69 @@ fn one_wrong_fact_makes_a_foreign_url() {
             )
             .unwrap();
         assert_eq!(intent.kind, IntentKind::ExternalUrl, "{destination}");
+    }
+}
+
+/// GitHub's `raw` form redirects a file to the content host and a directory
+/// to `tree`, so it promises no kind; the content host answers a directory
+/// with 404, so it promises a file. Both, like `blob`, take the branch as a
+/// full ref.
+#[test]
+fn github_raw_forms_are_this_repository() {
+    let mut bed = bed();
+    let context = forge_context(ForgeDialect::Github);
+    for (destination, kind, resolves) in [
+        (
+            "https://github.com/acme/widgets/raw/feature/x/docs/guide.md",
+            TargetKind::Either,
+            true,
+        ),
+        (
+            "https://github.com/acme/widgets/raw/feature/x/docs",
+            TargetKind::Either,
+            true,
+        ),
+        (
+            "https://github.com/acme/widgets/blob/refs/heads/feature/x/docs/guide.md",
+            TargetKind::Either,
+            true,
+        ),
+        (
+            "https://raw.githubusercontent.com/acme/widgets/feature/x/docs/guide.md",
+            TargetKind::Blob,
+            true,
+        ),
+        (
+            "https://raw.githubusercontent.com/acme/widgets/refs/heads/feature/x/docs/guide.md",
+            TargetKind::Blob,
+            true,
+        ),
+        (
+            "https://raw.githubusercontent.com/acme/widgets/feature/x/docs",
+            TargetKind::Blob,
+            false,
+        ),
+    ] {
+        let (intent, row) = bed
+            .run_as(
+                Adapter::Markdown,
+                Some(&context),
+                "docs/guide.md",
+                false,
+                destination,
+            )
+            .unwrap();
+        assert_eq!(
+            intent.kind,
+            IntentKind::SameRepositoryGithub,
+            "{destination}"
+        );
+        assert_eq!(intent.target_kind, Some(kind), "{destination}");
+        assert_eq!(
+            matches!(row, Resolution::Resolved { .. }),
+            resolves,
+            "{destination}: {row:?}"
+        );
     }
 }
 
