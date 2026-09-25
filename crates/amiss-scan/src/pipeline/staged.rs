@@ -289,7 +289,9 @@ const fn unavailable_reason(defect: &Error) -> SnapshotUnavailableReason {
         Error::Git(crate::GitDefect::ObjectUnreadable) => {
             SnapshotUnavailableReason::UnreadableObject
         }
-        Error::Git(crate::GitDefect::IndexInvalid) => SnapshotUnavailableReason::IndexInvalid,
+        Error::Git(crate::GitDefect::IndexInvalid | crate::GitDefect::IndexFormatUnsupported) => {
+            SnapshotUnavailableReason::IndexInvalid
+        }
         Error::Git(crate::GitDefect::IndexUnmerged) => SnapshotUnavailableReason::IndexUnmerged,
         Error::Git(crate::GitDefect::IntentToAdd) => SnapshotUnavailableReason::IntentToAdd,
         Error::Git(crate::GitDefect::SnapshotChanged) => SnapshotUnavailableReason::SnapshotChanged,

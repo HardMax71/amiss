@@ -161,6 +161,10 @@ declare_taxonomy! {
             meaning: "GIT_INDEX_FILE names an index outside this repository's own git directory, and the scan reads nothing there; unset it, or run from the repository whose Git process set it",
             metadata: Some(&GIT),
         },
+        GitIndexFormatUnsupported => {
+            meaning: "the index uses Git's split or sparse format, which this reader does not expand; compare two commits instead, or turn the format off with git update-index --no-split-index, or git config index.sparse false and git sparse-checkout reapply",
+            metadata: Some(&GIT),
+        },
         GitIndexUnmerged => {
             meaning: "the index holds unmerged conflict entries, so no single staged state exists; finish or abort the merge before checking the index",
             metadata: Some(&GIT),

@@ -90,9 +90,8 @@ pub(crate) fn build(
             slot.1 = true;
         }
     }
-    if pairs.values().any(|(pack, idx)| !(*pack && *idx)) {
-        return Err(Error::ObjectUnreadable);
-    }
+    // Git skips a pack or index whose partner is missing, as an interrupted fetch leaves.
+    pairs.retain(|_name_hex, (pack, idx)| *pack && *idx);
     let pair_count = u64::try_from(pairs.len()).unwrap_or(u64::MAX);
     if pair_count > limits.pack_files {
         return Err(crossing(

@@ -76,6 +76,7 @@ pub enum GitDefect {
     ObjectWrongKind,
     ObjectUnreadable,
     IndexInvalid,
+    IndexFormatUnsupported,
     IndexUnmerged,
     IntentToAdd,
     SnapshotChanged,
@@ -88,6 +89,9 @@ impl From<amiss_git::Error> for Error {
             amiss_git::Error::ObjectWrongKind => Self::Git(GitDefect::ObjectWrongKind),
             amiss_git::Error::ObjectUnreadable => Self::Git(GitDefect::ObjectUnreadable),
             amiss_git::Error::IndexInvalid => Self::Git(GitDefect::IndexInvalid),
+            amiss_git::Error::IndexFormatUnsupported => {
+                Self::Git(GitDefect::IndexFormatUnsupported)
+            }
             amiss_git::Error::IndexUnmerged => Self::Git(GitDefect::IndexUnmerged),
             amiss_git::Error::IntentToAdd => Self::Git(GitDefect::IntentToAdd),
             amiss_git::Error::SnapshotChanged => Self::Git(GitDefect::SnapshotChanged),
@@ -113,6 +117,9 @@ impl Error {
             Self::Git(GitDefect::ObjectWrongKind) => AnalysisErrorCode::GitObjectWrongKind,
             Self::Git(GitDefect::ObjectUnreadable) => AnalysisErrorCode::GitObjectUnreadable,
             Self::Git(GitDefect::IndexInvalid) => AnalysisErrorCode::GitIndexInvalid,
+            Self::Git(GitDefect::IndexFormatUnsupported) => {
+                AnalysisErrorCode::GitIndexFormatUnsupported
+            }
             Self::Git(GitDefect::IndexUnmerged) => AnalysisErrorCode::GitIndexUnmerged,
             Self::Git(GitDefect::IntentToAdd) => AnalysisErrorCode::GitIntentToAdd,
             Self::Git(GitDefect::SnapshotChanged) => AnalysisErrorCode::GitSnapshotChanged,

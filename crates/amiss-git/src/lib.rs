@@ -29,6 +29,7 @@ pub enum Error {
     ObjectWrongKind,
     ObjectUnreadable,
     IndexInvalid,
+    IndexFormatUnsupported,
     IndexUnmerged,
     IntentToAdd,
     SnapshotChanged,

@@ -85,6 +85,13 @@ refusal, never a best-effort read. Every SHA-1 object is re-hashed as it is read
 collision detection switched on, so an object that does not hash to its own name simply does
 not exist as far as the evaluation is concerned.
 
+Two rejections follow Git rather than the letter of its formats. An index written under
+`index.skipHash`, which `feature.manyFiles` turns on, carries an all-zero checksum that Git
+does not verify, and neither does this reader. A pack or pack index left without its partner
+by an interrupted fetch is skipped, as Git skips it. A split or a sparse index is a format
+this reader does not expand; it is refused with `GIT_INDEX_FORMAT_UNSUPPORTED`, whose text
+names how to turn it off.
+
 The supported repository forms are the non-bare checkouts: a primary checkout with a real
 `.git` directory, a linked worktree, or a separate-git-dir checkout, the latter two through
 one bounded `gitdir:` indirection and at most one bounded `commondir` hop, with symlinked

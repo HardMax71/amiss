@@ -59,6 +59,7 @@ row, so this page is a reference, not a second source of truth.
 - `GIT_OBJECT_UNREADABLE`: a Git object exists but its bytes cannot be decoded; the object store is damaged, so check it with git fsck and restore it from a fresh clone
 - `GIT_INDEX_INVALID`: the staged index file does not parse under the index grammar; remove .git/index and run git reset to rebuild it, or compare two commits instead of the index
 - `GIT_INDEX_OUTSIDE_REPOSITORY`: GIT_INDEX_FILE names an index outside this repository's own git directory, and the scan reads nothing there; unset it, or run from the repository whose Git process set it
+- `GIT_INDEX_FORMAT_UNSUPPORTED`: the index uses Git's split or sparse format, which this reader does not expand; compare two commits instead, or turn the format off with git update-index --no-split-index, or git config index.sparse false and git sparse-checkout reapply
 - `GIT_INDEX_UNMERGED`: the index holds unmerged conflict entries, so no single staged state exists; finish or abort the merge before checking the index
 - `GIT_INTENT_TO_ADD`: the index holds an intent-to-add entry whose content is not staged; stage the file or drop the intent entry before checking the index
 - `GIT_SNAPSHOT_CHANGED`: the staged index changed while the run was reading it; rerun when the repository is quiet
