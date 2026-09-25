@@ -610,19 +610,19 @@ pub const DECLARATIONS: [DeclarationRule; 24] = [
     },
     DeclarationRule {
         name: "asciidoc-anchor",
-        spelling: "a block anchor alone on its line, `[[id]]` or `[#id]`",
+        spelling: "a block anchor or attribute list alone on its line, `[[id]]`, `[#id]`, `[source#id]` or `[id=name]`",
         adapters: &[Adapter::AsciiDoc],
         declared_by: &[],
     },
     DeclarationRule {
         name: "asciidoc-inline-anchor",
-        spelling: "an anchor in the flow of a line, `[[id]]`",
+        spelling: "an anchor in the flow of a line or a section title, `[[id]]`, `[[[bib]]]` or `anchor:id[]`",
         adapters: &[Adapter::AsciiDoc],
         declared_by: &[],
     },
     DeclarationRule {
         name: "asciidoc-reference-text",
-        spelling: "a section title a natural cross reference names",
+        spelling: "a section title, or the reference text an anchor or `reftext` gives, that a natural cross reference names",
         adapters: &[Adapter::AsciiDoc],
         declared_by: &[],
     },

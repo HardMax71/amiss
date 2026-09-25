@@ -77,9 +77,9 @@ wherever their profile is.
 | `mdx-heading-id` | an MDX expression ending a heading, `{#id}` | `mdx` | any tree |
 | `jsx-id` | an `id` attribute on a lowercase JSX element | `mdx` | any tree |
 | `mdx-partial` | a default import of a relative document, rendered as an element | `mdx` | any tree |
-| `asciidoc-anchor` | a block anchor alone on its line, `[[id]]` or `[#id]` | `asciidoc` | any tree |
-| `asciidoc-inline-anchor` | an anchor in the flow of a line, `[[id]]` | `asciidoc` | any tree |
-| `asciidoc-reference-text` | a section title a natural cross reference names | `asciidoc` | any tree |
+| `asciidoc-anchor` | a block anchor or attribute list alone on its line, `[[id]]`, `[#id]`, `[source#id]` or `[id=name]` | `asciidoc` | any tree |
+| `asciidoc-inline-anchor` | an anchor in the flow of a line or a section title, `[[id]]`, `[[[bib]]]` or `anchor:id[]` | `asciidoc` | any tree |
+| `asciidoc-reference-text` | a section title, or the reference text an anchor or `reftext` gives, that a natural cross reference names | `asciidoc` | any tree |
 | `rst-target` | an internal hyperlink target, `.. _name:` | `rst` | any tree |
 <!-- amiss-doc-contract:declared-identities:end -->
 
@@ -297,15 +297,21 @@ since an undeclared cross reference is as broken as an absent path. The reading 
 is not, so an ordinary Markdown repository is untouched.
 
 The last rows belong to the other two profiles. `asciidoc-anchor` is the anchor an
-AsciiDoc author writes on a line of its own, `[[id]]` or `[#id]`, in either case with the
-identity being everything before the first comma; a section title that carries one publishes
-it beside the identity the `asciidoctor` rule generates for the title text.
-`asciidoc-inline-anchor` is the same `[[id]]` spelling written in the flow of a line, on a
-list item or mid-paragraph, which Asciidoctor reads as an anchor on the construct it sits in;
-an escaped `\[[` and one inside a verbatim span declare nothing. `asciidoc-reference-text`
-is the section title itself: Asciidoctor resolves a natural cross reference such as
-`<<API entrypoints>>` by looking the target up under its reference text, and a section's
-reference text is its own title, so a title carrying a space or a capital publishes it.
+AsciiDoc author writes on a line of its own: `[[id]]`, with the identity being everything
+before the first comma, or an attribute list naming one, through the `#id` shorthand after
+any style and before any `.role` or `%option`, `[source#hello]` or `[#intro.lead]`, or
+through the named `id` attribute, `[quote,id=qid]`. `asciidoc-inline-anchor` is the anchor
+written in the flow of a line, on a list item, mid-paragraph or inside a section title:
+`[[id]]`, the bibliography spelling `[[[bib]]]`, and the `anchor:id[]` macro. Asciidoctor
+reads each as an anchor on the construct it sits in; an escaped `\[[` and one inside an
+inline passthrough declare nothing. A section title that carries one publishes it beside the
+identity the `asciidoctor` rule generates for the title text with the anchor taken out, which
+is how `== [[custom-sec]]Install Guide` publishes both `custom-sec` and `_install_guide`. The
+title can also open with `#` characters instead of `=`, which Asciidoctor accepts from
+Markdown. `asciidoc-reference-text` is the reference text a natural cross reference such as
+`<<API entrypoints>>` looks its target up under: a section's own title, the text after an
+anchor's comma, or a `reftext` attribute, each published where it carries a space or a
+capital.
 `rst-target` is the internal hyperlink target, `.. _name:`, which Docutils turns into an
 identity on whatever follows it. That name is also what a Sphinx `:ref:` looks up, and
 [Resolution](resolution.md) describes that lookup, which is a different question from

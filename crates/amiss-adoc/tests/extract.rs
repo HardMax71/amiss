@@ -213,6 +213,55 @@ fn an_inline_anchor_declares_an_identity_without_taking_the_line() {
     }
 }
 
+/// Every identity form Asciidoctor 2 published for this document when it was
+/// rendered: the `#id` shorthand after a style or before a role, the named
+/// `id` attribute, the `anchor:` macro, bibliography anchors, and anchors
+/// written into a section title, whose generated identity leaves them out.
+/// Reference text is kept where a natural cross reference could name it.
+#[test]
+fn every_identity_form_asciidoctor_publishes_is_declared() {
+    let source = "= Doc\n\n[source#hello,ruby]\nputs 1\n\n[#intro.lead%open]\nText one.\n\n[id=named]\nText two.\n\n[quote,id=qid]\nQuoted.\n\nFlow anchor:inline-a[] and anchor:inline-b[Ref B].\n\n* [[[bib-ref]]] A book.\n* [[[bib-two,Label]]] Another.\n\n== [[custom-sec]]Install Guide\n\n== Trailing Title [[trail]]\n\n## Markdown Style\n\n[[with-text,Some Text]]\nPara.\n\n[reftext=\"Named Ref\"]\n== Reftext Section\n";
+    let extraction = extract(source.as_bytes()).expect("utf-8");
+    for id in [
+        "hello",
+        "intro",
+        "named",
+        "qid",
+        "inline-a",
+        "inline-b",
+        "Ref B",
+        "bib-ref",
+        "bib-two",
+        "Label",
+        "custom-sec",
+        "trail",
+        "with-text",
+        "Some Text",
+        "Named Ref",
+    ] {
+        assert!(
+            extraction.anchors.iter().any(|anchor| anchor == id),
+            "{id} is declared: {:?}",
+            extraction.anchors
+        );
+    }
+    let titles: Vec<&str> = extraction
+        .titles
+        .iter()
+        .map(|title| title.text.as_str())
+        .collect();
+    assert_eq!(
+        titles,
+        [
+            "Doc",
+            "Install Guide",
+            "Trailing Title",
+            "Markdown Style",
+            "Reftext Section"
+        ]
+    );
+}
+
 /// A paragraph opening with an indented line is literal: it renders as the
 /// text it holds, so nothing inside it is a reference or an anchor.
 #[test]
