@@ -1024,37 +1024,46 @@ fn plugin_path(site: &[u8], document: &[u8]) -> Option<Vec<u8>> {
     })
 }
 
-/// A docname a leading slash anchored at the source root.
+/// A docname a leading slash anchored at the source root, under every suffix
+/// the root reads, since Sphinx finds a docname's file under any of them.
 pub(crate) fn rooted_docname(
-    root: Vec<u8>,
+    root: &[u8],
     absolute: &str,
-    suffix: &str,
+    suffixes: &[&str],
 ) -> Vec<(Vec<u8>, String)> {
     if absolute.is_empty() || absolute.starts_with('/') {
         return Vec::new();
     }
-    vec![(root, docname_spelling(absolute, suffix))]
+    suffixes
+        .iter()
+        .map(|suffix| (root.to_vec(), docname_spelling(absolute, suffix)))
+        .collect()
 }
 
-/// A docname read beside its own document, offered under the suffix its root
-/// reads and again as authored, so a name the tree spells either way still
-/// resolves. One already carrying a suffix was spelled by the adapter, which
-/// runs before any root is known, and is left the way it was spelled.
+/// A docname read beside its own document, offered under every suffix its
+/// root reads and again as authored, so a name the tree spells either way
+/// still resolves. One already carrying a suffix is left the way it was
+/// spelled.
 pub(crate) fn docname_beside(
     document: &RepoPath,
     docname: &str,
-    suffix: &str,
+    suffixes: &[&str],
 ) -> Vec<(Vec<u8>, String)> {
-    if docname.ends_with(suffix) || docname.ends_with(DEFAULT_SOURCE_SUFFIX) {
+    if suffixes
+        .iter()
+        .chain(&[DEFAULT_SOURCE_SUFFIX])
+        .any(|suffix| docname.ends_with(suffix))
+    {
         return Vec::new();
     }
     let Some((beside, relative)) = beside_document(document, docname) else {
         return Vec::new();
     };
-    vec![
-        (beside.clone(), docname_spelling(&relative, suffix)),
-        (beside, relative),
-    ]
+    suffixes
+        .iter()
+        .map(|suffix| (beside.clone(), docname_spelling(&relative, suffix)))
+        .chain([(beside.clone(), relative.clone())])
+        .collect()
 }
 
 /// The directory a destination is read beside and the name with any trailing
