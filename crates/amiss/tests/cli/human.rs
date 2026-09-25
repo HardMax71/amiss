@@ -137,6 +137,65 @@ fn repeated_error_codes_are_explained_once() {
     );
 }
 
+/// A declared identity that reads a same-repository URL as external or as
+/// another version says so beside the counts: a file spelled in a form the
+/// declared dialect does not read, and a branch other than `--ref`, which
+/// is every link to the default branch when `--ref` is a pull request's own.
+#[test]
+fn a_declared_identity_names_the_urls_it_left_unread() {
+    let fx = amiss_fixtures::commit_pair(
+        &[("docs/guide.md", "# Guide\n")],
+        &[(
+            "docs/guide.md",
+            "# Guide\n\n[main](https://github.com/Acme/widget/blob/main/docs/guide.md) \
+             [lab](https://github.com/acme/widget/-/blob/feature/docs/guide.md) \
+             [issue](https://github.com/acme/widget/issues/3) \
+             [other](https://github.com/acme/elsewhere/-/blob/main/docs/guide.md)\n",
+        )],
+    )
+    .unwrap();
+    let run = |reference: &str| {
+        let (code, stdout, _stderr) = amiss(&[
+            "check",
+            "--repo",
+            &fx.repo,
+            "--object-format",
+            "sha1",
+            "--base",
+            &fx.base,
+            "--candidate",
+            &fx.candidate,
+            "--profile",
+            "observe",
+            "--repository",
+            "github.com/acme/widget",
+            "--ref",
+            reference,
+            "--default-branch-ref",
+            "refs/heads/main",
+        ]);
+        assert_eq!(code, 0);
+        String::from_utf8_lossy(&stdout).into_owned()
+    };
+    let text = run("refs/heads/feature");
+    assert!(
+        text.contains(
+            "references: 1 URLs on github.com/acme/widget spell a file in a form --forge github does not read, so they count as external\n"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "references: 1 same-repository URLs name a branch other than --ref refs/heads/feature, so their targets go unchecked; a pull request's check passes the branch it merges into\n"
+        ),
+        "{text}"
+    );
+    assert!(
+        !run("refs/heads/main").contains("branch other than --ref"),
+        "a ref equal to the default branch names no other version"
+    );
+}
+
 /// The run says when identity absence, not reality, made URLs external.
 #[test]
 fn undeclared_identity_is_named_beside_the_external_count() {
