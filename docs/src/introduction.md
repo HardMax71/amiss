@@ -100,7 +100,8 @@ Amiss source code and documentation ship under the
 [Functional Source License 1.1, ALv2 Future License](https://github.com/HardMax71/amiss/blob/main/LICENSE.md).
 The repository's [third-party notices](https://github.com/HardMax71/amiss/blob/main/THIRD_PARTY_NOTICES.md)
 attribute the parser evidence, documentation assets, and fonts. Released Action trees carry
-the project license and a plain-text license bundle built from the locked dependency graph.
+the project license and a plain-text license bundle built from the locked dependency graph, and
+the release page carries the same bundle.
 The Gelasio webfonts this book serves are covered by the
 [SIL Open Font License](fonts/OFL.txt), and the notices mdBook embeds in generated
 JavaScript and SVG assets stay in the published site.

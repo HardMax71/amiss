@@ -1,10 +1,10 @@
 # Third-party notices
 
 This file covers third-party material stored in the source tree and assets emitted by the
-documentation build. The released Action tree carries its own: `THIRD_PARTY_LICENSES.txt`, which
-cargo-about builds for the amiss binary from the locked five-platform Cargo graph under the policy
-in `about.toml`, and `RUST_STD_COPYRIGHT.html`, the Rust standard library's notice copied from the
-toolchain.
+documentation build. The released binaries carry one `THIRD_PARTY_LICENSES.txt`, in the Action
+tree and on the release page: cargo-about's listing for the amiss and amiss-probe binaries, built
+from the locked five-platform Cargo graph under the policy in `about.toml`, followed by the Rust
+standard library's own notice from the toolchain.
 
 ## Parser evidence
 

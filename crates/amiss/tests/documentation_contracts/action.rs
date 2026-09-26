@@ -584,7 +584,12 @@ fn action_dispatcher_tracks_the_packaged_runtime() {
             "the runtime exports {output} from the step that always runs"
         );
     }
+}
 
+/// The self-scan assembles the tree, license notice included, with the release's own lines.
+#[test]
+fn the_self_scan_runs_the_release_assembly() {
+    let root = repository_root();
     for workflow in [
         root.join(".github/workflows/ci.yml"),
         root.join(".github/workflows/release.yml"),
@@ -593,8 +598,9 @@ fn action_dispatcher_tracks_the_packaged_runtime() {
         for line in [
             "install -m 0644 crates/amiss/action/runtime.yml action-tree/action.yml",
             "cp LICENSE.md action-tree/LICENSE.md",
-            "cargo about generate --locked --fail -m crates/amiss/Cargo.toml -o action-tree/THIRD_PARTY_LICENSES.txt about.hbs",
-            "cp \"$(rustc --print sysroot)/share/doc/rust/COPYRIGHT-library.html\" action-tree/RUST_STD_COPYRIGHT.html",
+            "cargo about generate --locked --fail -m crates/amiss/Cargo.toml about.hbs > action-tree/THIRD_PARTY_LICENSES.txt",
+            "cargo about generate --locked --fail -m controller/probe/Cargo.toml about.hbs >> action-tree/THIRD_PARTY_LICENSES.txt",
+            "cat \"$(rustc --print sysroot)/share/doc/rust/COPYRIGHT-library.html\" >> action-tree/THIRD_PARTY_LICENSES.txt",
         ] {
             assert!(source.contains(line), "{} lost {line}", workflow.display());
         }

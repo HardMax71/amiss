@@ -126,8 +126,9 @@ jobs:
           mkdir -p action-tree/dist
           cp Cargo.lock action-tree/Cargo.lock
           cp LICENSE.md action-tree/LICENSE.md
-          cargo about generate --locked --fail -m crates/amiss/Cargo.toml -o action-tree/THIRD_PARTY_LICENSES.txt about.hbs
-          cp "$(rustc --print sysroot)/share/doc/rust/COPYRIGHT-library.html" action-tree/RUST_STD_COPYRIGHT.html
+          cargo about generate --locked --fail -m crates/amiss/Cargo.toml about.hbs > action-tree/THIRD_PARTY_LICENSES.txt
+          cargo about generate --locked --fail -m controller/probe/Cargo.toml about.hbs >> action-tree/THIRD_PARTY_LICENSES.txt
+          cat "$(rustc --print sysroot)/share/doc/rust/COPYRIGHT-library.html" >> action-tree/THIRD_PARTY_LICENSES.txt
           install -m 0644 crates/amiss/action/runtime.yml action-tree/action.yml
           args=""
           # The action never runs the prober; it ships as a release asset only.
@@ -165,6 +166,10 @@ jobs:
         with:
           name: action-tree
           path: action-tree.bundle
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: licenses
+          path: action-tree/THIRD_PARTY_LICENSES.txt
 
   # The assembled tree becomes the refs a workflow pins: the immutable
   # action/vX.Y.Z tag for exact pins, and the moving major branch, v0 for the
@@ -326,13 +331,17 @@ jobs:
           pattern: engine-*
           merge-multiple: true
           path: engines
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: licenses
+          path: engines
       - shell: bash
         run: |
           set -euo pipefail
           mkdir assets
-          cp engines/amiss-* assets/
+          cp engines/amiss-* engines/THIRD_PARTY_LICENSES.txt assets/
           cd assets
-          sha256sum -- amiss-* > SHA256SUMS
+          sha256sum -- amiss-* THIRD_PARTY_LICENSES.txt > SHA256SUMS
       - id: attest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
