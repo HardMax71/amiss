@@ -18,6 +18,8 @@ test(=semantic::parse::tests::template_intake_enforces_the_bound_envelope_ceilin
 | test(=wall_timeout_stops_contained_descendants)
 | test(=the_maximal_fatal_envelope_fits_the_wire_reservation)
 | test(=bootstrap_job::plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling)
+| test(=json_contracts::semantic_reader::decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks)
+| test(=json_contracts::report_controls::complete_report_payloads_reject_unknown_members_with_matching_digests)
 """
 priority = 100
 
