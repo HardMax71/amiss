@@ -13,10 +13,10 @@ cargo install --locked amiss
 
 Or download a binary from the [release page](https://github.com/HardMax71/amiss/releases).
 Each release ships `amiss-linux-x86_64`, `amiss-linux-aarch64`, `amiss-macos-x86_64`,
-`amiss-macos-aarch64` and `amiss-windows-x86_64.exe`, plus a `SHA256SUMS` file and its sigstore
-bundle; the `amiss-probe-*` files beside them are the external prober, not the CLI. The
-download arrives without the executable bit, and `SHA256SUMS` lists every asset, so the check
-skips the ones you did not fetch:
+`amiss-macos-aarch64` and `amiss-windows-x86_64.exe`, plus `THIRD_PARTY_LICENSES.txt`, a
+`SHA256SUMS` file and its sigstore bundle; the `amiss-probe-*` files beside them are the external
+prober, not the CLI. The download arrives without the executable bit, and `SHA256SUMS` lists every
+asset, so the check skips the ones you did not fetch:
 
 ```sh
 curl -sSLO https://github.com/HardMax71/amiss/releases/latest/download/amiss-linux-x86_64

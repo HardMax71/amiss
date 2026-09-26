@@ -409,9 +409,13 @@ fn release_smokes_every_runtime_before_promoting_the_major_ref() {
     assert!(smoke_action.contains("uses: ./action-under-test"));
     assert!(smoke_action.contains("uses: ./\n"));
     assert!(publish_assets.contains("needs: [publish-action, smoke-action]"));
-    assert!(publish_assets.contains("sha256sum -- amiss-* > SHA256SUMS"));
+    assert!(publish_assets.contains("sha256sum -- amiss-* THIRD_PARTY_LICENSES.txt > SHA256SUMS"));
     assert!(publish_assets.contains("subject-checksums: assets/SHA256SUMS"));
     assert!(publish_assets.contains("gh release upload \"$TAG\" --clobber assets/*"));
+    assert!(
+        publish_assets.contains("name: licenses\n          path: engines"),
+        "the license notice rides the engines into SHA256SUMS and the upload"
+    );
     assert!(
         !publish_assets.contains("bootstrap-"),
         "the constraint tooling is built from the reviewed source commit, not downloaded"

@@ -3,8 +3,8 @@
 Install from crates.io with `cargo install --locked amiss`, or take a prebuilt binary from
 the [release page](https://github.com/HardMax71/amiss/releases): the engine and
 [the external prober](external-assessment.md) for Linux x86_64 and aarch64, both macOS
-architectures, and Windows x86_64, beside a `SHA256SUMS` file and the sigstore bundle that
-attests it. `cargo binstall amiss` fetches the same binary. A download arrives without the
+architectures, and Windows x86_64, beside `THIRD_PARTY_LICENSES.txt`, a `SHA256SUMS` file, and
+the sigstore bundle that attests it. `cargo binstall amiss` fetches the same binary. A download arrives without the
 executable bit and under its platform name; [Quickstart](quickstart.md) has the four lines
 that verify, mark, and rename it. `gh attestation verify <binary> --repo HardMax71/amiss`,
 with gh 2.49 or later, matches a downloaded binary against the build that produced it.
