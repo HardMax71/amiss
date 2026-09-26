@@ -1,4 +1,6 @@
-<h1 align="center">Amiss</h1>
+<p align="center">
+  <img alt="Amiss" src="docs/src/images/amiss-logo.png" width="480">
+</p>
 
 <p align="center">
   <a href="https://crates.io/crates/amiss"><img alt="version" src="https://img.shields.io/crates/v/amiss?style=flat-square&label=version&labelColor=1e293b&color=475569"></a>

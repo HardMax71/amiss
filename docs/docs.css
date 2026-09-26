@@ -112,3 +112,19 @@ html, body, .sidebar, #menu-bar, .menu-title, .content main {
   text-align: right;
   opacity: 0.65;
 }
+
+.menu-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0;
+}
+.menu-title::before {
+  content: "";
+  width: 3.4rem;
+  height: 3.4rem;
+  background: url("images/amiss-icon.png") center / contain no-repeat;
+}
+.coal .menu-title::before, .navy .menu-title::before, .ayu .menu-title::before {
+  filter: invert(1) hue-rotate(180deg);
+}

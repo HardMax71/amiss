@@ -76,6 +76,7 @@ repos:
         name: typos
         entry: typos
         language: system
+        types: [text]
         # commit-range hex in the scan ledger tokenizes into short words
         exclude: (^|/)ledger\.md$
       - id: fmt
