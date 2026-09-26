@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.1](https://github.com/HardMax71/amiss/compare/v0.36.0...v0.36.1) - 2026-09-26
+
+### Changes
+
+- ship one license notice with the release page binaries
+- set the book in Gelasio, the open twin of the logo's typeface
+- build the release license bundle with cargo-about
+
 ## [0.36.0](https://github.com/HardMax71/amiss/compare/v0.35.0...v0.36.0) - 2026-09-25
 
 ### Changes
