@@ -9,7 +9,7 @@ branding:
 inputs:
   profile:
     description: observe (findings do not block), enforce-introduced (introduced findings block, carried ones warn), or enforce (blocking findings fail the run)
-    default: enforce
+    default: enforce-introduced
   base:
     description: >-
       full base commit id; when empty, pull requests derive the candidate's
@@ -25,7 +25,7 @@ inputs:
     description: sha1 or sha256
     default: sha1
   annotations:
-    description: emit candidate-located displayed Fixes and scan errors as file annotations
+    description: emit candidate-located displayed Fixes and Checks, and scan errors, as file annotations
     default: "true"
   watchdog-seconds:
     description: wall-clock seconds the scan may take before it is ended with no result
@@ -107,7 +107,7 @@ runs:
         HEAD_SHA: ${{ github.sha }}
         REPOSITORY: ${{ github.repository }}
         SERVER_URL: ${{ github.server_url }}
-        BRANCH: ${{ github.head_ref || github.ref_name }}
+        BRANCH: ${{ github.base_ref || github.event.merge_group.base_ref || github.ref_name }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         REF_TYPE: ${{ github.ref_type }}
       run: |
@@ -166,6 +166,8 @@ runs:
           printf 'base=%s\n' "$base"
           printf 'candidate=%s\n' "$candidate"
         } >> "$GITHUB_OUTPUT"
+        # a pull request or queue entry is checked as the branch it merges into will read
+        BRANCH="${BRANCH#refs/heads/}"
         if [ -n "$BRANCH" ] && [ -n "$DEFAULT_BRANCH" ] \
           && { [ "$EVENT_NAME" != "push" ] || [ "$REF_TYPE" = "branch" ]; }; then
           host="${SERVER_URL#*://}"
@@ -209,8 +211,12 @@ runs:
               --base "$BASE" --candidate "$CANDIDATE"
               --profile "$PROFILE" --format json)
         if [ -n "${IDENTITY:-}" ]; then
+          forge=github
+          if [ "${GITEA_ACTIONS:-}" = true ] || [ "${FORGEJO_ACTIONS:-}" = true ]; then
+            forge=gitea
+          fi
           args+=(--repository "$IDENTITY" --ref "$REF" --default-branch-ref "$DEFAULT_REF"
-                --forge github)
+                --forge "$forge")
         fi
         status=0
         "$BINARY" "${args[@]}" > "$report" &
@@ -257,22 +263,25 @@ runs:
               end;
             def told($text): ($text // "") as $d
               | if $d == "" then "" else ": " + $d end;
+            def window($rows):
+              ($rows[:10][]
+               | "- **\((.action[0:1] | ascii_upcase) + .action[1:])** "
+                 + (.target | target)
+                 + " \(.finding_kinds | join(", "))"
+                 + where
+                 + ", \(.location_count) affected place\(if .location_count == 1 then "" else "s" end)"),
+              (($rows | length) - 10
+               | if . > 0 then
+                   "- \(.) more item\(if . == 1 then "" else "s" end) in report."
+                 else empty end);
             (.payload as $p
              | if $p.feedback.status == "available" then
                  ($p.feedback.items | map(select(.action == "fix")) | length) as $fixes
                  | ($p.feedback.items | map(select(.action == "check")) | length) as $checks
                  | ["amiss \($p.result.status): \($fixes) Fix, \($checks) Check, \($p.feedback.existing_count) Existing, exit class \($p.result.exit_code)",
                     (if ($p.feedback.items | length) > 0 then "" else empty end),
-                    ($p.feedback.items[:10][]
-                     | "- **\((.action[0:1] | ascii_upcase) + .action[1:])** "
-                       + (.target | target)
-                       + " \(.finding_kinds | join(", "))"
-                       + where
-                       + ", \(.location_count) affected place\(if .location_count == 1 then "" else "s" end)"),
-                    (($p.feedback.items | length) - 10
-                     | if . > 0 then
-                         "- \(.) more item\(if . == 1 then "" else "s" end) in report."
-                       else empty end)][]
+                    window($p.feedback.items | map(select(.action != "existing"))),
+                    window($p.feedback.items | map(select(.action == "existing")))][]
                else
                  ($p.errors | group_by(.code)) as $errors
                  | ["amiss \($p.result.status): scan failed, \($p.result.error_count) errors, exit class \($p.result.exit_code)",
@@ -303,7 +312,8 @@ runs:
           exit 0
         fi
         jq -r '
-          def d: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
+          def d: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A")
+            | gsub("(?<c>[[:cntrl:]])"; .c | tojson | .[1:-1]);
           def p: d | gsub(":"; "%3A") | gsub(","; "%2C");
           def hex: map((. / 16 | floor) as $h | (. % 16) as $l
             | "0123456789abcdef"[$h:$h + 1] + "0123456789abcdef"[$l:$l + 1]) | join("");
@@ -316,13 +326,15 @@ runs:
           def led($lead): (spelled // "") | if . == "" then "" else $lead + . end;
           (.payload as $p
            | if $p.feedback.status == "available" then
-               $p.feedback.items[:10][]
-               | select(.action == "fix" and .annotation != null)
+               ($p.feedback.items | map(select(.action != "existing")))[:10][]
+               | select(.annotation != null)
                | .annotation as $at
                | ([$p.findings[] | select(.location.path == $at.path and .location.span == $at.span)]
                   | first | .candidate_fact.evidence.resolution // {}) as $resolution
-               | (if .effective_disposition == "fail" then "error" else "warning" end) as $level
-               | "::\($level) file=\($at.path|p),line=\($at.span.start_line),endLine=\($at.span.end_line),col=\($at.span.start_column),endColumn=\($at.span.end_column),title=amiss Fix::Fix \(.finding_kinds | join(", "))"
+               | (if .action == "check" then "Check" else "Fix" end) as $name
+               | (if .action == "check" then "notice"
+                  elif .effective_disposition == "fail" then "error" else "warning" end) as $level
+               | "::\($level) file=\($at.path|p),line=\($at.span.start_line),endLine=\($at.span.end_line),col=\($at.span.start_column),endColumn=\($at.span.end_column),title=amiss \($name)::\($name) \(.finding_kinds | join(", "))"
                  + (.target | led(": target "))
                  + why($resolution.reason)
                  + ($resolution.near | led(", near "))
