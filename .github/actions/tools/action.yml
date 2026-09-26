@@ -32,7 +32,7 @@ runs:
         path: ${{ runner.tool_cache }}/amiss-tools
         key: tools-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.bench.outputs.key }}
     - if: steps.cache.outputs.cache-hit != 'true' && steps.bench.outputs.prebuilt != ''
-      uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
+      uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2.87.13
       with:
         tool: ${{ steps.bench.outputs.prebuilt }}
         fallback: none
