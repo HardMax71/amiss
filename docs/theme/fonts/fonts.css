@@ -1,31 +1,23 @@
 @font-face {
-  font-family: "Latin Modern";
-  src: url("LM-regular.woff2") format("woff2");
-  font-weight: normal;
+  font-family: "Gelasio";
+  src: url("Gelasio.woff2") format("woff2");
+  font-weight: 400 700;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Latin Modern";
-  src: url("LM-italic.woff2") format("woff2");
-  font-weight: normal;
-  font-style: italic;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Latin Modern";
-  src: url("LM-bold.woff2") format("woff2");
-  font-weight: bold;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Latin Modern";
-  src: url("LM-bold-italic.woff2") format("woff2");
-  font-weight: bold;
+  font-family: "Gelasio";
+  src: url("Gelasio-Italic.woff2") format("woff2");
+  font-weight: 400 700;
   font-style: italic;
   font-display: swap;
 }
 html {
-  font-family: "Latin Modern", Georgia, serif;
+  font-family: "Gelasio", Georgia, serif;
+  font-variant-numeric: lining-nums;
+  letter-spacing: 0.02em;
+  word-spacing: 0.05em;
+}
+::marker {
+  font-variant-numeric: lining-nums tabular-nums;
 }

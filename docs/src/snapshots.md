@@ -45,8 +45,8 @@ A commit-pair run uses the corresponding
 ```dot process
 digraph identity {
   rankdir = LR;
-  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
-  edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
+  node [shape = box, fontname = "Gelasio, Georgia, serif", fontsize = 11];
+  edge [arrowsize = 0.7, fontname = "Gelasio, Georgia, serif", fontsize = 10];
   projection [label = "sorted index\nprojection"];
   synthetic  [label = "synthetic\nsnapshot"];
   identity   [label = "candidate identity\n+ repository, dialect,\nrefs, base"];

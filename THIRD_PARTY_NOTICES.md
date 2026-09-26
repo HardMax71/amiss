@@ -26,10 +26,10 @@ measurements, and Amiss-authored fields remain under the project license.
 
 ## Documentation and fonts
 
-The four Latin Modern WOFF2 files are byte-identical to `vincentdoerig/latex-css` commit
-`2de5cc58d87b3a58413020f9f15bd8c261c29e13`. Latin Modern is copyright 2003–2021 B. Jackowski
-and J.M. Nowacki and distributed under the [GUST Font License](docs/src/fonts/GUST-FONT-LICENSE.txt).
-The upstream web packaging is MIT, copyright 2020 Vincent Dörig.
+The two Gelasio WOFF2 files are byte-identical to `fonts/webfonts/Gelasio[wght].woff2` and
+`fonts/webfonts/Gelasio-Italic[wght].woff2` in `SorkinType/Gelasio` commit
+`7ab20e7e5c42791e603b9ee3201a0b49849cfdb2`. Gelasio is copyright 2022 The Gelasio Project Authors
+and distributed under the [SIL Open Font License 1.1](docs/src/fonts/OFL.txt).
 
 The site is built with mdBook 0.5.4, licensed under
 [MPL-2.0](https://github.com/rust-lang/mdBook/blob/v0.5.4/LICENSE). Its generated assets retain
