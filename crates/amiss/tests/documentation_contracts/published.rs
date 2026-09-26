@@ -450,7 +450,7 @@ fn third_party_material_keeps_its_attribution() {
         "7cc9131",
         "df527f5",
         "a3a75cc",
-        "2de5cc58d87b3a58413020f9f15bd8c261c29e13",
+        "7ab20e7e5c42791e603b9ee3201a0b49849cfdb2",
         "mdBook 0.5.4",
         "Highlight.js 10.1.1",
         "Font Awesome Free 6.2.0",
@@ -463,20 +463,12 @@ fn third_party_material_keeps_its_attribution() {
 
     for (file, expected) in [
         (
-            "LM-bold-italic.woff2",
-            "3d41e67617603684e0353953f9460893cd441049398be31857c9fbaaa2521811",
+            "Gelasio.woff2",
+            "15a06d2088bbfcf250296c770704cb9bb3f229ff58289faf708fe0f3279094c3",
         ),
         (
-            "LM-bold.woff2",
-            "449ad146efbd630d36e08f956b1249e862463797a26b61f5fe7999513c328c03",
-        ),
-        (
-            "LM-italic.woff2",
-            "3eb5daf8d26e6f882207633b8f45a27b389ac1b2a6713562fdef4d982f24b192",
-        ),
-        (
-            "LM-regular.woff2",
-            "c2e0d602fee55a45e44f8ab3f4f561d73d2c23db1efee295865d79f9307977db",
+            "Gelasio-Italic.woff2",
+            "91164b31301c9e72922371df0ce81334d3c68e44172fc8ef597ad63c873e9215",
         ),
     ] {
         let bytes = fs::read(root.join("docs/src/fonts").join(file)).expect("font is readable");
@@ -488,7 +480,7 @@ fn third_party_material_keeps_its_attribution() {
         .expect("book introduction is readable");
     assert!(introduction.contains("blob/main/LICENSE.md"));
     assert!(introduction.contains("blob/main/THIRD_PARTY_NOTICES.md"));
-    assert!(introduction.contains("fonts/GUST-FONT-LICENSE.txt"));
+    assert!(introduction.contains("fonts/OFL.txt"));
 }
 
 #[test]

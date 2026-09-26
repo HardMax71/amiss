@@ -93,8 +93,8 @@ durable record.
 ```dot process
 digraph controller_delivery {
   rankdir = TB;
-  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
-  edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
+  node [shape = box, fontname = "Gelasio, Georgia, serif", fontsize = 11];
+  edge [arrowsize = 0.7, fontname = "Gelasio, Georgia, serif", fontsize = 10];
   raw      [label = "raw delivery"];
   gate     [label = "bounds + receipt time"];
   auth     [label = "authenticate\n+ replay identity"];
@@ -205,8 +205,8 @@ uses a higher fence.
 ```dot process
 digraph delivery_states {
   rankdir = TB;
-  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
-  edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
+  node [shape = box, fontname = "Gelasio, Georgia, serif", fontsize = 11];
+  edge [arrowsize = 0.7, fontname = "Gelasio, Georgia, serif", fontsize = 10];
   fresh   [label = "new"];
   running [label = "running\nlease + fence"];
   saved   [label = "result saved\nexact value"];

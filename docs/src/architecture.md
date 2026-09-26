@@ -7,7 +7,7 @@ engine, never the other way round.
 ```dot process
 digraph amiss {
   rankdir = BT;
-  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
+  node [shape = box, fontname = "Gelasio, Georgia, serif", fontsize = 11];
   edge [arrowsize = 0.7];
   wire  [label = "amiss-wire\nshared typed models,\nvalidation, machine contracts"];
   git   [label = "amiss-git\nobject store, packs, index,\nno-follow handles"];
@@ -154,7 +154,7 @@ Inside an engine run, the stages form a line:
 ```dot process
 digraph pipeline {
   rankdir = LR;
-  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
+  node [shape = box, fontname = "Gelasio, Georgia, serif", fontsize = 11];
   edge [arrowsize = 0.7];
   snap  [label = "snapshots\nbase + candidate"];
   disc  [label = "discovery"];

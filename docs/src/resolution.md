@@ -138,8 +138,8 @@ The same decision, drawn:
 ```dot process
 digraph resolve {
   rankdir = LR;
-  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
-  edge [fontname = "Latin Modern, Georgia, serif", fontsize = 10, arrowsize = 0.7];
+  node [shape = box, fontname = "Gelasio, Georgia, serif", fontsize = 11];
+  edge [fontname = "Gelasio, Georgia, serif", fontsize = 10, arrowsize = 0.7];
   dest  [label = "destination"];
   rel   [label = "relative path"];
   route [label = "leading-slash

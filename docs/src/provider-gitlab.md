@@ -39,8 +39,8 @@ key ID, issuer, and audience. It then binds the `job_project_id`, canonical
 ```dot process
 digraph gitlab_provider {
   rankdir = TB;
-  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
-  edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
+  node [shape = box, fontname = "Gelasio, Georgia, serif", fontsize = 11];
+  edge [arrowsize = 0.7, fontname = "Gelasio, Georgia, serif", fontsize = 10];
   policy [label = "independent pipeline\nexecution policy"];
   train  [label = "enforced merge train\n+ injected job"];
   tls    [label = "TLS terminator"];

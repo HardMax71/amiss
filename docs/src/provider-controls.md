@@ -37,8 +37,8 @@ supervised process, and durable result staging.
 ```dot process
 digraph provider_controls {
   rankdir = LR;
-  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
-  edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
+  node [shape = box, fontname = "Gelasio, Georgia, serif", fontsize = 11];
+  edge [arrowsize = 0.7, fontname = "Gelasio, Georgia, serif", fontsize = 10];
   source [label = "provider-created\nrequest"];
   auth   [label = "authenticate\noutside repo"];
   first  [label = "refresh exact\nchange + gate"];

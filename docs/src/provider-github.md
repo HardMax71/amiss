@@ -21,8 +21,8 @@ Other authenticated events return the same success without creating an inbox row
 ```dot process
 digraph provider_controls {
   rankdir = TB;
-  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
-  edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
+  node [shape = box, fontname = "Gelasio, Georgia, serif", fontsize = 11];
+  edge [arrowsize = 0.7, fontname = "Gelasio, Georgia, serif", fontsize = 10];
   github [label = "GitHub\nsigned pull-request event"];
   tls    [label = "TLS terminator"];
   gate   [label = "bounded receiver\n+ body HMAC"];
