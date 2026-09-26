@@ -83,9 +83,18 @@ not: a package override reaches the package's test binaries too, and those are w
 on. Debug assertions and overflow checks stay on, and release settings are unchanged.
 
 Compiling the tests costs far more than running them, so platform CI builds the binaries in one
-step and runs them in another: a slow run says which half it was. A restored dependency cache
+step and runs them in another: a slow run says which half it was. The build is throughput bound
+on a four-core runner, so each platform splits in two. The libraries half builds the engine's
+library crates; the programs half builds the CLI, the bootstrap wrapper, and every package under
+`controller/` and `api/`, whose tests start a process per case. A new crate lands in the libraries
+half unless it lives under those two directories. Each half keeps its own dependency cache, since
+Cargo resolves features for the packages it builds and the halves resolve some shared dependencies
+differently. A restored dependency cache
 still leaves every workspace crate to compile. To see where that time goes, add `--timings` to
 `cargo nextest run --workspace --locked` locally and read Cargo's report next to nextest's summary.
+
+Windows links the test binaries with rust-lld and runs eight test threads, since starting a test
+process there costs more than running most tests.
 
 Platform CI also builds without debug information. The test profile strips it at link time, so
 generating it only hands the linker bytes it discards. Local builds keep their line tables, since
@@ -99,7 +108,8 @@ that are already there. Targets with no unit tests set `test = false`, which ski
 executable per target; turn it back on when you add one, since integration tests reach those
 libraries and binaries either way. Two targets stay on their own. The fatal-envelope test counts
 allocations process wide, and the two release eligibility checks live in `eligibility` so the
-extra release build stays small.
+extra release build stays small. They run in their own job, on Linux for a pull request and on
+every release platform for `main` and the weekly run.
 
 Two similarly named files point in opposite directions. `.pre-commit-config.yaml` is the hook
 table this repository runs on itself through prek. `.pre-commit-hooks.yaml` is the hook this

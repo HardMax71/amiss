@@ -308,6 +308,10 @@ jobs:
   fuzz:
     needs: changes
     if: needs.changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [amiss-fuzz, amiss-controller-fuzz]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -317,8 +321,11 @@ jobs:
       - run: rustup toolchain uninstall stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          key: ${{ matrix.crate }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo test -p amiss-fuzz -p amiss-controller-fuzz --locked --release
+      - run: cargo test -p "$CRATE" --locked --release
+        env:
+          CRATE: ${{ matrix.crate }}
 
   module-cycles:
     needs: changes
@@ -364,6 +371,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        crates: [libraries, programs]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     # The test profile strips debug information at link time anyway, so
@@ -408,22 +416,106 @@ jobs:
           tool: cargo-nextest@${{ steps.bench.outputs.nextest }}
           fallback: none
       - run: rustup toolchain uninstall stable
+      # The linker is part of every build script and proc macro's fingerprint, so it goes in before the cache key.
+      - if: runner.os == 'Windows'
+        name: Link with rust-lld
+        shell: bash
+        run: echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
+      # Much of a Windows test's time is starting its process, so more threads than cores still pay.
+      - if: runner.os == 'Windows'
+        shell: bash
+        run: echo "NEXTEST_TEST_THREADS=8" >> "$GITHUB_ENV"
+      # Cargo resolves features for the packages it builds, and the halves resolve shared dependencies differently.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: .
+          key: ${{ matrix.crates }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Build the workspace tests
-        run: cargo nextest run --workspace --locked --no-run
-      - name: Run the workspace tests
-        run: cargo nextest run --workspace --locked
-      - name: Check release eligibility
-        run: cargo nextest run -p amiss-scan --test eligibility --release --locked
+      # Programs are the CLI, the bootstrap wrapper, and everything under controller/ and api/; a new crate lands in libraries.
+      # macOS ships bash 3.2 and Windows jq ends lines with CR, hence the plain string and the tr.
+      - id: crates
+        shell: bash
+        env:
+          CRATES: ${{ matrix.crates }}
+        run: |
+          set -euo pipefail
+          programs=$(cargo metadata --locked --format-version 1 --no-deps --offline |
+            jq -r '.workspace_root as $root | .packages[]
+              | select((.manifest_path | ltrimstr($root) | test("^[/\\\\](controller|api)[/\\\\]"))
+                or .name == "amiss" or .name == "amiss-bootstrap") | .name' |
+            tr -d '\r')
+          if [ -z "$programs" ]; then
+            echo "no program packages found" >&2
+            exit 1
+          fi
+          case "$CRATES" in
+            libraries)
+              args="--workspace"
+              for package in $programs; do args="$args --exclude $package"; done
+              ;;
+            programs)
+              args=""
+              for package in $programs; do args="$args --package $package"; done
+              ;;
+            *)
+              echo "unknown crate half: $CRATES" >&2
+              exit 1
+              ;;
+          esac
+          echo "args=$args" >> "$GITHUB_OUTPUT"
+      - name: Build the tests
+        shell: bash
+        env:
+          ARGS: ${{ steps.crates.outputs.args }}
+        run: |
+          read -ra args <<< "$ARGS"
+          cargo nextest run "${args[@]}" --locked --no-run
+      - name: Run the tests
+        shell: bash
+        env:
+          ARGS: ${{ steps.crates.outputs.args }}
+        run: |
+          read -ra args <<< "$ARGS"
+          cargo nextest run "${args[@]}" --locked
+
+  # Pull requests check the release parse bound on Linux; main and the weekly run check every release platform.
+  eligibility:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: nextest
+        shell: bash
+        run: |
+          cargo metadata --locked --format-version 1 --no-deps --offline |
+            jq -er '"version=\(.metadata.tools.prebuilt["cargo-nextest"])"' >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2.87.13
+        with:
+          tool: cargo-nextest@${{ steps.nextest.outputs.version }}
+          fallback: none
+      - run: rustup toolchain uninstall stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo nextest run -p amiss-scan --test eligibility --release --locked
 
   coverage:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Coverage reads its own mapping sections, not debug information.
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
