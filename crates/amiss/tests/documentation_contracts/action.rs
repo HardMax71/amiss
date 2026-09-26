@@ -3,6 +3,7 @@
     reason = "integration assertions over repository-owned documentation and fixtures"
 )]
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write as _;
 use std::process::{Command, Stdio};
@@ -589,15 +590,44 @@ fn action_dispatcher_tracks_the_packaged_runtime() {
         root.join(".github/workflows/release.yml"),
     ] {
         let source = fs::read_to_string(&workflow).expect("Action assembly workflow is readable");
-        assert!(
-            source
-                .contains("install -m 0644 crates/amiss/action/runtime.yml action-tree/action.yml")
-        );
-        assert!(source.contains("cp LICENSE.md action-tree/LICENSE.md"));
-        assert!(
-            source
-                .contains("bash scripts/release-licenses.sh action-tree/THIRD_PARTY_LICENSES.txt")
-        );
+        for line in [
+            "install -m 0644 crates/amiss/action/runtime.yml action-tree/action.yml",
+            "cp LICENSE.md action-tree/LICENSE.md",
+            "cargo about generate --locked --fail -m crates/amiss/Cargo.toml -o action-tree/THIRD_PARTY_LICENSES.txt about.hbs",
+            "cp \"$(rustc --print sysroot)/share/doc/rust/COPYRIGHT-library.html\" action-tree/RUST_STD_COPYRIGHT.html",
+        ] {
+            assert!(source.contains(line), "{} lost {line}", workflow.display());
+        }
         assert!(!source.contains("install -m 0644 action.yml action-tree/action.yml"));
     }
+}
+
+/// The license bundle accepts exactly what cargo deny allows, so the two policies cannot drift.
+#[test]
+fn the_license_bundle_accepts_what_cargo_deny_allows() {
+    let root = repository_root();
+    let about: toml::Table = fs::read_to_string(root.join("about.toml"))
+        .expect("about.toml is readable")
+        .parse()
+        .expect("about.toml parses as TOML");
+    let deny: toml::Table = fs::read_to_string(root.join("deny.toml"))
+        .expect("deny.toml is readable")
+        .parse()
+        .expect("deny.toml parses as TOML");
+    let accepted: BTreeSet<&str> = about
+        .get("accepted")
+        .and_then(toml::Value::as_array)
+        .expect("about.toml lists accepted licenses")
+        .iter()
+        .map(|license| license.as_str().expect("an accepted license is a string"))
+        .collect();
+    let allowed: BTreeSet<&str> = deny
+        .get("licenses")
+        .and_then(|licenses| licenses.get("allow"))
+        .and_then(toml::Value::as_array)
+        .expect("deny.toml lists allowed licenses")
+        .iter()
+        .map(|license| license.as_str().expect("an allowed license is a string"))
+        .collect();
+    assert_eq!(accepted, allowed);
 }

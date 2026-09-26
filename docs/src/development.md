@@ -16,7 +16,9 @@ cache warmed by main; jobs install only their requested tools on a miss, and pul
 never save partial benches. The agent lanes use the same composite and gh-aw's native Copilot
 installer without private CLI caches. A documentation-contract test parses the
 manifest independently and refuses any workflow spelling a declared tool at another version.
-Bumping a tool is one edit.
+Bumping a tool is one edit, except cargo-about: a release restores no cache, so the release job
+and the self-scan that mirrors it spell its version in the workflow, and that test holds both to
+the manifest.
 
 Hooks run through [prek](https://github.com/j178/prek): formatting and the cheap checks
 on commit, then [Clippy](https://github.com/rust-lang/rust-clippy) with
