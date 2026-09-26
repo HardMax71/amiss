@@ -26,6 +26,8 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    # The Rust analysis takes about ten minutes, so it runs on main and weekly;
+    # every pull request still gets the workflow analysis and its CodeQL check.
     strategy:
       fail-fast: false
       matrix:
@@ -35,13 +37,13 @@ jobs:
         with:
           persist-credentials: false
       # The Rust extractor builds every build script and proc macro in the graph to load the workspace.
-      - if: matrix.language == 'rust' && needs.changes.outputs.code == 'true'
+      - if: matrix.language == 'rust' && github.event_name != 'pull_request' && needs.changes.outputs.code == 'true'
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: codeql
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
-        if: (matrix.language == 'rust' && needs.changes.outputs.code == 'true') || (matrix.language == 'actions' && needs.changes.outputs.actions == 'true')
+        if: (matrix.language == 'rust' && github.event_name != 'pull_request' && needs.changes.outputs.code == 'true') || (matrix.language == 'actions' && (github.event_name == 'pull_request' || needs.changes.outputs.actions == 'true'))
         with:
           languages: ${{ matrix.language }}
           build-mode: none
@@ -53,7 +55,7 @@ jobs:
               - fuzz
               - controller/fuzz
       - uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
-        if: (matrix.language == 'rust' && needs.changes.outputs.code == 'true') || (matrix.language == 'actions' && needs.changes.outputs.actions == 'true')
+        if: (matrix.language == 'rust' && github.event_name != 'pull_request' && needs.changes.outputs.code == 'true') || (matrix.language == 'actions' && (github.event_name == 'pull_request' || needs.changes.outputs.actions == 'true'))
         env:
           CODEQL_EXTRACTOR_RUST_OPTION_CARGO_TARGET_DIR: ${{ github.workspace }}/target
         with:

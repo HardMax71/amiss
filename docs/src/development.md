@@ -223,6 +223,7 @@ If a forge outage leaves that pull request stale, manually dispatching the
 without running the publishing job; crate publication remains restricted to pushes on `main`.
 Security checks layer in CI as well. Dependency update PRs arrive with a cooldown, a
 weekly advisory re-check runs against a fresh database, and
-[CodeQL](https://codeql.github.com) covers both the Rust and the workflows.
+[CodeQL](https://codeql.github.com) covers both the Rust and the workflows. The Rust analysis takes
+about ten minutes, so it runs on `main` and weekly, and a pull request gets the workflow analysis.
 [Scorecard](https://scorecard.dev), secret scanning with push protection, and build
 provenance attestations on release binaries round it out.
