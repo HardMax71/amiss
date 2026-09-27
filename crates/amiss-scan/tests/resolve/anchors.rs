@@ -2,11 +2,44 @@ use amiss_fixtures::{CommitChain, Staged, commit_chain, staged_repository};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::resolve::{Resolver, TargetCache};
 use amiss_scan::{ScanLimits, ScanResources, discover};
-use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
+use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid, RepoPath};
 use amiss_wire::resolution::Resolution;
 use amiss_wire::resolution::{Missing, Target, UnsupportedSemantics};
 
-use crate::support::{ANCHORS, bed, bed_at, bed_with};
+use crate::support::{ANCHORS, bed, bed_at, bed_with, forge_context};
+
+/// github.com lowercases a fragment before it looks the heading up, so a link
+/// that differs from a github.com identity only in case works on that forge
+/// and on no other.
+#[test]
+fn github_matches_a_heading_anchor_in_any_case() {
+    let mut bed = bed();
+    for (dialect, fragment, resolves) in [
+        (Some(ForgeDialect::Github), "Setup--Config", true),
+        (Some(ForgeDialect::Github), "R%C3%89SUM%C3%89-Draft", true),
+        (Some(ForgeDialect::Github), "Setup", false),
+        (Some(ForgeDialect::Gitlab), "Setup--Config", false),
+        (None, "Setup--Config", false),
+    ] {
+        let context = dialect.map(forge_context);
+        let destination = format!("anchors.md#{fragment}");
+        let row = bed
+            .run_as(
+                Adapter::Markdown,
+                context.as_ref(),
+                "docs/guide.md",
+                false,
+                &destination,
+            )
+            .unwrap_or_else(|_defect| panic!("resolve {destination}"))
+            .1;
+        assert_eq!(
+            matches!(row, Resolution::Resolved { .. }),
+            resolves,
+            "{fragment} under {dialect:?}: {row:?}"
+        );
+    }
+}
 
 /// The identity of a heading belongs to the renderer, so an anchor resolves
 /// when any pinned renderer would publish it. Nothing a repository declares can
