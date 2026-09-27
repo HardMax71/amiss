@@ -391,8 +391,8 @@ fn compensate(name: &str, expected: &str) -> String {
 /// pulldown-cmark 0.13.4 forms neither a link nor an image whose label holds
 /// a footnote call once a footnote definition exists, so `[link[^5]](#)` and
 /// `![image[^4]](#)` stay literal where github.com makes them a link and an
-/// image. The scanner would miss both references. It is recorded here, and it
-/// is worth reporting upstream.
+/// image. The scanner would miss both references. It is recorded here and
+/// reported upstream as pulldown-cmark#1152.
 const GITHUB_DIVERGENCE: [&str; 1] = ["footnotes-in-constructs"];
 
 #[test]
