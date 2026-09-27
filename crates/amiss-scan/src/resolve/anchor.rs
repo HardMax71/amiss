@@ -7,7 +7,7 @@ use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{BlobTarget, Missing, TaggedBlobTarget, Target, UnsupportedSemantics};
 
 use crate::Error;
-use crate::anchor::anchor_set;
+use crate::anchor::{AnchorRule, GITHUB, anchor_set, identities};
 use crate::discovery::component::antora_fragment;
 use crate::discovery::{SnapshotDiscovery, declared_root};
 use crate::document::{classify, native_adapter};
@@ -24,6 +24,7 @@ use amiss_wire::resolution::Resolution;
 #[derive(Debug)]
 pub(super) struct AnchorIndex {
     identities: Vec<String>,
+    github: Vec<String>,
     typography: Option<[BTreeMap<String, Option<usize>>; 2]>,
 }
 
@@ -33,9 +34,10 @@ pub(super) struct AnchorIndex {
 const NEAR_KEYS: [fn(&str) -> String; 2] = [str::to_lowercase, fold_typography];
 
 impl AnchorIndex {
-    fn new(identities: BTreeSet<String>) -> Self {
+    fn new(identities: BTreeSet<String>, github: BTreeSet<String>) -> Self {
         Self {
             identities: identities.into_iter().collect(),
+            github: github.into_iter().collect(),
             typography: None,
         }
     }
@@ -98,13 +100,13 @@ pub(super) fn fragment_resolution(
     let bound = resolver.snapshot.bound_adapter(path).is_some();
     match classify(path.as_bytes()).filter(|_| !bound) {
         Some(classification) => match native_adapter(classification) {
-            Some(adapter) => anchor_resolution(resolver, path, mode, blob, adapter, decoded),
+            Some(adapter) => anchor_resolution(resolver, path, mode, blob, adapter, forge, decoded),
             None => Ok(Resolution::UnsupportedSemantics(
                 UnsupportedSemantics::Fragment(TaggedBlobTarget::Blob(blob)),
             )),
         },
         None => match resolver.snapshot.bound_adapter(path) {
-            Some(adapter) => anchor_resolution(resolver, path, mode, blob, adapter, decoded),
+            Some(adapter) => anchor_resolution(resolver, path, mode, blob, adapter, forge, decoded),
             None => Ok(Resolution::UnsupportedSemantics(
                 UnsupportedSemantics::CodeFragment(Target::Blob(blob)),
             )),
@@ -122,6 +124,7 @@ fn anchor_resolution(
     mode: GitMode,
     blob: BlobTarget<RepoPath>,
     adapter: Adapter,
+    forge: Option<ForgeDialect>,
     fragment: &str,
 ) -> Result<Resolution<RepoPath>, Error> {
     // The HTML standard scrolls `#top`, in any case, to the top of every page.
@@ -211,6 +214,14 @@ fn anchor_resolution(
             target: Target::Blob(blob),
         });
     }
+    // github.com lowercases a fragment before it looks the heading up.
+    if forge == Some(ForgeDialect::Github)
+        && index.github.binary_search(&fragment.to_lowercase()).is_ok()
+    {
+        return Ok(Resolution::Resolved {
+            target: Target::Blob(blob),
+        });
+    }
     if !complete {
         return Ok(unsupported);
     }
@@ -233,18 +244,29 @@ fn expanded_anchors(
     pin: Option<&BTreeSet<String>>,
 ) -> Anchors {
     let expanded = expand(snapshot, scan, path, adapter, source);
-    let identities = AnchorIndex::new(anchor_set(
-        expanded.headings.as_ref(),
-        expanded.html_anchors.as_ref(),
-        expanded.declared_anchors.as_ref(),
-        |rule| {
-            (rule.declared_by.is_empty()
-                || declared_root(snapshot, path.as_bytes(), rule.declared_by).is_some())
-                && pin
-                    .filter(|_| matches!(adapter, Adapter::Markdown | Adapter::Mdx))
-                    .is_none_or(|pin| pin.contains(rule.name))
-        },
-    ));
+    let read = |rule: &AnchorRule| {
+        (rule.declared_by.is_empty()
+            || declared_root(snapshot, path.as_bytes(), rule.declared_by).is_some())
+            && pin
+                .filter(|_| matches!(adapter, Adapter::Markdown | Adapter::Mdx))
+                .is_none_or(|pin| pin.contains(rule.name))
+    };
+    let github = if read(&GITHUB) {
+        identities(&GITHUB, expanded.headings.as_ref())
+            .into_iter()
+            .collect()
+    } else {
+        BTreeSet::new()
+    };
+    let index = AnchorIndex::new(
+        anchor_set(
+            expanded.headings.as_ref(),
+            expanded.html_anchors.as_ref(),
+            expanded.declared_anchors.as_ref(),
+            read,
+        ),
+        github,
+    );
     // An AsciiDoc chapter renders inside the book that includes it.
     let chapter = adapter == Adapter::AsciiDoc
         && (snapshot.asciidoc_included.contains(path)
@@ -255,9 +277,9 @@ fn expanded_anchors(
         && !unrouted(snapshot, adapter, path)
         && !templated(snapshot, adapter, path, &source)
     {
-        Anchors::Published(identities)
+        Anchors::Published(index)
     } else {
-        Anchors::Partial(identities)
+        Anchors::Partial(index)
     }
 }
 

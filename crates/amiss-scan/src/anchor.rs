@@ -195,6 +195,10 @@ const fn github() -> AnchorRule {
     }
 }
 
+/// The github.com rule on its own, since the resolver also matches it the way
+/// github.com's page does.
+pub const GITHUB: AnchorRule = github();
+
 /// The identity Hugo publishes for a definition-list term under
 /// `autoDefinitionTermID`, which is the slug its heading rule builds, on the
 /// counter its headings occupy. The rule sits beside the table rather than
@@ -214,7 +218,7 @@ const MDN_CONTENT: &[&str] = &["front-matter-config.json", ".front-matter-config
 /// anchor may match, so the set is the union and a missing rule is the only
 /// way to report a live anchor as absent.
 pub const RULES: [AnchorRule; 13] = [
-    github(),
+    GITHUB,
     AnchorRule {
         name: "gitea",
         typography: Typography::Plain,

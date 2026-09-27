@@ -8,7 +8,10 @@ guessing one would report live anchors as missing. One fragment needs no rule at
 HTML standard scrolls `#top`, in any case, to the top of every page, so it resolves on any
 document whatever its headings. Starlight writes `_top` on the title of every page it builds,
 so on a page of an Astro project whose configuration imports `@astrojs/starlight`, `#_top`
-resolves the same way.
+resolves the same way. github.com also lowercases a fragment before it looks for the heading,
+so `#Setup--Config` reaches `setup--config` there, while gitlab.com matches the fragment
+exactly, as a browser does on a built site. The resolver lowercases too when a run declares a
+GitHub repository with `--repository`, and matches exactly otherwise.
 
 [Resolution](resolution.md) describes what the resolver does with that. This page retains
 what the rules are, where each came from, and what each was checked against, because a
