@@ -12,6 +12,9 @@ on:
         required: true
         type: string
 
+concurrency:
+  job-discriminator: ${{ github.event.pull_request.number || inputs.pr }}
+
 permissions:
   contents: read
   pull-requests: read

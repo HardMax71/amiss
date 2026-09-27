@@ -266,27 +266,6 @@ fn the_hook_config_defers_to_the_bench() {
     );
 }
 
-/// The credentialed dispatcher reaches its setup action by sha; the compiler
-/// re-emits a mutable tag on every compile until upstream reads its ledger.
-#[test]
-fn the_dispatcher_setup_action_is_sha_pinned() {
-    let raw = fs::read_to_string(repository_root().join(".github/workflows/agentic_commands.yml"))
-        .expect("the dispatcher is readable");
-    let uses = raw
-        .lines()
-        .find(|line| line.contains("gh-aw-actions/setup@"))
-        .expect("the dispatcher uses the setup action");
-    let reference = uses
-        .split("setup@")
-        .nth(1)
-        .and_then(|tail| tail.split_whitespace().next())
-        .expect("the setup reference is readable");
-    assert!(
-        reference.len() == 40 && reference.chars().all(|symbol| symbol.is_ascii_hexdigit()),
-        "the dispatcher reaches its setup action by mutable reference: {reference}"
-    );
-}
-
 /// Every agent lane's copilot version is one fact: both engine blocks
 /// and every installer argument in the lock spell it alike,
 /// and the three lanes spell the same version.

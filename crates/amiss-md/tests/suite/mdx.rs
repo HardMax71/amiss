@@ -95,9 +95,10 @@ fn jsx_spans_its_whole_element() {
     assert_eq!(opaque(source, "jsx"), (0, 13));
 }
 
-/// `markdown-rs` 1.0.0 fails an internal assertion when a JSX tag opens inside a
-/// link label and closes outside it. The contract's answer to a parser that
-/// panics is to catch it and report `PARSER_PANIC`, never to abort the run.
+/// `markdown-rs` 1.0.0 fails a debug assertion when a JSX tag opens inside a
+/// link label and closes outside it; a release build returns an error instead.
+/// The contract's answer to a parser that panics is to catch it and report
+/// `PARSER_PANIC`, never to abort the run.
 #[test]
 fn a_panicking_parser_is_caught_and_reported() {
     let previous = std::panic::take_hook();

@@ -1,4 +1,7 @@
 ---
+jobs:
+  agent:
+    continue-on-error: true
 safe-outputs:
   report-failure-as-issue: false
   missing-tool:

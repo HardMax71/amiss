@@ -278,8 +278,8 @@ This one matters more than a rendering difference, because the scanner reads lin
 `[see the guide[^1]](./guide.md)` in a repository would go unseen, and the reference it carries
 would be missing from the report rather than wrong in it. That is under-reporting, which is the
 safer direction to fail in but still a hole, and it is disclosed here rather than discovered later.
-It is worth reporting upstream to pulldown-cmark. The conformance test asserts the divergence set
-is exactly this one document.
+It is reported upstream as pulldown-cmark#1152, with a fix in #1153. The conformance test asserts
+the divergence set is exactly this one document.
 
 Comparing against github.com's link surface keeps two of the suite's own compensations, applied
 exactly as upstream applies them, so that what remains is a difference here rather than a
@@ -290,16 +290,19 @@ on the extracted side, since github.com drops it, and in `constructs-in-identifi
 
 ## An upstream bug, and what the contract says to do about it
 
-`markdown-rs` 1.0.0, which the MDX profile runs, fails an internal assertion on
+`markdown-rs` 1.0.0, which the MDX profile runs, fails a debug assertion (`to_mdast.rs:160`) on
 `a [open <b> close](c) </b> d.`, and on the image form of it: a JSX tag that opens inside a link
-label and closes outside it. Both are accepted by the pinned grammar, so this is a bug, not a
-rejection. It is worth reporting upstream.
+label and closes outside it. The pinned micromark test tokenizes both, but building the tree does
+not accept them: `@mdx-js/mdx` rejects them with "Expected a closing tag for `<b>`", and a release
+build of markdown-rs returns the matching `end-tag-mismatch` error. Only the debug build is wrong,
+and that is worth reporting upstream.
 
-A repository can therefore hand the scanner an MDX document that panics its parser. The contract
-already has the answer: `PARSER_PANIC` is defined as a caught panic that bypasses the parser's own
-result, which means the engine catches it and reports it rather than dying. So the release profile
-unwinds instead of aborting, the parse is guarded, and those two documents come back as
-`PARSER_PANIC` with the run intact. A hostile document cannot take the scanner down with it.
+A debug build of the scanner can therefore be handed an MDX document that panics its parser. The
+contract already has the answer: `PARSER_PANIC` is defined as a caught panic that bypasses the
+parser's own result, which means the engine catches it and reports it rather than dying. The parse
+is guarded and the release profile unwinds instead of aborting, so those two documents come back as
+`PARSER_PANIC` from a debug build and `DOCUMENT_INVALID` from a release build, with the run intact
+either way. A hostile document cannot take the scanner down with it.
 
 The same table settles what a grammar rejection is: it is attributable to the source, so an
 unmatched JSX tag is `DOCUMENT_INVALID`, not a parser failure.

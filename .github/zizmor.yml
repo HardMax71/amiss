@@ -1,14 +1,7 @@
 rules:
-  # agentic_commands.yml is regenerated verbatim by gh aw compile; its
-  # upstream setup ref and checkout defaults are the generator's to fix.
-  unpinned-uses:
-    ignore:
-      - agentic_commands.yml
-  artipacked:
-    ignore:
-      - agentic_commands.yml
   # gh aw compile writes each pinned SHA back as its own version comment, so
-  # naming the tag is the generator's to fix; the pin is still a SHA.
+  # naming the tag is the generator's to fix (github/gh-aw#63684); the pin is
+  # still a SHA.
   ref-version-mismatch:
     ignore:
       - agent-mention.lock.yml
