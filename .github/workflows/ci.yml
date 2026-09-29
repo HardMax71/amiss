@@ -138,7 +138,7 @@ jobs:
           # and the event's before must be in the checkout, so pushes stay 0.
           fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
           persist-credentials: false
-      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2.87.13
+      - uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12 # v2.87.18
         with:
           tool: cargo-about@0.9.2
           fallback: none
@@ -417,7 +417,7 @@ jobs:
         run: |
           cargo metadata --locked --format-version 1 --no-deps --offline |
             jq -er '"nextest=\(.metadata.tools.prebuilt["cargo-nextest"])"' >> "$GITHUB_OUTPUT"
-      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2.87.13
+      - uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12 # v2.87.18
         with:
           tool: cargo-nextest@${{ steps.bench.outputs.nextest }}
           fallback: none
@@ -503,7 +503,7 @@ jobs:
         run: |
           cargo metadata --locked --format-version 1 --no-deps --offline |
             jq -er '"version=\(.metadata.tools.prebuilt["cargo-nextest"])"' >> "$GITHUB_OUTPUT"
-      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2.87.13
+      - uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12 # v2.87.18
         with:
           tool: cargo-nextest@${{ steps.nextest.outputs.version }}
           fallback: none
