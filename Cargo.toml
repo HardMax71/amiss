@@ -57,7 +57,7 @@ getrandom = "0.4.3"
 hex = "0.4"
 hmac = "0.13"
 html5gum = { version = "=0.8.4", default-features = false }
-jsonschema = { version = "0.57", default-features = false, features = ["resolve-file"] }
+jsonschema = { version = "0.58", default-features = false, features = ["resolve-file"] }
 jsonwebtoken = { version = "11.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 json-serde = "=0.0.1-alpha.3"
 js_int = { version = "=0.2.2", default-features = false, features = ["serde"] }
@@ -83,7 +83,7 @@ toml = "1.1"
 tokio = "1.53.1"
 tower = { version = "0.5.3", features = ["util"] }
 trustfall = "0.8.1"
-trustfall-rustdoc-adapter = { version = "=61.0.1", default-features = false }
+trustfall-rustdoc-adapter = { version = "=61.0.2", default-features = false }
 unicode-general-category = "1.1"
 unicode-normalization = "0.1"
 url = "2"
