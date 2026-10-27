@@ -44,7 +44,7 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain uninstall stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: contracts
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -72,7 +72,7 @@ jobs:
       - if: needs.changes.outputs.code == 'true'
         run: rustup toolchain uninstall stable
       - if: needs.changes.outputs.code == 'true'
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: .
           shared-key: gates
@@ -138,12 +138,12 @@ jobs:
           # and the event's before must be in the checkout, so pushes stay 0.
           fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
           persist-credentials: false
-      - uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12 # v2.87.18
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-about@0.9.2
           fallback: none
       - run: rustup toolchain uninstall stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo build --locked --release -p amiss -p amiss-bootstrap
@@ -217,7 +217,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: rustup toolchain uninstall stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: .
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -325,7 +325,7 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain uninstall stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: ${{ matrix.crate }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -346,7 +346,7 @@ jobs:
         with:
           tools: cargo-dylint dylint-link
       - run: rustup toolchain uninstall stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: module-cycles
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -417,7 +417,7 @@ jobs:
         run: |
           cargo metadata --locked --format-version 1 --no-deps --offline |
             jq -er '"nextest=\(.metadata.tools.prebuilt["cargo-nextest"])"' >> "$GITHUB_OUTPUT"
-      - uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12 # v2.87.18
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-nextest@${{ steps.bench.outputs.nextest }}
           fallback: none
@@ -432,7 +432,7 @@ jobs:
         shell: bash
         run: echo "NEXTEST_TEST_THREADS=8" >> "$GITHUB_ENV"
       # Cargo resolves features for the packages it builds, and the halves resolve shared dependencies differently.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: .
           key: ${{ matrix.crates }}
@@ -503,12 +503,12 @@ jobs:
         run: |
           cargo metadata --locked --format-version 1 --no-deps --offline |
             jq -er '"version=\(.metadata.tools.prebuilt["cargo-nextest"])"' >> "$GITHUB_OUTPUT"
-      - uses: taiki-e/install-action@dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12 # v2.87.18
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-nextest@${{ steps.nextest.outputs.version }}
           fallback: none
       - run: rustup toolchain uninstall stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo nextest run -p amiss-scan --test eligibility --release --locked
@@ -530,7 +530,7 @@ jobs:
         with:
           tools: cargo-llvm-cov cargo-nextest
       - run: rustup toolchain uninstall stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: rustup component add llvm-tools-preview
@@ -540,7 +540,7 @@ jobs:
           --exclude-from-report amiss-controller-fixtures
           --exclude-from-report amiss-controller-bootstrap-fixture
           --fail-under-lines 85
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-lcov
           path: lcov.info
