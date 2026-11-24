@@ -22,7 +22,7 @@ ctrlc = { version = "3.5.2", features = ["termination"] }
 getrandom.workspace = true
 hex.workspace = true
 hmac.workspace = true
-prometheus-client = "0.25"
+prometheus-client = "0.26"
 secrecy.workspace = true
 serde.workspace = true
 serde_with = { workspace = true, features = ["base64", "hex"] }
